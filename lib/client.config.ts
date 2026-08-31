@@ -1,7 +1,7 @@
 export type Bubble = { from: "system" | "business" | "customer"; text: string; time: string };
 export type Preset = {
   id: string; label: string; bizName: string;
-  ticket: number; missedPerMonth: number; callsCaught: number; recovered: number;
+  ticket: number; missedPerMonth: number; callsCaught: number; recovered: number; lost: number;
   thread: Bubble[];
 };
 
@@ -18,18 +18,38 @@ export const COPY = {
   presetPrompt: "Pick your line of work:",
   ledgerTitle: "Recovered this month",
   ledgerCaption: "What Salvage caught while the lights were off.",
+  leakTitle: "Lost this month",
+  leakCaption: "Calls that rang out while nobody picked up.",
+  replayLabel: "Watch it again",
+  shareLabel: "Send this to someone",
+  shareCopied: "Link copied",
   mathLead: "Miss",
   mathMid: "calls a month at",
   mathTail: "a job. That's what's walking out the door.",
   ctaLabel: "See it on your own number",
   ctaHref: "https://calendly.com/andy-davyjoneslocker/30min",
   footNote: "Demo. Numbers are illustrative.",
+
+  // Phone / OG chrome. Same human veto as everything else in this file.
+  chrome: {
+    phone: {
+      statusTime: "8:47",
+      threadLabel: "Text message",
+      deliveredLabel: "Delivered",
+    },
+    ledger: {
+      callsCaughtLabel: "calls caught",
+    },
+    og: {
+      wordmark: "Davy Jones' Locker",
+    },
+  },
 };
 
 export const PRESETS: Preset[] = [
   {
     id: "salon", label: "Salon & Spa", bizName: "Harbor Row Aesthetics",
-    ticket: 340, missedPerMonth: 12, callsCaught: 4, recovered: 1360,
+    ticket: 340, missedPerMonth: 12, callsCaught: 4, recovered: 1360, lost: 4080,
     thread: [
       { from: "system",   time: "8:47 PM", text: "Missed call. Front desk closed at 6." },
       { from: "business", time: "8:47 PM", text: "This is Harbor Row Aesthetics, sorry we missed you. We're closed for the night, but I can get you on the book right now if you want." },
@@ -40,7 +60,7 @@ export const PRESETS: Preset[] = [
   },
   {
     id: "home", label: "Home Services", bizName: "Ridgeline Plumbing",
-    ticket: 850, missedPerMonth: 15, callsCaught: 5, recovered: 4250,
+    ticket: 850, missedPerMonth: 15, callsCaught: 5, recovered: 4250, lost: 12750,
     thread: [
       { from: "system",   time: "8:47 PM", text: "Missed call. Line was busy." },
       { from: "business", time: "8:47 PM", text: "Ridgeline Plumbing, sorry we couldn't pick up. What's going on? I can get someone scheduled." },
@@ -51,7 +71,7 @@ export const PRESETS: Preset[] = [
   },
   {
     id: "dental", label: "Dental", bizName: "Fairfield Dental",
-    ticket: 600, missedPerMonth: 9, callsCaught: 3, recovered: 1800,
+    ticket: 600, missedPerMonth: 9, callsCaught: 3, recovered: 1800, lost: 5400,
     thread: [
       { from: "system",   time: "8:47 PM", text: "Missed call. After hours." },
       { from: "business", time: "8:47 PM", text: "Fairfield Dental, sorry we missed your call. Office opens at 8, but I can hold a time for you now." },
@@ -64,26 +84,10 @@ export const PRESETS: Preset[] = [
 
 export const DEFAULT_PRESET = "salon";
 
-// ---------------------------------------------------------------------------
-// Chrome strings — NOT part of the approved COPY veto block above.
-// These are the literal strings specified in the change-1 build spec for the
-// phone UI and the OG composition. Standing rule 3 says every user-facing
-// string lives in this file, so they are centralised here rather than being
-// hardcoded in components. Subject to the same human veto.
-// ---------------------------------------------------------------------------
-export const CHROME = {
-  phone: {
-    statusTime: "8:47",
-    threadLabel: "Text message",
-    deliveredLabel: "Delivered",
-  },
-  ledger: {
-    callsCaughtLabel: "calls caught",
-  },
-  presets: {
-    disabledTitle: "wired in change 2",
-  },
-  og: {
-    wordmark: "Davy Jones' Locker",
-  },
-};
+/** Resolves ?biz=. Unknown or missing falls back to DEFAULT_PRESET; never throws. */
+export function resolvePreset(biz: string | string[] | undefined): Preset {
+  const id = Array.isArray(biz) ? biz[0] : biz;
+  return PRESETS.find((p) => p.id === id) ?? PRESETS.find((p) => p.id === DEFAULT_PRESET) ?? PRESETS[0];
+}
+
+export const SHARE_ORIGIN = "https://salvage-demo.vercel.app";

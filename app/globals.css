@@ -20,3 +20,11 @@ body {
     linear-gradient(180deg, #060B14 0%, #08111F 100%);
   min-height: 100dvh;
 }
+
+/* Reduced motion: no playback, so Replay has nothing to do. Pure CSS, so it
+   holds with JS disabled too and needs no hydration-sensitive branch. */
+@media (prefers-reduced-motion: reduce) {
+  [data-replay] {
+    display: none !important;
+  }
+}

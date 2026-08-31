@@ -1,5 +1,5 @@
 import Phone from "@/components/Phone";
-import { CHROME, COPY, DEFAULT_PRESET, PRESETS } from "@/lib/client.config";
+import { COPY, DEFAULT_PRESET, PRESETS } from "@/lib/client.config";
 
 /*
  * Source composition for public/og.png.
@@ -23,7 +23,7 @@ export default function OgFrame() {
           {COPY.headline}
         </h1>
         <p className="mt-9 text-[14px] uppercase tracking-[0.28em] text-muted">
-          {CHROME.og.wordmark}
+          {COPY.chrome.og.wordmark}
         </p>
       </div>
     </div>

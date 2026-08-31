@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 
-import { CHROME, type Preset } from "@/lib/client.config";
+import { COPY, type Preset } from "@/lib/client.config";
 
 /* Hand-written status glyphs. No emoji, no icon library. */
 
@@ -54,16 +54,49 @@ function BatteryGlyph() {
   );
 }
 
+/* Typing indicator. Hidden in SSR and under reduced motion; the rAF loop is the
+   only thing that ever shows it, by writing inline display. */
+function TypingRow({ index, right }: { index: number; right: boolean }) {
+  return (
+    <div data-typing={index} className={`hidden ${right ? "justify-end" : "justify-start"}`}>
+      <div
+        className={`flex items-center gap-[5px] rounded-2xl px-3.5 py-3 ${
+          right ? "bg-teal" : "bg-surface-2"
+        }`}
+      >
+        {[0, 1, 2].map((d) => (
+          <span
+            key={d}
+            data-dot={d}
+            className={`h-[7px] w-[7px] rounded-full ${right ? "bg-abyss/60" : "bg-muted"}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Phone({
   preset,
   screenMinHeight,
+  screenHeight,
+  typingBefore = [],
 }: {
   preset: Preset;
   /* Forces a full-device screen height so a short thread still reads as a real
      phone. Used by the OG composition, which crops the device at the frame. */
   screenMinHeight?: number;
+  /* Fixed screen height reserving the settled thread, so bubbles can anchor to
+     the bottom and clientHeight never changes between beats. */
+  screenHeight?: number;
+  /* Bubble indices that get a typing indicator rendered before them. */
+  typingBefore?: number[];
 }) {
   const thread = preset.thread;
+  const typing = new Set(typingBefore);
+  /* Bottom-anchor only when the height is reserved for playback. The OG crop
+     uses screenMinHeight and wants the conversation to start at the top. */
+  const anchorBottom = screenHeight != null;
 
   return (
     <div className="w-[390px] max-w-full shrink-0">
@@ -74,16 +107,17 @@ export default function Phone({
       >
         {/* Screen */}
         <div
-          className="relative overflow-hidden rounded-[2.15rem] bg-[#0A1526]"
-          style={screenMinHeight ? { minHeight: `${screenMinHeight}px` } : undefined}
+          data-phone-screen
+          className="relative flex flex-col overflow-hidden rounded-[2.15rem] bg-[#0A1526]"
+          style={{ height: screenHeight, minHeight: screenMinHeight }}
         >
           {/* Notch */}
           <div className="absolute left-1/2 top-0 z-20 h-[26px] w-[120px] -translate-x-1/2 rounded-b-[14px] bg-[#05090F]" />
 
           {/* Status row */}
-          <div className="relative z-10 flex h-[36px] items-center justify-between px-6 pt-1">
+          <div className="relative z-10 flex h-[36px] shrink-0 items-center justify-between px-6 pt-1">
             <span className="text-[13px] font-semibold tabular-nums text-ink">
-              {CHROME.phone.statusTime}
+              {COPY.chrome.phone.statusTime}
             </span>
             <span className="flex items-center gap-[6px] text-muted">
               <SignalGlyph />
@@ -93,65 +127,78 @@ export default function Phone({
           </div>
 
           {/* Contact header */}
-          <div className="border-b border-line bg-surface-2 px-6 pb-3 pt-2 text-center">
-            <div data-biz-name className="font-body text-[15px] font-semibold leading-tight text-ink">
+          <div className="shrink-0 border-b border-line bg-surface-2 px-6 pb-3 pt-2 text-center">
+            <div
+              data-biz-name
+              className="font-body text-[15px] font-semibold leading-tight text-ink"
+            >
               {preset.bizName}
             </div>
-            <div className="mt-0.5 text-[11px] text-muted">{CHROME.phone.threadLabel}</div>
+            <div className="mt-0.5 text-[11px] text-muted">{COPY.chrome.phone.threadLabel}</div>
           </div>
 
-          {/* Thread */}
-          <div className="flex flex-col gap-1 px-4 pb-6 pt-4">
-            {thread.map((b, i) => {
-              const prev = thread[i - 1];
-              const next = thread[i + 1];
-              const senderChange = !prev || prev.from !== b.from;
-              const runEnd = !next || next.from !== b.from;
+          {/* Thread viewport: fixed box, stack pinned to its bottom edge. */}
+          <div
+            className={`flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-5 pt-4 ${
+              anchorBottom ? "justify-end" : "justify-start"
+            }`}
+          >
+            <div data-thread-area className="flex flex-col gap-1">
+              {thread.map((b, i) => {
+                const prev = thread[i - 1];
+                const next = thread[i + 1];
+                const senderChange = !prev || prev.from !== b.from;
+                const runEnd = !next || next.from !== b.from;
 
-              return (
-                <Fragment key={i}>
-                  {senderChange && (
-                    <div className="pb-1 pt-3 text-center text-[11px] tabular-nums text-muted">
-                      {b.time}
-                    </div>
-                  )}
+                return (
+                  <Fragment key={i}>
+                    {typing.has(i) && <TypingRow index={i} right={b.from === "business"} />}
 
-                  {b.from === "system" ? (
-                    <div
-                      data-bubble="system"
-                      className="px-6 py-1 text-center text-[12px] uppercase tracking-wide text-muted"
-                    >
-                      {b.text}
-                    </div>
-                  ) : b.from === "business" ? (
-                    <div className="flex justify-end">
-                      <div
-                        data-bubble="business"
-                        className={`max-w-[78%] rounded-2xl bg-teal px-3.5 py-2 text-[14px] leading-snug text-abyss ${
-                          runEnd ? "rounded-br-sm" : ""
-                        }`}
-                      >
-                        {b.text}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex justify-start">
-                      <div
-                        data-bubble="customer"
-                        className={`max-w-[78%] rounded-2xl bg-surface-2 px-3.5 py-2 text-[14px] leading-snug text-ink ${
-                          runEnd ? "rounded-bl-sm" : ""
-                        }`}
-                      >
-                        {b.text}
-                      </div>
-                    </div>
-                  )}
-                </Fragment>
-              );
-            })}
+                    <div data-row={i} className="flex flex-col gap-1">
+                      {senderChange && (
+                        <div className="pb-1 pt-3 text-center text-[11px] tabular-nums text-muted">
+                          {b.time}
+                        </div>
+                      )}
 
-            <div className="pr-1 pt-1 text-right text-[11px] text-muted">
-              {CHROME.phone.deliveredLabel}
+                      {b.from === "system" ? (
+                        <div
+                          data-bubble="system"
+                          className="px-6 py-1 text-center text-[12px] uppercase tracking-wide text-muted"
+                        >
+                          {b.text}
+                        </div>
+                      ) : b.from === "business" ? (
+                        <div className="flex justify-end">
+                          <div
+                            data-bubble="business"
+                            className={`max-w-[78%] rounded-2xl bg-teal px-3.5 py-2 text-[14px] leading-snug text-abyss ${
+                              runEnd ? "rounded-br-sm" : ""
+                            }`}
+                          >
+                            {b.text}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex justify-start">
+                          <div
+                            data-bubble="customer"
+                            className={`max-w-[78%] rounded-2xl bg-surface-2 px-3.5 py-2 text-[14px] leading-snug text-ink ${
+                              runEnd ? "rounded-bl-sm" : ""
+                            }`}
+                          >
+                            {b.text}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </Fragment>
+                );
+              })}
+
+              <div data-delivered className="pr-1 pt-1 text-right text-[11px] text-muted">
+                {COPY.chrome.phone.deliveredLabel}
+              </div>
             </div>
           </div>
         </div>
