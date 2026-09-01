@@ -23,7 +23,6 @@ import {
   clamp01,
   easeOut,
   leakAt,
-  ledgerAt,
   panelRecoveredAt,
 } from "@/lib/timeline";
 
@@ -42,7 +41,6 @@ type Nodes = {
   delivered: HTMLElement | null;
   bizName: HTMLElement | null;
   threadArea: HTMLElement | null;
-  ledger: HTMLElement | null;
   leak: HTMLElement | null;
   controls: HTMLElement | null;
   ledgerPanel: HTMLElement | null;
@@ -50,7 +48,7 @@ type Nodes = {
   panelRecovered: HTMLElement | null;
 };
 
-type Totals = { recovered: number; lost: number; panelRecovered: number };
+type Totals = { lost: number; panelRecovered: number };
 type Transition = {
   at: number | null;
   from: Totals;
@@ -86,7 +84,6 @@ function collect(root: HTMLElement): Nodes {
     delivered: root.querySelector<HTMLElement>("[data-delivered]"),
     bizName: root.querySelector<HTMLElement>("[data-biz-name]"),
     threadArea: root.querySelector<HTMLElement>("[data-thread-area]"),
-    ledger: root.querySelector<HTMLElement>("[data-ledger-recovered]"),
     leak: root.querySelector<HTMLElement>("[data-leak-lost]"),
     controls: root.querySelector<HTMLElement>("[data-controls]"),
     ledgerPanel: root.querySelector<HTMLElement>("[data-ledger-panel]"),
@@ -95,9 +92,8 @@ function collect(root: HTMLElement): Nodes {
   };
 }
 
-function paintNumbers(ctx: Ctx, recovered: number, lost: number, panelRecovered: number) {
-  ctx.shown = { recovered, lost, panelRecovered };
-  if (ctx.nodes.ledger) ctx.nodes.ledger.textContent = usd(recovered);
+function paintNumbers(ctx: Ctx, lost: number, panelRecovered: number) {
+  ctx.shown = { lost, panelRecovered };
   if (ctx.nodes.leak) ctx.nodes.leak.textContent = usd(lost);
   if (ctx.nodes.panelRecovered) ctx.nodes.panelRecovered.textContent = usd(panelRecovered);
 }
@@ -180,7 +176,6 @@ function tick(ctx: Ctx, now: number) {
       const rp = easeOut(clamp01(e / SWAP_ROLL));
       paintNumbers(
         ctx,
-        Math.round(tr.from.recovered + (tr.target.recovered - tr.from.recovered) * rp),
         Math.round(tr.from.lost + (tr.target.lost - tr.from.lost) * rp),
         Math.round(tr.from.panelRecovered + (tr.target.panelRecovered - tr.from.panelRecovered) * rp),
       );
@@ -199,12 +194,7 @@ function tick(ctx: Ctx, now: number) {
 
   paintScene(ctx, t);
   paintFade(ctx, 1);
-  paintNumbers(
-    ctx,
-    ledgerAt(t, p.recovered),
-    leakAt(t, p.lost),
-    panelRecoveredAt(t, p.recovered, p.caught[0].amount),
-  );
+  paintNumbers(ctx, leakAt(t, p.lost), panelRecoveredAt(t, p.recovered, p.caught[0].amount));
   ctx.root.dataset.t = t.toFixed(3);
 
   if (t < LOOP_UNTIL) schedule(ctx);
@@ -213,13 +203,11 @@ function tick(ctx: Ctx, now: number) {
 /* ------------------------------------------------------------------------- */
 
 const settledTotals = (p: Preset): Totals => ({
-  recovered: p.recovered,
   lost: p.lost,
   panelRecovered: p.recovered,
 });
 
 const beatZeroTotals = (p: Preset): Totals => ({
-  recovered: ledgerAt(0, p.recovered),
   lost: leakAt(0, p.lost),
   panelRecovered: panelRecoveredAt(0, p.recovered, p.caught[0].amount),
 });
@@ -255,7 +243,7 @@ export default function Demo({ initialPresetId }: { initialPresetId: string }) {
     if (ctx.transition?.swapped) {
       paintScene(ctx, 0);
       paintFade(ctx, 0);
-      paintNumbers(ctx, ctx.shown.recovered, ctx.shown.lost, ctx.shown.panelRecovered);
+      paintNumbers(ctx, ctx.shown.lost, ctx.shown.panelRecovered);
     }
   }, [preset]);
 
@@ -284,7 +272,7 @@ export default function Demo({ initialPresetId }: { initialPresetId: string }) {
 
     paintScene(ctx, 0);
     paintFade(ctx, 1);
-    paintNumbers(ctx, 0, 0, panelRecoveredAt(0, preset.recovered, preset.caught[0].amount));
+    paintNumbers(ctx, 0, panelRecoveredAt(0, preset.recovered, preset.caught[0].amount));
     root.dataset.t = "0.000";
     schedule(ctx);
 
@@ -415,28 +403,10 @@ export default function Demo({ initialPresetId }: { initialPresetId: string }) {
             />
           )}
 
-          {/* Quick pitch: what this is costing you, right under the phone. */}
-          <div data-money className="mt-6 grid grid-cols-1 gap-4 min-[560px]:grid-cols-2">
-            <section
-              className="relative overflow-hidden rounded-2xl border border-line bg-surface p-6"
-              style={{ boxShadow: "0 0 44px -14px rgba(216,180,90,0.30)" }}
-            >
-              <span aria-hidden="true" className="absolute inset-x-0 top-0 h-px bg-gold" />
-              <p className="text-[12px] uppercase tracking-[0.18em] text-muted">
-                {COPY.ledgerTitle}
-              </p>
-              <p
-                data-ledger-recovered
-                className="mt-2 font-display font-semibold leading-none text-gold lining-nums [font-size:clamp(42px,7vw,60px)]"
-              >
-                {usd(preset.recovered)}
-              </p>
-              <p data-calls-caught className="mt-3 text-[15px] text-ink">
-                {preset.callsCaught} {COPY.chrome.ledger.callsCaughtLabel}
-              </p>
-              <p className="mt-1.5 text-[13px] text-muted">{COPY.ledgerCaption}</p>
-            </section>
-
+          {/* Loss lives under the phone; recovery lives on the owner panel.
+              (change 5: the phone-side Recovered card is gone — the gold
+              recovered figure now appears exactly once on the whole page.) */}
+          <div className="mt-6 max-w-sm">
             <section className="relative overflow-hidden rounded-2xl border border-line bg-surface p-6">
               <span aria-hidden="true" className="absolute inset-x-0 top-0 h-px bg-line" />
               <p className="text-[12px] uppercase tracking-[0.18em] text-muted">{COPY.leakTitle}</p>

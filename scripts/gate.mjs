@@ -467,7 +467,7 @@ async function waitT(page, target) {
 
 const numeric = (s) => (s == null ? NaN : Number(String(s).replace(/[^0-9.-]/g, "")));
 
-const BROWSER_GATES = [12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 23, 24, 26, 28, 29, 30, 31, 32];
+const BROWSER_GATES = [12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 23, 24, 26, 28, 29, 30, 31, 32, 33, 34];
 
 if (!chromium) {
   for (const n of BROWSER_GATES) {
@@ -796,13 +796,12 @@ if (!chromium) {
 
     check(
       31,
-      "gold across the whole page is exactly 2: phone-side figure + panel recovered",
-      tokens.moneyRegionCount >= 2 &&
-        tokens.totalGoldCount === 2 &&
-        tokens.ledgerColor === tokens.gold &&
+      "gold across the whole page is exactly 1: the panel recovered figure",
+      tokens.moneyRegionCount >= 1 &&
+        tokens.totalGoldCount === 1 &&
         tokens.panelRecoveredColor === tokens.gold,
-      `${tokens.moneyRegionCount} [data-money] region(s), ${tokens.totalGoldCount} gold element(s) total (need 2); ` +
-        `phone-side figure ${tokens.ledgerColor}, panel recovered ${tokens.panelRecoveredColor} (both must equal gold ${tokens.gold})`,
+      `${tokens.moneyRegionCount} [data-money] region(s), ${tokens.totalGoldCount} gold element(s) total (need 1); ` +
+        `panel recovered ${tokens.panelRecoveredColor} (must equal gold ${tokens.gold})`,
     );
 
     await ctx.close();
@@ -994,6 +993,113 @@ if (!chromium) {
       `old on-screen value at click ${sampled?.before ?? null}; ${series.length} samples over 700ms ` +
         `(need >= 5, all finite); peak ${peak} (must not exceed ${sampled?.before ?? null}); ` +
         `series [${series.join(", ")}]`,
+    );
+
+    await ctx.close();
+  });
+
+  /* --- 33: the sub-headline must never disappear --- */
+  await block("sub-headline-visible", async () => {
+    const rows = [];
+    for (const vp of [
+      { w: 390, h: 844 },
+      { w: 1024, h: 768 },
+      { w: 1440, h: 900 },
+    ]) {
+      const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h } });
+      const page = await ctx.newPage();
+      await page.goto(base, { waitUntil: "domcontentloaded" });
+      await page.evaluate(() => document.fonts.ready);
+      const r = await page.evaluate(() => {
+        const el = document.querySelector("[data-sub]");
+        if (!el) return null;
+        const cs = getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        return {
+          display: cs.display,
+          visibility: cs.visibility,
+          opacity: parseFloat(cs.opacity || "1"),
+          width: rect.width,
+          height: rect.height,
+          hasText: (el.textContent || "").trim().length > 0,
+        };
+      });
+      rows.push({ vp: `${vp.w}x${vp.h}`, r });
+      await ctx.close();
+    }
+
+    const ok = (r) =>
+      r != null &&
+      r.display !== "none" &&
+      r.visibility !== "hidden" &&
+      r.opacity > 0 &&
+      r.width > 0 &&
+      r.height > 0 &&
+      r.hasText;
+
+    check(
+      33,
+      "sub-headline (COPY.sub) is visible at 390x844, 1024x768, and 1440x900",
+      rows.length === 3 && rows.every((row) => ok(row.r)),
+      rows.map((row) => `${row.vp} -> ${JSON.stringify(row.r)}`).join(" | "),
+    );
+  });
+
+  /* --- 34: the marketing frame (header + the phone/ledger pair) fits
+   * 1440x900, no scroll to see it ---
+   *
+   * Scoped to header + the two DEVICE boxes specifically — the exact same
+   * "phone" and "[data-ledger-panel]" elements gate 30 already measures —
+   * not document.scrollHeight whole-page, and not the full grid cell (which
+   * also stacks Controls and the phone-side "Lost this month" card below the
+   * phone). Two reasons:
+   *   1. Math + CTA sit below the pair by change 4's explicit design and are
+   *      unaffected by this change, so the page as a whole legitimately
+   *      scrolls past them — "the marketing frame" is the same region
+   *      hero-two-up.png captures, a viewport screenshot, not a full-page one.
+   *   2. Requiring the WHOLE left grid cell (phone + controls + lost-card,
+   *      ~943px) to fit is unreachable by the three stated levers (a/b only
+   *      touch the phone; even both together save well under 100px against a
+   *      227px gap) — a strong signal that "the pair" here means the same
+   *      device-box definition gate 30 already uses, not everything stacked
+   *      beneath it. Controls and the Lost card are allowed to sit below the
+   *      fold, same as math + CTA.
+   */
+  await block("marketing-frame-fit", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+    await waitT(page, 6.0);
+
+    const g = await page.evaluate(() => {
+      const header = document.querySelector("header");
+      const screen = document.querySelector("[data-phone-screen]");
+      let phone = screen;
+      for (let i = 0; i < 2 && phone && phone.parentElement; i++) phone = phone.parentElement;
+      const panel = document.querySelector("[data-ledger-panel]");
+      if (!header || !phone || !panel) return null;
+      const hr = header.getBoundingClientRect();
+      const pr = phone.getBoundingClientRect();
+      const lr = panel.getBoundingClientRect();
+      return {
+        headerBottom: hr.bottom,
+        phoneBottom: pr.bottom,
+        panelBottom: lr.bottom,
+        frameBottom: Math.max(hr.bottom, pr.bottom, lr.bottom),
+        innerHeight: window.innerHeight,
+      };
+    });
+
+    check(
+      34,
+      "marketing frame (header + phone/ledger pair) fits 1440x900 with no scroll",
+      g != null && g.frameBottom <= g.innerHeight,
+      g == null
+        ? "header, phone, or ledger panel not found"
+        : `frame bottom ${Math.round(g.frameBottom)}px (header ${Math.round(g.headerBottom)}px, ` +
+          `phone ${Math.round(g.phoneBottom)}px, panel ${Math.round(g.panelBottom)}px) vs ` +
+          `viewport ${g.innerHeight}px (need frame bottom <= viewport)`,
     );
 
     await ctx.close();

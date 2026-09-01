@@ -19,8 +19,6 @@ export const COPY = {
   headline: "The phone rang. Nobody answered. They called someone else.",
   sub: "Salvage catches the call you missed and books it before they move on.",
   presetPrompt: "Pick your line of work:",
-  ledgerTitle: "Recovered this month",
-  ledgerCaption: "What Salvage caught while the lights were off.",
   leakTitle: "Lost this month",
   leakCaption: "Calls that rang out while nobody picked up.",
   replayLabel: "Watch it again",
@@ -57,9 +55,6 @@ export const COPY = {
       statusTime: "8:47",
       threadLabel: "Text message",
       deliveredLabel: "Delivered",
-    },
-    ledger: {
-      callsCaughtLabel: "calls caught",
     },
     og: {
       wordmark: "Davy Jones' Locker",

@@ -54,6 +54,17 @@ export const SWAP_ROLL = 0.5;
  */
 export const PHONE_SCREEN_HEIGHT = 716;
 
+/**
+ * Above 1100px the phone always renders at its full 390px box width (no page
+ * padding ever squeezes it there), so the narrow-viewport safety margin baked
+ * into PHONE_SCREEN_HEIGHT is dead weight: the true floor at that width is
+ * 676px (measured, change 3). Applied via a CSS custom-property override
+ * scoped to the breakpoint (see Phone.tsx) rather than a JS/matchMedia
+ * switch, so there is no reactive state and no hydration risk — the browser
+ * just picks the right rule at paint time from server-rendered markup.
+ */
+export const PHONE_SCREEN_HEIGHT_WIDE = 676;
+
 export const clamp01 = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n);
 export const easeOut = (p: number) => 1 - Math.pow(1 - p, 3);
 

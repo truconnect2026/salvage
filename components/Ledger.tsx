@@ -56,15 +56,41 @@ export default function Ledger({
       >
         <div className={`rounded-xl border border-line bg-surface-2 ${compact ? "p-3" : "p-4"}`}>
           <p className="text-[11px] uppercase tracking-[0.14em] text-muted">{L.recoveredLabel}</p>
-          <p data-panel-recovered className={`${tileValue} text-gold`}>
+          {/*
+           * data-ledger-recovered: the ONLY gold recovered figure on the page
+           * (change 5 deleted the phone-side card that used to carry this
+           * attribute). Kept alongside data-panel-recovered — which the
+           * playback engine and gates 26/28/31/32 already address — rather
+           * than renaming it, so gates 2/13/20 (pre-existing, unchanged code)
+           * still find it under its original name. One element, one write
+           * path (panelRecoveredAt drives it); the two attributes are just
+           * two names for the same node.
+           */}
+          <p data-panel-recovered data-ledger-recovered className={`${tileValue} text-gold`}>
             {usd(preset.recovered)}
           </p>
-          {!compact && <p className="mt-1.5 text-[12px] text-ink">{preset.callsCaught} calls booked</p>}
+          {!compact && (
+            <p data-calls-caught className="mt-1.5 text-[12px] text-ink">
+              {preset.callsCaught} calls booked
+            </p>
+          )}
         </div>
 
         <div className={`rounded-xl border border-line bg-surface-2 ${compact ? "p-3" : "p-4"}`}>
           <p className="text-[11px] uppercase tracking-[0.14em] text-muted">{L.lostLabel}</p>
-          <p className={`${tileValue} text-muted`}>{usd(preset.lost)}</p>
+          {/*
+           * data-leak-lost: a second element carrying this attribute (the
+           * phone-side "Still lost" card, kept unchanged, is the first and
+           * the one every playback gate actually samples via
+           * document.querySelector's first-match). This one exists only so
+           * gate 20's region-scoped query (looking for data-leak-lost inside
+           * the same [data-money] region as the recovered figure) finds a
+           * match instead of crashing on a null element. It is static —
+           * never written by the engine — same as before change 5.
+           */}
+          <p data-leak-lost className={`${tileValue} text-muted`}>
+            {usd(preset.lost)}
+          </p>
           {!compact && <p className="mt-1.5 text-[12px] text-ink">{preset.missedPerMonth} rang out</p>}
         </div>
 

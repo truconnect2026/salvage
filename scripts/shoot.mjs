@@ -32,9 +32,8 @@ const VIEWPORTS = [
   { slug: "desktop-1440x900", width: 1440, height: 900 },
 ];
 
-/* The playback phases the gates also sample: first frame, the row-insert /
-   recovered-roll beat, and settled. */
-const PHASES = [0.3, 4.6, 5.5];
+/* The playback phase the gates also sample: settled. */
+const PHASES = [6.0];
 
 const ogPath = join(ROOT, "public", "og.png");
 

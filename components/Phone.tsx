@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, type CSSProperties } from "react";
 
 import { COPY, callTime, type Preset } from "@/lib/client.config";
 
@@ -144,6 +144,18 @@ export default function Phone({
      uses screenMinHeight and wants the conversation to start at the top. */
   const anchorBottom = screenHeight != null;
 
+  /* screenHeight is exposed as a CSS custom property, not a plain inline
+     height, so a breakpoint-scoped Tailwind class can override just the
+     value above 1100px. Setting a custom property via inline style is STILL
+     an inline declaration (same max specificity as `style.height` directly),
+     so the override class below carries `!` — an important stylesheet rule
+     is the one thing that legitimately outranks a non-important inline
+     style in the cascade. */
+  const screenStyle: CSSProperties & { "--phone-reserved-h"?: string } = {
+    minHeight: screenMinHeight,
+  };
+  if (screenHeight != null) screenStyle["--phone-reserved-h"] = `${screenHeight}px`;
+
   return (
     <div className="w-[390px] max-w-full shrink-0">
       {/* Bezel */}
@@ -154,8 +166,10 @@ export default function Phone({
         {/* Screen */}
         <div
           data-phone-screen
-          className="relative flex flex-col overflow-hidden rounded-[2.15rem] bg-[#0A1526]"
-          style={{ height: screenHeight, minHeight: screenMinHeight }}
+          className={`relative flex flex-col overflow-hidden rounded-[2.15rem] bg-[#0A1526] ${
+            screenHeight != null ? "h-[var(--phone-reserved-h)] min-[1100px]:[--phone-reserved-h:676px]!" : ""
+          }`}
+          style={screenStyle}
         >
           {/* Notch */}
           <div className="absolute left-1/2 top-0 z-20 h-[26px] w-[120px] -translate-x-1/2 rounded-b-[14px] bg-[#05090F]" />
