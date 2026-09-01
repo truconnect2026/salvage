@@ -8,7 +8,9 @@ import { COPY, DEFAULT_PRESET, PRESETS } from "@/lib/client.config";
  */
 export default function OgFrame() {
   const base = PRESETS.find((p) => p.id === DEFAULT_PRESET) ?? PRESETS[0];
-  const cropped = { ...base, thread: base.thread.slice(0, 2) };
+  /* Call card + the first business reply: the missed call and the save. The
+     system bubble that used to open the thread is now the call card itself. */
+  const cropped = { ...base, thread: base.thread.slice(0, 1) };
 
   return (
     <div className="relative h-[630px] w-[1200px] overflow-hidden">

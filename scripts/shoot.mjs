@@ -101,6 +101,12 @@ if (mode === "shell") {
       await p.goto(base, { waitUntil: "domcontentloaded" });
       await p.evaluate(() => document.fonts.ready);
       await waitT(p, T);
+      /* Freeze the phase at the target before capturing. Overriding rAF from the
+         test side stops the loop advancing without touching app code, so the
+         frame in the PNG is the frame the label claims. */
+      await p.evaluate(() => {
+        window.requestAnimationFrame = () => 0;
+      });
 
       const out = join(outDir, `${vp.slug}-t${T.toFixed(1)}.png`);
       await p.screenshot({ path: out, fullPage: true });

@@ -12,9 +12,6 @@ import {
   CONTROLS_AT,
   CONTROLS_FADE,
   DELIVERED_AT,
-  LEAK_DUR,
-  LEDGER_AT,
-  LEDGER_DUR,
   LOOP_UNTIL,
   PHONE_SCREEN_HEIGHT,
   SWAP_FADE,
@@ -22,6 +19,8 @@ import {
   TYPING,
   clamp01,
   easeOut,
+  leakAt,
+  ledgerAt,
 } from "@/lib/timeline";
 
 /* ---------------------------------------------------------------------------
@@ -32,6 +31,7 @@ import {
  * ------------------------------------------------------------------------- */
 
 type Nodes = {
+  callCard: HTMLElement | null;
   rows: HTMLElement[];
   typings: Map<number, HTMLElement>;
   delivered: HTMLElement | null;
@@ -43,7 +43,16 @@ type Nodes = {
 };
 
 type Totals = { recovered: number; lost: number };
-type Transition = { at: number | null; from: Totals; to: Preset; swapped: boolean };
+type Transition = {
+  at: number | null;
+  from: Totals;
+  to: Preset;
+  /* Where the counters roll TO during the swap: the incoming preset's values at
+     beat 0, not its finals. Rolling to the finals would climb and then drop to
+     zero the moment playback restarts. */
+  target: Totals;
+  swapped: boolean;
+};
 
 type Ctx = {
   root: HTMLElement;
@@ -63,6 +72,7 @@ function collect(root: HTMLElement): Nodes {
     typings.set(Number(el.dataset.typing), el);
   });
   return {
+    callCard: root.querySelector<HTMLElement>("[data-call-card]"),
     rows: Array.from(root.querySelectorAll<HTMLElement>("[data-row]")),
     typings,
     delivered: root.querySelector<HTMLElement>("[data-delivered]"),
@@ -84,6 +94,7 @@ function paintFade(ctx: Ctx, o: number) {
   const s = String(o);
   if (ctx.nodes.bizName) ctx.nodes.bizName.style.opacity = s;
   if (ctx.nodes.threadArea) ctx.nodes.threadArea.style.opacity = s;
+  if (ctx.nodes.callCard) ctx.nodes.callCard.style.opacity = s;
 }
 
 function paintThread(ctx: Ctx, t: number) {
@@ -147,8 +158,8 @@ function tick(ctx: Ctx, now: number) {
       const rp = easeOut(clamp01(e / SWAP_ROLL));
       paintNumbers(
         ctx,
-        Math.round(tr.from.recovered + (tr.to.recovered - tr.from.recovered) * rp),
-        Math.round(tr.from.lost + (tr.to.lost - tr.from.lost) * rp),
+        Math.round(tr.from.recovered + (tr.target.recovered - tr.from.recovered) * rp),
+        Math.round(tr.from.lost + (tr.target.lost - tr.from.lost) * rp),
       );
       ctx.root.dataset.t = "swap";
       schedule(ctx);
@@ -164,11 +175,7 @@ function tick(ctx: Ctx, now: number) {
 
   paintThread(ctx, t);
   paintFade(ctx, 1);
-  paintNumbers(
-    ctx,
-    Math.round(easeOut(clamp01((t - LEDGER_AT) / LEDGER_DUR)) * ctx.preset.recovered),
-    Math.round(clamp01(t / LEAK_DUR) * ctx.preset.lost),
-  );
+  paintNumbers(ctx, ledgerAt(t, ctx.preset.recovered), leakAt(t, ctx.preset.lost));
   ctx.root.dataset.t = t.toFixed(3);
 
   if (t < LOOP_UNTIL) schedule(ctx);
@@ -263,6 +270,12 @@ export default function Demo({ initialPresetId }: { initialPresetId: string }) {
     const next = PRESETS.find((p) => p.id === id);
     if (!next) return;
 
+    /* Bail BEFORE any side effect. A click landing inside the 500ms swap is
+       discarded for playback, so it must not commit ?biz= either: that would
+       leave the address bar (and a reload) naming a preset the page never
+       rendered, while Share still copied the one on screen. */
+    if (!ctx.reduced && ctx.transition) return;
+
     const url = new URL(window.location.href);
     url.searchParams.set("biz", id);
     window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
@@ -273,11 +286,16 @@ export default function Demo({ initialPresetId }: { initialPresetId: string }) {
       setPresetId(id);
       return;
     }
-    if (ctx.transition) return;
 
-    /* Roll from what is on screen now, so a settled card rolls from the old
-       preset total and never snaps to zero on the way to the new one. */
-    ctx.transition = { at: null, from: { ...ctx.shown }, to: next, swapped: false };
+    /* Roll from what is on screen now down to the incoming preset's beat-0
+       values, so the counters never climb to a total they are about to drop. */
+    ctx.transition = {
+      at: null,
+      from: { ...ctx.shown },
+      to: next,
+      target: { recovered: ledgerAt(0, next.recovered), lost: leakAt(0, next.lost) },
+      swapped: false,
+    };
     schedule(ctx);
   };
 
@@ -332,7 +350,7 @@ export default function Demo({ initialPresetId }: { initialPresetId: string }) {
       <div className="mt-12 grid grid-cols-1 gap-12 min-[900px]:mt-16 min-[900px]:grid-cols-[390px_minmax(0,1fr)] min-[900px]:items-center min-[900px]:gap-16">
         <div>
           {/* C — phone */}
-          <Phone preset={preset} screenHeight={PHONE_SCREEN_HEIGHT} typingBefore={[1, 2, 3]} />
+          <Phone preset={preset} screenHeight={PHONE_SCREEN_HEIGHT} typingBefore={[0, 1, 2]} />
 
           {/* Controls. Space is reserved so their arrival shifts nothing. */}
           <div data-controls className="mt-5 flex min-h-[42px] flex-wrap items-center gap-3">
