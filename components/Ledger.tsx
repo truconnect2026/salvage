@@ -79,14 +79,12 @@ export default function Ledger({
         <div className={`rounded-xl border border-line bg-surface-2 ${compact ? "p-3" : "p-4"}`}>
           <p className="text-[11px] uppercase tracking-[0.14em] text-muted">{L.lostLabel}</p>
           {/*
-           * data-leak-lost: a second element carrying this attribute (the
-           * phone-side "Still lost" card, kept unchanged, is the first and
-           * the one every playback gate actually samples via
-           * document.querySelector's first-match). This one exists only so
-           * gate 20's region-scoped query (looking for data-leak-lost inside
-           * the same [data-money] region as the recovered figure) finds a
-           * match instead of crashing on a null element. It is static —
-           * never written by the engine — same as before change 5.
+           * data-leak-lost: the ONLY element carrying this attribute (change
+           * 6 deleted the phone-side "Still lost" card that used to). The
+           * playback engine's collect() queries this attribute directly, so
+           * once the phone-side duplicate was gone it started binding here
+           * automatically — the climbing animation needed no engine change
+           * at all, just this element to land on.
            */}
           <p data-leak-lost className={`${tileValue} text-muted`}>
             {usd(preset.lost)}

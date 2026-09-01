@@ -383,7 +383,7 @@ export default function Demo({ initialPresetId }: { initialPresetId: string }) {
           <Phone preset={preset} screenHeight={PHONE_SCREEN_HEIGHT} typingBefore={[0, 1, 2]} />
 
           {/* Controls. Space is reserved so their arrival shifts nothing. */}
-          <div data-controls className="mt-5 flex min-h-[42px] flex-wrap items-center gap-3">
+          <div data-controls className="mt-5 min-[1100px]:mt-3 flex min-h-[42px] flex-wrap items-center gap-3">
             <button data-replay type="button" onClick={onReplay} className={ghost}>
               {COPY.replayLabel}
             </button>
@@ -403,22 +403,13 @@ export default function Demo({ initialPresetId }: { initialPresetId: string }) {
             />
           )}
 
-          {/* Loss lives under the phone; recovery lives on the owner panel.
-              (change 5: the phone-side Recovered card is gone — the gold
-              recovered figure now appears exactly once on the whole page.) */}
-          <div className="mt-6 max-w-sm">
-            <section className="relative overflow-hidden rounded-2xl border border-line bg-surface p-6">
-              <span aria-hidden="true" className="absolute inset-x-0 top-0 h-px bg-line" />
-              <p className="text-[12px] uppercase tracking-[0.18em] text-muted">{COPY.leakTitle}</p>
-              <p
-                data-leak-lost
-                className="mt-2 font-display font-semibold leading-none text-muted lining-nums [font-size:clamp(42px,7vw,60px)]"
-              >
-                {usd(preset.lost)}
-              </p>
-              <p className="mt-1.5 text-[13px] text-muted">{COPY.leakCaption}</p>
-            </section>
-          </div>
+          {/* change 6: the phone-side "Still lost" card is gone too — it was
+              showing the same figure the owner panel's own Still-lost tile
+              already carries, and the duplicate pushed the loss figure below
+              the fold at 1440x900. data-leak-lost now lives on the panel
+              tile alone; collect()'s querySelector picks it up unchanged,
+              so the climbing animation just keeps working with zero engine
+              changes. Recovery and loss both live on the owner panel now. */}
         </div>
 
         {/* Owner side */}

@@ -57,13 +57,20 @@ export const PHONE_SCREEN_HEIGHT = 716;
 /**
  * Above 1100px the phone always renders at its full 390px box width (no page
  * padding ever squeezes it there), so the narrow-viewport safety margin baked
- * into PHONE_SCREEN_HEIGHT is dead weight: the true floor at that width is
- * 676px (measured, change 3). Applied via a CSS custom-property override
+ * into PHONE_SCREEN_HEIGHT is dead weight. Change 3's own floor table showed
+ * 676px was specifically the floor at a 390px VIEWPORT (where the phone's own
+ * box can still be marginally compressed); the floor at 430px+ viewports —
+ * which >=1100px always satisfies, since the phone box stops shrinking well
+ * before then — is 638px. Re-verified directly (change 6): at 1440px the
+ * worst-case preset (salon/home) needs exactly 638px with zero slack, so this
+ * is the true floor, not a rounder/safer approximation of it. Stable across
+ * every viewport >=1100px, since the phone's box size and text wrapping never
+ * change again past that width. Applied via a CSS custom-property override
  * scoped to the breakpoint (see Phone.tsx) rather than a JS/matchMedia
  * switch, so there is no reactive state and no hydration risk — the browser
  * just picks the right rule at paint time from server-rendered markup.
  */
-export const PHONE_SCREEN_HEIGHT_WIDE = 676;
+export const PHONE_SCREEN_HEIGHT_WIDE = 638;
 
 export const clamp01 = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n);
 export const easeOut = (p: number) => 1 - Math.pow(1 - p, 3);

@@ -19,8 +19,6 @@ export const COPY = {
   headline: "The phone rang. Nobody answered. They called someone else.",
   sub: "Salvage catches the call you missed and books it before they move on.",
   presetPrompt: "Pick your line of work:",
-  leakTitle: "Lost this month",
-  leakCaption: "Calls that rang out while nobody picked up.",
   replayLabel: "Watch it again",
   shareLabel: "Send this to someone",
   shareCopied: "Link copied",

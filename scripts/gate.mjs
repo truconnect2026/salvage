@@ -467,7 +467,7 @@ async function waitT(page, target) {
 
 const numeric = (s) => (s == null ? NaN : Number(String(s).replace(/[^0-9.-]/g, "")));
 
-const BROWSER_GATES = [12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 23, 24, 26, 28, 29, 30, 31, 32, 33, 34];
+const BROWSER_GATES = [12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 23, 24, 26, 28, 29, 30, 31, 32, 33, 34, 35];
 
 if (!chromium) {
   for (const n of BROWSER_GATES) {
@@ -1045,25 +1045,17 @@ if (!chromium) {
     );
   });
 
-  /* --- 34: the marketing frame (header + the phone/ledger pair) fits
-   * 1440x900, no scroll to see it ---
+  /* --- 34 (amended, change 6): the FULL marketing frame — header + both
+   * device boxes + anything stacked in the phone column (Controls; the
+   * phone-side "Lost this month" card that used to also stack there is gone
+   * as of this change) — fits 1440x900 with no scroll.
    *
-   * Scoped to header + the two DEVICE boxes specifically — the exact same
-   * "phone" and "[data-ledger-panel]" elements gate 30 already measures —
-   * not document.scrollHeight whole-page, and not the full grid cell (which
-   * also stacks Controls and the phone-side "Lost this month" card below the
-   * phone). Two reasons:
-   *   1. Math + CTA sit below the pair by change 4's explicit design and are
-   *      unaffected by this change, so the page as a whole legitimately
-   *      scrolls past them — "the marketing frame" is the same region
-   *      hero-two-up.png captures, a viewport screenshot, not a full-page one.
-   *   2. Requiring the WHOLE left grid cell (phone + controls + lost-card,
-   *      ~943px) to fit is unreachable by the three stated levers (a/b only
-   *      touch the phone; even both together save well under 100px against a
-   *      227px gap) — a strong signal that "the pair" here means the same
-   *      device-box definition gate 30 already uses, not everything stacked
-   *      beneath it. Controls and the Lost card are allowed to sit below the
-   *      fold, same as math + CTA.
+   * Change 5 scoped this to the device boxes alone (matching gate 30),
+   * because closing the FULL-column gap was unreachable by the levers that
+   * change offered (227px short, with only the phone's own height as a
+   * lever). Deleting the duplicate Lost card removed most of that stacked
+   * height, and change 6 explicitly asks for the fuller measurement again —
+   * so this gate now covers the whole left column, not just the phone.
    */
   await block("marketing-frame-fit", async () => {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -1077,29 +1069,70 @@ if (!chromium) {
       const screen = document.querySelector("[data-phone-screen]");
       let phone = screen;
       for (let i = 0; i < 2 && phone && phone.parentElement; i++) phone = phone.parentElement;
+      const controls = document.querySelector("[data-controls]");
       const panel = document.querySelector("[data-ledger-panel]");
-      if (!header || !phone || !panel) return null;
+      if (!header || !phone || !controls || !panel) return null;
       const hr = header.getBoundingClientRect();
       const pr = phone.getBoundingClientRect();
+      const cr = controls.getBoundingClientRect();
       const lr = panel.getBoundingClientRect();
       return {
         headerBottom: hr.bottom,
         phoneBottom: pr.bottom,
+        controlsBottom: cr.bottom,
         panelBottom: lr.bottom,
-        frameBottom: Math.max(hr.bottom, pr.bottom, lr.bottom),
+        frameBottom: Math.max(hr.bottom, pr.bottom, cr.bottom, lr.bottom),
         innerHeight: window.innerHeight,
       };
     });
 
     check(
       34,
-      "marketing frame (header + phone/ledger pair) fits 1440x900 with no scroll",
+      "full marketing frame (header + both device boxes + phone-column stack) fits 1440x900 with no scroll",
       g != null && g.frameBottom <= g.innerHeight,
       g == null
-        ? "header, phone, or ledger panel not found"
+        ? "header, phone, controls, or ledger panel not found"
         : `frame bottom ${Math.round(g.frameBottom)}px (header ${Math.round(g.headerBottom)}px, ` +
-          `phone ${Math.round(g.phoneBottom)}px, panel ${Math.round(g.panelBottom)}px) vs ` +
-          `viewport ${g.innerHeight}px (need frame bottom <= viewport)`,
+          `phone ${Math.round(g.phoneBottom)}px, controls ${Math.round(g.controlsBottom)}px, ` +
+          `panel ${Math.round(g.panelBottom)}px) vs viewport ${g.innerHeight}px (need frame bottom <= viewport)`,
+    );
+
+    await ctx.close();
+  });
+
+  /* --- 35: exactly one data-leak-lost on the page, and it lives on the owner
+   * panel (change 6 deleted the phone-side duplicate). Muted, never gold. */
+  await block("single-leak-figure", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+    await waitT(page, 6.0);
+
+    const g = await page.evaluate(() => {
+      const root = getComputedStyle(document.documentElement);
+      const toRgb = (name) => {
+        const h = root.getPropertyValue(name).trim().replace("#", "");
+        if (h.length < 6) return null;
+        return `rgb(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)})`;
+      };
+      const els = [...document.querySelectorAll("[data-leak-lost]")];
+      const panel = document.querySelector("[data-ledger-panel]");
+      return {
+        count: els.length,
+        insidePanel: els.length === 1 && panel ? panel.contains(els[0]) : false,
+        color: els.length === 1 ? getComputedStyle(els[0]).color : null,
+        muted: toRgb("--color-muted"),
+        gold: toRgb("--color-gold"),
+      };
+    });
+
+    check(
+      35,
+      "exactly one data-leak-lost on the page, inside the owner panel, muted not gold",
+      g.count === 1 && g.count > 0 && g.insidePanel && g.color === g.muted && g.color !== g.gold,
+      `${g.count} element(s) with data-leak-lost (need exactly 1, > 0), inside panel: ${g.insidePanel}, ` +
+        `color ${g.color} (need muted ${g.muted}, must not be gold ${g.gold})`,
     );
 
     await ctx.close();

@@ -167,7 +167,10 @@ export default function Phone({
         <div
           data-phone-screen
           className={`relative flex flex-col overflow-hidden rounded-[2.15rem] bg-[#0A1526] ${
-            screenHeight != null ? "h-[var(--phone-reserved-h)] min-[1100px]:[--phone-reserved-h:676px]!" : ""
+            // 638px must match lib/timeline.ts's PHONE_SCREEN_HEIGHT_WIDE —
+            // Tailwind's JIT scanner needs the literal in source, so this
+            // can't be a template interpolation of the constant.
+            screenHeight != null ? "h-[var(--phone-reserved-h)] min-[1100px]:[--phone-reserved-h:638px]!" : ""
           }`}
           style={screenStyle}
         >
