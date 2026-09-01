@@ -1,13 +1,18 @@
 import Demo from "@/components/Demo";
-import { COPY, resolvePreset } from "@/lib/client.config";
+import { COPY, resolveName, resolvePreset } from "@/lib/client.config";
 
 /*
  * Server component. The causal chain starts here:
- *   URL param -> preset -> (client) playback phase -> counters.
+ *   URL params -> preset + custom name -> (client) playback phase -> counters.
  *
  * Next 16 hands searchParams as a Promise; it must be awaited. Reading it
  * without awaiting yields a thenable, resolvePreset falls through to the
- * default, and every /?biz= link silently renders salon. Gates 9-11 cover that.
+ * default, and every /?biz= link silently renders salon. Gates 9-11 cover
+ * that; gate 54 covers the same failure mode for &name=.
+ *
+ * The headline moved into Demo (change 10): on mobile the phone is the first
+ * frame and the headline lands beneath it on the missed-call beat, an order
+ * only the client grid can express.
  */
 export default async function Home({
   searchParams,
@@ -16,28 +21,41 @@ export default async function Home({
 }) {
   const sp = await searchParams;
   const preset = resolvePreset(sp.biz);
+  const initialName = resolveName(sp.name);
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-5 py-14 min-[900px]:px-10 min-[900px]:py-20 min-[1100px]:pb-20 min-[1100px]:pt-4">
-      {/* A — eyebrow, headline, sub.
-          At >=1100px the phone+ledger pair must fit under 900px tall with no
-          scroll (the pair alone is ~740px), so the hero is compact there —
-          but the sub-headline is never hidden: it's the only line that says
-          what the product is, and desktop is the frame people screenshot.
-          Vertical space is reclaimed elsewhere (see lib/timeline.ts and
-          Phone.tsx for the >=1100px reserve-height and scale levers). */}
-      <header className="max-w-3xl">
-        <p className="text-[11px] uppercase tracking-[0.3em] text-muted">{COPY.eyebrow}</p>
-        <h1 className="mt-5 min-[1100px]:mt-1 font-display font-medium leading-[1.06] min-[1100px]:leading-[1.15] text-ink [font-size:clamp(34px,6vw,58px)] min-[1100px]:text-[26px]">
-          {COPY.headline}
-        </h1>
-        <p data-sub className="mt-5 min-[1100px]:mt-1.5 max-w-xl text-[16px] leading-relaxed text-muted">
-          {COPY.sub}
-        </p>
-      </header>
+    <>
+      {/* Orientation guard (C4): landscape on a coarse-pointer device shows
+          only this. Pure CSS gate in globals.css — no JS, no hydration. */}
+      <div
+        data-rotate-guard
+        className="fixed inset-0 z-50 flex-col items-center justify-center gap-5 bg-abyss text-center"
+      >
+        <svg
+          width="44"
+          height="44"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="text-teal"
+          aria-hidden="true"
+        >
+          <rect x="7" y="3" width="10" height="18" rx="2.5" />
+          <path d="M20.5 8.5a9 9 0 0 1 0 7" />
+          <path d="M19 17.5l1.5-2l2 1.5" />
+        </svg>
+        <p className="text-[15px] text-ink">{COPY.rotatePrompt}</p>
+      </div>
 
-      {/* B-F — interactive island, server-rendered settled for the resolved preset */}
-      <Demo initialPresetId={preset.id} />
-    </main>
+      <main
+        data-app-root
+        className="mx-auto w-full max-w-6xl px-5 pb-14 pt-6 min-[900px]:px-10 min-[900px]:pb-10 min-[900px]:pt-0"
+      >
+        <Demo initialPresetId={preset.id} initialName={initialName} />
+      </main>
+    </>
   );
 }

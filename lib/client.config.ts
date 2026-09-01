@@ -2,7 +2,7 @@ export type Bubble = { from: "business" | "customer"; text: string; time: string
 export type CaughtEntry = { number: string; detail: string; amount: number; date: string };
 export type Preset = {
   id: string; label: string; bizName: string;
-  callerNumber: string; callReason: string;
+  callerName: string; callerNumber: string; callReason: string;
   ticket: number; missedPerMonth: number; callsCaught: number; recovered: number; lost: number;
   sinceCalls: number; sinceRecovered: number;
   caught: CaughtEntry[];
@@ -50,10 +50,37 @@ export const COPY = {
     justNow: "Just now",
   },
 
+  // The lock-screen beat (change 10). Approved copy; do not reword.
+  lock: {
+    incomingLabel: "Incoming call",
+    declineLabel: "Decline",
+    acceptLabel: "Accept",
+    missedLabel: "Missed Call",
+  },
+
+  // The owner-side notification card (change 10). Approved copy. nowLabel is
+  // the timestamp corner specified in the A4 beat ("now" small muted
+  // top-right) — added here rather than hardcoded, per standing rule 3.
+  notify: {
+    bookedLabel: "Booked",
+    appTag: "Salvage",
+    nowLabel: "now",
+  },
+
+  // The live business-name field (change 10). Approved copy.
+  name: {
+    label: "Type your business name",
+    placeholder: "Harbor Row Aesthetics",
+    hint: "Everything below updates as you type.",
+  },
+
+  rotatePrompt: "Turn your phone upright.",
+
   // Phone / OG chrome. Same human veto as everything else in this file.
   chrome: {
     phone: {
       statusTime: "8:47",
+      lockDate: "Thursday, March 14",
       threadLabel: "Text message",
       deliveredLabel: "Delivered",
     },
@@ -66,6 +93,7 @@ export const COPY = {
 export const PRESETS: Preset[] = [
   {
     id: "salon", label: "Salon & Spa", bizName: "Harbor Row Aesthetics",
+    callerName: "Danielle R.",
     callerNumber: "(804) 555-0142", callReason: "Front desk closed at 6",
     ticket: 340, missedPerMonth: 12, callsCaught: 4, recovered: 1360, lost: 4080,
     sinceCalls: 31, sinceRecovered: 9240,
@@ -85,6 +113,7 @@ export const PRESETS: Preset[] = [
   },
   {
     id: "home", label: "Home Services", bizName: "Ridgeline Plumbing",
+    callerName: "Mark T.",
     callerNumber: "(804) 555-0197", callReason: "Line was busy",
     ticket: 850, missedPerMonth: 15, callsCaught: 5, recovered: 4250, lost: 12750,
     sinceCalls: 24, sinceRecovered: 18700,
@@ -103,6 +132,7 @@ export const PRESETS: Preset[] = [
   },
   {
     id: "dental", label: "Dental", bizName: "Fairfield Dental",
+    callerName: "Priya S.",
     callerNumber: "(804) 555-0168", callReason: "After hours",
     ticket: 600, missedPerMonth: 9, callsCaught: 3, recovered: 1800, lost: 5400,
     sinceCalls: 19, sinceRecovered: 9800,
@@ -135,6 +165,21 @@ export const callTime = (p: Preset) => p.thread[0].time;
 export function resolvePreset(biz: string | string[] | undefined): Preset {
   const id = Array.isArray(biz) ? biz[0] : biz;
   return PRESETS.find((p) => p.id === id) ?? PRESETS.find((p) => p.id === DEFAULT_PRESET) ?? PRESETS[0];
+}
+
+export const MAX_NAME_LEN = 40;
+
+/**
+ * Resolves &name=. One function for BOTH the server read (searchParams) and
+ * the client's debounced commit, so a shared link renders exactly what the
+ * sender saw. Trim + cap only — no HTML stripping needed because the value
+ * is only ever rendered as React text content, never markup (gate 55).
+ * Empty result means "use the preset's default bizName".
+ */
+export function resolveName(raw: string | string[] | undefined): string {
+  const s = Array.isArray(raw) ? raw[0] : raw;
+  if (!s) return "";
+  return s.trim().slice(0, MAX_NAME_LEN);
 }
 
 export const SHARE_ORIGIN = "https://salvage-demo.vercel.app";

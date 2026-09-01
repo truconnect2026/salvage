@@ -11,7 +11,7 @@
   --color-gold: #D8B45A;
   --color-ink: #E9EEF4;
   --color-muted: #8AA0B4;
-  --font-display: var(--font-cormorant);
+  --font-display: var(--font-fraunces);
   --font-body: var(--font-inter);
 }
 
@@ -22,6 +22,21 @@ body {
   min-height: 100dvh;
 }
 
+/* Fraunces warmth: optical sizing on, SOFT axis raised. Applies wherever the
+   display face is used — this rule stacks with Tailwind's own
+   .font-display { font-family: ... } utility. */
+.font-display {
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 70;
+}
+
+/* Everything INSIDE the phone screen speaks the device's language, not the
+   brand's: the system UI stack (change 10, C1a). The lock screen and both
+   notification cards carry this class too. */
+.font-phone {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
 /* Reduced motion: no playback, so Replay has nothing to do. Pure CSS, so it
    holds with JS disabled too and needs no hydration-sensitive branch. */
 @media (prefers-reduced-motion: reduce) {
@@ -30,17 +45,67 @@ body {
   }
 }
 
-/* Two-up area order. Below 900px the three blocks stack phone -> ledger ->
-   controls, so the two sides of the story appear together before the ask.
-   At >=900px it reflows to two columns with controls stacked under the
-   phone, ledger spanning both rows — the original desktop composition.
-   A named-area grid, not Tailwind's `order-*`, because the desktop shape
-   needs the ledger to span two rows, which `order` alone cannot express. */
+/* Change 10 page order. Mobile: the phone IS the first frame; the headline
+   lands beneath it on the missed-call beat, then name + presets, then the
+   ledger. Desktop reflows to the classic composition — headline block above
+   the two-up. A named-area grid, not `order-*`, because the desktop shape
+   needs multi-column areas. */
 .demo-grid {
-  grid-template-areas: "phone" "ledger" "controls";
+  grid-template-areas: "phone" "head" "namepre" "ledger";
 }
 @media (min-width: 900px) {
   .demo-grid {
-    grid-template-areas: "phone ledger" "controls ledger";
+    grid-template-areas:
+      "head head"
+      "namepre namepre"
+      "phone ledger";
+  }
+}
+
+/* 19.5:9 fit fallback (change 10, A3): on short viewports where a full-width
+   19.5:9 device would overflow, cap the device so its height is 78% of the
+   viewport and let the width follow. At 390x844 the full-width device fits
+   (758px + 24px padding < 844) and this cap never engages. */
+@media (max-width: 899px) and (max-height: 800px) {
+  [data-phone-device] {
+    max-width: calc(78dvh * 9 / 19.5);
+  }
+}
+
+/* Section reveal (change 10, C5a): below-the-fold sections fade + rise 16px
+   once, on first intersection. The classes are added by JS only — with no JS
+   (the SSR floor) nothing is ever hidden. The headline block is NOT part of
+   this: its reveal belongs to the playback engine (the missed-call beat). */
+[data-reveal].reveal-pending {
+  opacity: 0;
+  transform: translateY(16px);
+}
+[data-reveal].revealed {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 400ms ease,
+    transform 400ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal].reveal-pending,
+  [data-reveal].revealed {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* Orientation guard (change 10, C4): landscape on a coarse-pointer device
+   gets a full-screen rotate prompt and nothing else. */
+[data-rotate-guard] {
+  display: none;
+}
+@media (pointer: coarse) and (max-height: 500px) and (orientation: landscape) {
+  [data-rotate-guard] {
+    display: flex;
+  }
+  [data-app-root] {
+    display: none;
   }
 }

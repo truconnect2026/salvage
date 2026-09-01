@@ -1,6 +1,6 @@
 import { Fragment, type CSSProperties } from "react";
 
-import { COPY, callTime, type Preset } from "@/lib/client.config";
+import { COPY, callTime, type CaughtEntry, type Preset } from "@/lib/client.config";
 
 /* Hand-written status glyphs. No emoji, no icon library. */
 
@@ -75,8 +75,69 @@ export function MissedCallGlyph() {
   );
 }
 
-/* The loss moment. Static: it has already happened by the time playback starts,
-   so it never enters, never animates out, and is never re-mounted. */
+/* Filled handset for the lock-screen call buttons. */
+function HandsetGlyph({ up = false }: { up?: boolean }) {
+  return (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      style={up ? undefined : { transform: "rotate(135deg)" }}
+    >
+      <path
+        d="M13.6 11.3l-2.1-1.5a1 1 0 0 0-1.3.2l-.7.9a9.6 9.6 0 0 1-3.4-3.4l.9-.7a1 1 0 0 0 .2-1.3L5.7 3.4a1 1 0 0 0-1.4-.2l-1 .8a1.7 1.7 0 0 0-.5 1.8 13.2 13.2 0 0 0 8.4 8.4 1.7 1.7 0 0 0 1.8-.5l.8-1a1 1 0 0 0-.2-1.4z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+const initialsOf = (name: string) =>
+  name
+    .split(/\s+/)
+    .map((w) => w[0] ?? "")
+    .join("")
+    .replace(/[^A-Za-z]/g, "")
+    .slice(0, 2)
+    .toUpperCase();
+
+/**
+ * The owner notification card (change 10, A4). Rendered twice — inside the
+ * phone screen and, on desktop, on the ledger panel's top edge — both driven
+ * by the same rAF phase in Demo.tsx. System stack, not brand faces; the one
+ * exception is the Salvage "S" mark, which is the brand speaking inside the
+ * device's language.
+ */
+export function NotifyCard({ bizName, entry }: { bizName: string; entry: CaughtEntry }) {
+  return (
+    <div
+      className="rounded-2xl p-3 font-phone"
+      style={{
+        background: "rgba(9, 17, 31, 0.88)",
+        backdropFilter: "blur(16px)",
+        WebkitBackdropFilter: "blur(16px)",
+      }}
+    >
+      <div className="flex items-center gap-1.5">
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal">
+          <span className="font-display text-[13px] font-semibold leading-none text-abyss">S</span>
+        </span>
+        <span className="text-[11px] font-medium text-muted">{COPY.notify.appTag}</span>
+        <span className="ml-auto text-[11px] text-muted">{COPY.notify.nowLabel}</span>
+      </div>
+      <div className="mt-1.5 truncate text-[14px] font-semibold leading-snug text-ink">
+        {bizName} · {COPY.notify.bookedLabel}
+      </div>
+      <div className="mt-0.5 truncate text-[13px] leading-snug text-muted">
+        {entry.detail} · ${entry.amount}
+      </div>
+    </div>
+  );
+}
+
+/* The loss moment. Static: it has already happened by the time the thread
+   appears, so it never enters, never animates out, and is never re-mounted. */
 function CallCard({ preset }: { preset: Preset }) {
   return (
     <div
@@ -104,9 +165,9 @@ function CallCard({ preset }: { preset: Preset }) {
    only thing that ever shows it, by writing inline display. */
 function TypingRow({ index, right }: { index: number; right: boolean }) {
   return (
-    <div data-typing={index} className={`hidden ${right ? "justify-end" : "justify-start"}`}>
+    <div data-typing={index} className={`mt-2 hidden ${right ? "justify-end" : "justify-start"}`}>
       <div
-        className={`flex items-center gap-[5px] rounded-2xl px-3.5 py-3 ${
+        className={`flex items-center gap-[5px] rounded-[20px] px-3.5 py-3 ${
           right ? "bg-teal" : "bg-surface-2"
         }`}
       >
@@ -122,170 +183,286 @@ function TypingRow({ index, right }: { index: number; right: boolean }) {
   );
 }
 
+/**
+ * The lock-screen beat (change 10, A2). SSR ships it hidden — the settled
+ * thread is the no-JS floor — and only the playback engine ever shows it.
+ * Every animated piece (ring pulse, collapse, dim, missed state) is driven by
+ * the one rAF phase in Demo.tsx via inline styles; no CSS animation loops.
+ */
+function LockScreen({ preset }: { preset: Preset }) {
+  return (
+    <div
+      data-lock
+      className="absolute inset-0 z-30 hidden flex-col items-center overflow-hidden rounded-[44px] font-phone"
+      style={{ background: "linear-gradient(180deg, #071021 0%, #0B1830 100%)" }}
+    >
+      {/* Status glyphs live on the lock layer too — the hardware doesn't
+          vanish because a call is ringing (review lens 1). No small time on
+          the left: the big clock below is the lock screen's clock. */}
+      <div className="absolute right-6 top-2 z-10 flex items-center gap-[6px] text-muted">
+        <SignalGlyph />
+        <WifiGlyph />
+        <BatteryGlyph />
+      </div>
+
+      {/* The clock does NOT collapse with the call UI: a real lock screen
+          keeps its clock through the miss (review lens 1). iOS-16 hierarchy:
+          date line above a heavy clock. */}
+      <div className="flex w-full shrink-0 flex-col items-center pt-13">
+        <div className="text-[13px] font-medium text-muted">{COPY.chrome.phone.lockDate}</div>
+        <div className="mt-0.5 text-[64px] font-semibold leading-none tabular-nums text-ink">
+          {COPY.chrome.phone.statusTime}
+        </div>
+      </div>
+
+      {/* The call UI: everything that collapses upward at the miss. */}
+      <div data-lock-call className="flex min-h-0 w-full flex-1 flex-col items-center pt-8">
+        <div className="text-[13px] text-muted">{COPY.lock.incomingLabel}</div>
+
+        {/* Avatar + the pulsing ring. The ring's scale/opacity are written by
+            the rAF loop each frame — 1.2s period, three pulses, then still. */}
+        <div className="relative mt-5 flex h-16 w-16 items-center justify-center rounded-full bg-surface-2">
+          <span
+            data-lock-ring
+            className="pointer-events-none absolute -inset-1 rounded-full border-2 border-ink/40"
+            style={{ opacity: 0 }}
+          />
+          <span className="text-[22px] font-medium text-muted">{initialsOf(preset.callerName)}</span>
+        </div>
+
+        <div data-lock-caller className="mt-4 text-[26px] font-medium leading-tight text-ink">
+          {preset.callerName}
+        </div>
+        <div className="mt-1 text-[14px] tabular-nums text-muted">{preset.callerNumber}</div>
+
+        {/* Decline / Accept. They never press — that is the point. Exact
+            system palette (#FF3B30 / #34C759), white labels: the one screen
+            that must not speak brand (review lens 1). */}
+        <div className="mt-auto flex w-full items-start justify-center gap-24 pb-14">
+          <div className="flex flex-col items-center gap-2">
+            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#FF3B30] text-white">
+              <HandsetGlyph />
+            </span>
+            <span className="text-[12px] text-white/90">{COPY.lock.declineLabel}</span>
+          </div>
+          <div className="flex flex-col items-center gap-2">
+            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#34C759] text-white">
+              <HandsetGlyph up />
+            </span>
+            <span className="text-[12px] text-white/90">{COPY.lock.acceptLabel}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* The 30% dim that lands with the miss. */}
+      <div
+        data-lock-dim
+        className="pointer-events-none absolute inset-0 bg-black"
+        style={{ opacity: 0 }}
+      />
+
+      {/* The iOS "Missed Call" state. */}
+      <div
+        data-lock-missed
+        className="absolute inset-x-0 top-[38%] flex flex-col items-center"
+        style={{ opacity: 0 }}
+      >
+        <div className="text-[22px] font-medium text-ink">{COPY.lock.missedLabel}</div>
+        <div className="mt-1 text-[15px] text-muted">{preset.callerName}</div>
+      </div>
+    </div>
+  );
+}
+
 export default function Phone({
   preset,
+  bizName,
   screenMinHeight,
-  screenHeight,
   typingBefore = [],
   hideCallCard = false,
+  showNotification = false,
 }: {
   preset: Preset;
-  /* Forces a full-device screen height so a short thread still reads as a real
-     phone. Used by the OG composition, which crops the device at the frame. */
+  /* The effective business name (custom or preset default). Falls back to the
+     preset's own bizName so static compositions (OG) need not pass it. */
+  bizName?: string;
+  /* OG crop mode: a fixed screen height instead of the 19.5:9 device box.
+     The OG canvas crops the composition; the interactive page never uses it. */
   screenMinHeight?: number;
-  /* Fixed screen height reserving the call card and the settled thread, so
-     bubbles can anchor to the bottom and clientHeight never changes. */
-  screenHeight?: number;
   /* Bubble indices that get a typing indicator rendered before them. */
   typingBefore?: number[];
-  /* OG composition only: shows the settled thread's tail (last bubbles +
-     Delivered) without the call card that opened it, so a short crop reads
-     as a resolved conversation rather than a mid-scroll fragment. */
+  /* OG composition only: shows the settled thread's tail without the call
+     card that opened it. */
   hideCallCard?: boolean;
+  /* OG composition only: the owner notification rendered statically visible —
+     there is no rAF phase on the OG page to slide it in. */
+  showNotification?: boolean;
 }) {
   const thread = preset.thread;
   const typing = new Set(typingBefore);
-  /* Bottom-anchor only when the height is reserved for playback. The OG crop
-     uses screenMinHeight and wants the conversation to start at the top. */
-  const anchorBottom = screenHeight != null;
+  const effectiveBizName = bizName ?? preset.bizName;
+  /* Aspect mode is the real device: box locked to 19.5:9, height follows
+     width. OG crop mode keeps the old fixed-height screen. */
+  const aspect = screenMinHeight == null;
 
-  /* screenHeight is exposed as a CSS custom property, not a plain inline
-     height, so a breakpoint-scoped Tailwind class can override just the
-     value above 1100px. Setting a custom property via inline style is STILL
-     an inline declaration (same max specificity as `style.height` directly),
-     so the override class below carries `!` — an important stylesheet rule
-     is the one thing that legitimately outranks a non-important inline
-     style in the cascade. */
-  const screenStyle: CSSProperties & { "--phone-reserved-h"?: string } = {
-    minHeight: screenMinHeight,
+  const bezelShadow: CSSProperties = {
+    boxShadow:
+      "inset 0 1px 0 0 rgba(255,255,255,0.08), 0 44px 90px -28px rgba(0,0,0,0.9), 0 8px 28px -12px rgba(0,0,0,0.7)",
   };
-  if (screenHeight != null) screenStyle["--phone-reserved-h"] = `${screenHeight}px`;
 
-  return (
-    <div className="w-[390px] max-w-full shrink-0">
-      {/* Bezel. The inset top highlight is device chrome, not the app's
-          elevation system (which is luminance-only, no shadows) — a real
-          phone bezel catches a hairline of light along its top edge. */}
+  const screenContent = (
+    <>
+      {/* Notch */}
+      <div className="absolute left-1/2 top-0 z-40 h-[26px] w-[120px] -translate-x-1/2 rounded-b-[14px] bg-[#05090F]" />
+
+      {/* Status row */}
+      <div className="relative z-10 flex h-[36px] shrink-0 items-center justify-between px-6 pt-1">
+        <span className="text-[13px] font-semibold tabular-nums text-ink">
+          {COPY.chrome.phone.statusTime}
+        </span>
+        <span className="flex items-center gap-[6px] text-muted">
+          <SignalGlyph />
+          <WifiGlyph />
+          <BatteryGlyph />
+        </span>
+      </div>
+
+      {/* Contact header */}
+      <div className="shrink-0 border-b border-line bg-surface-2 px-6 pb-3 pt-2 text-center">
+        <div data-biz-name className="text-[15px] font-semibold leading-tight text-ink">
+          {effectiveBizName}
+        </div>
+        <div className="mt-0.5 text-[11px] text-muted">{COPY.chrome.phone.threadLabel}</div>
+      </div>
+
+      {/* Reserved box: call card pinned to the top, thread stack to the bottom. */}
       <div
-        className="relative rounded-[2.75rem] bg-[#05090F] p-[10px] ring-1 ring-inset ring-line/60"
-        style={{
-          boxShadow:
-            "inset 0 1px 0 0 rgba(255,255,255,0.08), 0 44px 90px -28px rgba(0,0,0,0.9), 0 8px 28px -12px rgba(0,0,0,0.7)",
-        }}
+        data-thread-viewport
+        className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-5 pt-4"
       >
-        {/* Screen. rounded-[1.75rem] is deliberately well short of the
-            bezel's 2.75rem, not the ~concentric 2.15rem this used to carry —
-            the corner should read as visibly tighter than the bezel's, not
-            as a same-curve inset. bg-surface: the phone screen and the
-            owner panel are the same "device/panel" elevation step. */}
+        {!hideCallCard && <CallCard preset={preset} />}
+
+        <div
+          /* overflow-hidden matters: an overflowing justify-end box spills
+             past its START edge, so without it a thread taller than the
+             reserve would paint opaque bubbles over the call card at very
+             narrow widths. Clipped, it degrades like a scrolled thread. */
+          className={`flex min-h-0 flex-1 flex-col overflow-hidden ${
+            aspect ? "justify-end" : "justify-start"
+          }`}
+        >
+          <div data-thread-area className="flex flex-col pt-3">
+            {thread.map((b, i) => {
+              const prev = thread[i - 1];
+              const next = thread[i + 1];
+              const senderChange = !prev || prev.from !== b.from;
+              const runEnd = !next || next.from !== b.from;
+
+              return (
+                <Fragment key={i}>
+                  {typing.has(i) && <TypingRow index={i} right={b.from === "business"} />}
+
+                  {/* iOS spacing (C1c): 8px between senders, 2px within a
+                      same-sender run; the time label rides the sender change. */}
+                  <div
+                    data-row={i}
+                    className={`flex flex-col ${i === 0 ? "" : senderChange ? "mt-2" : "mt-0.5"}`}
+                  >
+                    {senderChange && (
+                      <div className="pb-1.5 pt-2 text-center text-[11px] tabular-nums text-muted">
+                        {b.time}
+                      </div>
+                    )}
+
+                    {b.from === "business" ? (
+                      <div className="flex justify-end">
+                        <div
+                          data-bubble="business"
+                          className={`max-w-[72%] rounded-[20px] bg-teal px-[14px] py-2 text-[17px] leading-[1.29] text-abyss ${
+                            runEnd ? "rounded-br-[6px]" : ""
+                          }`}
+                        >
+                          {b.text}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex justify-start">
+                        <div
+                          data-bubble="customer"
+                          className={`max-w-[72%] rounded-[20px] bg-surface-2 px-[14px] py-2 text-[17px] leading-[1.29] text-ink ${
+                            runEnd ? "rounded-bl-[6px]" : ""
+                          }`}
+                        >
+                          {b.text}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </Fragment>
+              );
+            })}
+
+            <div data-delivered className="mt-0.5 pr-1 pt-1 text-right text-[11px] text-muted">
+              {COPY.chrome.phone.deliveredLabel}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* The lock-screen beat lives only on the interactive device. */}
+      {aspect && <LockScreen preset={preset} />}
+
+      {/* The owner notification, sliding up from the screen's bottom edge.
+          12px inset (inset-x-3 / bottom-3). SSR ships it parked below the
+          edge and transparent; the engine slides it. The OG composition
+          forces it visible statically. */}
+      <div
+        data-notify-phone
+        className="absolute inset-x-3 bottom-3 z-40"
+        style={
+          showNotification
+            ? { transform: "none", opacity: 1 }
+            : { transform: "translateY(130%)", opacity: 0 }
+        }
+      >
+        <NotifyCard bizName={effectiveBizName} entry={preset.caught[0]} />
+      </div>
+
+      {/* Home indicator. Muted, low-alpha: chrome, not content. */}
+      <div className="absolute bottom-2 left-1/2 z-50 h-1.25 w-35 -translate-x-1/2 rounded-full bg-muted/30" />
+    </>
+  );
+
+  if (!aspect) {
+    /* OG crop mode: fixed screen height, device cropped by the canvas. */
+    return (
+      <div data-phone-device className="w-[390px] max-w-full shrink-0">
+        <div className="relative rounded-[56px] bg-[#05090F] p-3 ring-1 ring-inset ring-line/60" style={bezelShadow}>
+          <div
+            data-phone-screen
+            className="relative flex flex-col overflow-hidden rounded-[44px] bg-surface font-phone"
+            style={{ minHeight: screenMinHeight }}
+          >
+            {screenContent}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* The real device: 19.5:9 box (gate 46), 12px bezel, 44px screen radius
+     inside a 56px outer radius (C1d). Height always follows width. */
+  return (
+    <div data-phone-device className="relative mx-auto aspect-[9/19.5] w-full max-w-[390px] shrink-0">
+      <div
+        className="absolute inset-0 rounded-[56px] bg-[#05090F] p-3 ring-1 ring-inset ring-line/60"
+        style={bezelShadow}
+      >
         <div
           data-phone-screen
-          className={`relative flex flex-col overflow-hidden rounded-[1.75rem] bg-surface ${
-            // 638px must match lib/timeline.ts's PHONE_SCREEN_HEIGHT_WIDE —
-            // Tailwind's JIT scanner needs the literal in source, so this
-            // can't be a template interpolation of the constant.
-            screenHeight != null ? "h-[var(--phone-reserved-h)] min-[1100px]:[--phone-reserved-h:638px]!" : ""
-          }`}
-          style={screenStyle}
+          className="relative flex h-full flex-col overflow-hidden rounded-[44px] bg-surface font-phone"
         >
-          {/* Notch */}
-          <div className="absolute left-1/2 top-0 z-20 h-[26px] w-[120px] -translate-x-1/2 rounded-b-[14px] bg-[#05090F]" />
-
-          {/* Status row */}
-          <div className="relative z-10 flex h-[36px] shrink-0 items-center justify-between px-6 pt-1">
-            <span className="text-[13px] font-semibold tabular-nums text-ink">
-              {COPY.chrome.phone.statusTime}
-            </span>
-            <span className="flex items-center gap-[6px] text-muted">
-              <SignalGlyph />
-              <WifiGlyph />
-              <BatteryGlyph />
-            </span>
-          </div>
-
-          {/* Contact header */}
-          <div className="shrink-0 border-b border-line bg-surface-2 px-6 pb-3 pt-2 text-center">
-            <div
-              data-biz-name
-              className="font-body text-[15px] font-semibold leading-tight text-ink"
-            >
-              {preset.bizName}
-            </div>
-            <div className="mt-0.5 text-[11px] text-muted">{COPY.chrome.phone.threadLabel}</div>
-          </div>
-
-          {/* Reserved box: call card pinned to the top, thread stack to the bottom. */}
-          <div
-            data-thread-viewport
-            className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-5 pt-4"
-          >
-            {!hideCallCard && <CallCard preset={preset} />}
-
-            <div
-              /* overflow-hidden matters: an overflowing justify-end box spills
-                 past its START edge, so without it a thread taller than the
-                 reserve would paint opaque bubbles over the call card at very
-                 narrow widths. Clipped, it degrades like a scrolled thread. */
-              className={`flex min-h-0 flex-1 flex-col overflow-hidden ${
-                anchorBottom ? "justify-end" : "justify-start"
-              }`}
-            >
-              <div data-thread-area className="flex flex-col gap-1 pt-3">
-                {thread.map((b, i) => {
-                  const prev = thread[i - 1];
-                  const next = thread[i + 1];
-                  const senderChange = !prev || prev.from !== b.from;
-                  const runEnd = !next || next.from !== b.from;
-
-                  return (
-                    <Fragment key={i}>
-                      {typing.has(i) && <TypingRow index={i} right={b.from === "business"} />}
-
-                      <div data-row={i} className="flex flex-col gap-1">
-                        {senderChange && (
-                          <div className="pb-1 pt-2 text-center text-[11px] tabular-nums text-muted">
-                            {b.time}
-                          </div>
-                        )}
-
-                        {b.from === "business" ? (
-                          <div className="flex justify-end">
-                            <div
-                              data-bubble="business"
-                              className={`max-w-[78%] rounded-2xl bg-teal px-3.5 py-2 text-[14px] leading-snug text-abyss ${
-                                runEnd ? "rounded-br-sm" : ""
-                              }`}
-                            >
-                              {b.text}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex justify-start">
-                            <div
-                              data-bubble="customer"
-                              className={`max-w-[78%] rounded-2xl bg-surface-2 px-3.5 py-2 text-[14px] leading-snug text-ink ${
-                                runEnd ? "rounded-bl-sm" : ""
-                              }`}
-                            >
-                              {b.text}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </Fragment>
-                  );
-                })}
-
-                <div data-delivered className="pr-1 pt-1 text-right text-[11px] text-muted">
-                  {COPY.chrome.phone.deliveredLabel}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Home indicator. Muted, low-alpha: chrome, not content — it
-              should read as hardware, never compete with the thread. */}
-          <div className="absolute bottom-2 left-1/2 z-20 h-1.25 w-35 -translate-x-1/2 rounded-full bg-muted/30" />
+          {screenContent}
         </div>
       </div>
     </div>

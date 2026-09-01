@@ -14,17 +14,25 @@ import { usd } from "@/lib/format";
  */
 export default function Ledger({
   preset,
+  bizName,
   compact = false,
 }: {
   preset: Preset;
+  /* The effective business name (custom or preset default) — change 10's
+     live name field re-skins this header without touching playback. */
+  bizName?: string;
   /* Tighter, larger-type rendering for the OG thumbnail: legible at 500px
      wide beats "looks right at full size", and the frame is short on height. */
   compact?: boolean;
 }) {
   const [row0, ...rest] = preset.caught;
+  const headerName = bizName ?? preset.bizName;
   const L = COPY.ledger;
 
-  const pad = compact ? "p-3" : "p-6";
+  /* change 10: the desktop hero section gained the name field above the
+     two-up while keeping the whole frame inside 900px, so the panel runs
+     denser at >=1100px. Mobile and the OG compact variant are untouched. */
+  const pad = compact ? "p-3" : "p-6 min-[1100px]:p-5";
   const tileValue = `mt-1.5 font-display font-semibold leading-none lining-nums ${
     compact ? "text-[24px]" : "text-[26px] min-[500px]:text-[30px]"
   }`;
@@ -40,7 +48,7 @@ export default function Ledger({
         <div className="min-w-0">
           <p className="text-[10px] uppercase tracking-[0.2em] text-muted">{L.screenLabel}</p>
           <div data-ledger-biz className="mt-1 truncate font-body text-[16px] font-semibold text-ink">
-            {preset.bizName}
+            {headerName}
           </div>
           {!compact && <div className="mt-0.5 text-[12px] text-muted">{L.monthLabel}</div>}
         </div>
@@ -52,7 +60,7 @@ export default function Ledger({
       {/* Three metric tiles */}
       <div
         data-money
-        className={`grid gap-3 grid-cols-[repeat(auto-fit,minmax(150px,1fr))] ${compact ? "mt-2" : "mt-6"}`}
+        className={`grid gap-3 grid-cols-[repeat(auto-fit,minmax(150px,1fr))] ${compact ? "mt-2" : "mt-6 min-[1100px]:mt-4"}`}
       >
         <div className={`rounded-xl border border-line bg-surface-2 ${compact ? "p-3" : "p-4"}`}>
           <p className="text-[11px] uppercase tracking-[0.14em] text-muted">{L.recoveredLabel}</p>
@@ -66,8 +74,26 @@ export default function Ledger({
            * path (panelRecoveredAt drives it); the two attributes are just
            * two names for the same node.
            */}
-          <p data-panel-recovered data-ledger-recovered className={`${tileValue} text-gold`}>
-            {usd(preset.recovered)}
+          {/* The recovered figure keeps its gate attributes on the INNER span:
+              the engine rewrites its textContent every frame, which would
+              destroy any children — so the shimmer overlay (change 10, C5c)
+              lives beside it, not inside it. The overlay's computed color is
+              inherited ink, never gold, so the gold census stays at one. */}
+          <p className={`${tileValue} relative block overflow-hidden`}>
+            <span data-panel-recovered data-ledger-recovered className="text-gold">
+              {usd(preset.recovered)}
+            </span>
+            <span
+              data-gold-shimmer
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0"
+              style={{
+                opacity: 0,
+                transform: "translateX(-120%)",
+                background:
+                  "linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.30) 50%, transparent 70%)",
+              }}
+            />
           </p>
           {!compact && (
             <p data-calls-caught className="mt-1.5 text-[12px] text-ink">
@@ -100,7 +126,9 @@ export default function Ledger({
       </div>
 
       {/* Caught list */}
-      <p className={`text-[12px] uppercase tracking-[0.18em] text-muted ${compact ? "mt-2" : "mt-6"}`}>
+      <p
+        className={`text-[12px] uppercase tracking-[0.18em] text-muted ${compact ? "mt-2" : "mt-6 min-[1100px]:mt-4"}`}
+      >
         {L.caughtLabel}
       </p>
       {/* rounded-tl-none: row [0]'s flush teal rule needs a square corner to
@@ -118,14 +146,16 @@ export default function Ledger({
         </div>
       </div>
 
-      {!compact && <p className="mt-4 text-[12px] text-muted">{L.reviewNote}</p>}
+      {!compact && <p className="mt-4 min-[1100px]:mt-3 text-[12px] text-muted">{L.reviewNote}</p>}
 
       {/* Since-install strip: the panel's last element, closing the gap
           against the phone at >=1100px with a running total rather than
           empty space. Renders in both variants — the OG composite wants it
           too. The dollar figure is ink, deliberately not gold: gold stays
           reserved for the one recovered figure above (gates 31/38). */}
-      <div className={`border-t border-line ${compact ? "mt-2 pt-1.5" : "mt-5 pt-4"}`}>
+      <div
+        className={`border-t border-line ${compact ? "mt-2 pt-1.5" : "mt-5 pt-4 min-[1100px]:mt-4 min-[1100px]:pt-3"}`}
+      >
         <p className="text-[10px] uppercase tracking-[0.2em] text-muted">{L.sinceLabel}</p>
         <p data-since-strip className={`mt-1.5 text-muted ${compact ? "text-[14px]" : "text-[13px]"}`}>
           <span data-since-calls>{preset.sinceCalls}</span> calls caught ·{" "}
@@ -152,7 +182,7 @@ function CaughtRow({
   return (
     <div
       data-caught-row={index}
-      className={`flex items-start gap-3 ${compact ? "px-3 py-2" : "px-4 py-3.5"} ${
+      className={`flex items-start gap-3 ${compact ? "px-3 py-2" : "px-4 py-3.5 min-[1100px]:py-2"} ${
         isFirst ? "border-l-2 border-l-teal bg-surface-3" : "bg-surface-2"
       }`}
     >

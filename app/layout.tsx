@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, Inter } from "next/font/google";
+import { Fraunces, Inter } from "next/font/google";
 import { META } from "@/lib/client.config";
 import "./globals.css";
 
-const cormorant = Cormorant_Garamond({
-  variable: "--font-cormorant",
+/* Change 10: Fraunces replaces Cormorant Garamond as the display face.
+   Variable, with the optical-size and SOFT axes loaded — the warmth comes
+   from font-variation-settings in globals.css, not a separate weight file. */
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
+  axes: ["opsz", "SOFT"],
   display: "swap",
 });
 
@@ -38,7 +41,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${cormorant.variable} ${inter.variable}`}>
+    <html lang="en" className={`${fraunces.variable} ${inter.variable}`}>
       <body className="bg-abyss text-ink font-body antialiased">{children}</body>
     </html>
   );

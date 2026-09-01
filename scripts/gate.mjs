@@ -58,6 +58,7 @@ const presets = (() => {
     return {
       id: mark.id,
       bizName: pick(/bizName:\s*"([^"]+)"/, "bizName"),
+      callerName: pick(/callerName:\s*"([^"]+)"/, "callerName"),
       callerNumber: pick(/callerNumber:\s*"([^"]+)"/, "callerNumber"),
       callReason: pick(/callReason:\s*"([^"]+)"/, "callReason"),
       ticket: Number(pick(/ticket:\s*(\d+)/, "ticket")),
@@ -87,11 +88,15 @@ const expected = { ...byId(defaultId), ctaHref };
 
 /*
  * Playback expectations, held here rather than imported from the timeline.
- * Beats are 0.9 / 2.2 / 3.3 / 4.0, so at these sample times the visible bubble
- * count is fully determined. Held independently of lib/timeline.ts on purpose:
- * a gate that imported the timeline would move with it and could never catch
- * a rebeat.
+ * Beats are 0.9 / 2.2 / 3.3 / 4.0 THREAD-RELATIVE, so at these sample times
+ * the visible bubble count is fully determined. Change 10 prepends a 4.8s
+ * lock-screen opening to the global clock: every browser gate that samples
+ * the thread timeline waits at (thread time + INTRO) but keeps its
+ * thread-relative labels and assertions untouched. Held independently of
+ * lib/timeline.ts on purpose: a gate that imported the timeline would move
+ * with it and could never catch a rebeat.
  */
+const INTRO = 4.8;
 const VISIBLE_AT = { 0.3: 0, 2.5: 2, 6.0: expected.bubbles };
 
 if (expected.caught.length !== 4) {
@@ -393,6 +398,26 @@ check(
   dotMiddotRows.map((r) => `?biz=${r.id} -> HTTP ${r.status}, contains ". ·": ${r.hasBad}`).join(" | "),
 );
 
+/* 54: the server reads &name= itself — a shared link renders the custom name
+   with no client hydration. Raw HTML, scripts stripped, so the RSC payload
+   cannot satisfy this. */
+{
+  const page = await getPage("/?biz=home&name=Acme%20Plumbing");
+  const ledgerBiz = elementsIn(page.html, "data-ledger-biz");
+  const phoneBiz = elementsIn(page.html, "data-biz-name");
+  check(
+    54,
+    "SSR of /?biz=home&name=Acme%20Plumbing renders the custom name in the ledger header",
+    page.status === 200 &&
+      ledgerBiz.length === 1 &&
+      ledgerBiz[0] === "Acme Plumbing" &&
+      phoneBiz.length === 1 &&
+      phoneBiz[0] === "Acme Plumbing",
+    `HTTP ${page.status}; ledger header ${JSON.stringify(ledgerBiz[0] ?? null)}, ` +
+      `phone header ${JSON.stringify(phoneBiz[0] ?? null)} (both must be "Acme Plumbing")`,
+  );
+}
+
 /* ---------- 12-20, 22-24, 26, 28-32: the live DOM ------------------------- */
 
 let chromium = null;
@@ -487,6 +512,7 @@ const numeric = (s) => (s == null ? NaN : Number(String(s).replace(/[^0-9.-]/g, 
 
 const BROWSER_GATES = [
   12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 23, 24, 26, 28, 29, 30, 31, 32, 33, 34, 35, 37, 38, 39, 45,
+  46, 47, 48, 49, 50, 51, 52, 53, 55, 56, 57,
 ];
 
 if (!chromium) {
@@ -519,7 +545,7 @@ if (!chromium) {
        read a mid-roll value regardless of correctness. 5.5 is unambiguously
        past settle. */
     for (const T of [0.3, 2.5, 3.0, 5.5, 6.0]) {
-      await waitT(page, T);
+      await waitT(page, T + INTRO);
       snaps[T] = await page.evaluate(sampleFn, EFF);
     }
 
@@ -720,7 +746,7 @@ if (!chromium) {
     const page = await ctx.newPage();
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
-    await waitT(page, 5.8); // past CONTROLS_AT (5.4) + CONTROLS_FADE (0.3), fully visible
+    await waitT(page, 5.8 + INTRO); // past CONTROLS_AT (5.4) + CONTROLS_FADE (0.3), fully visible
     await page.click("[data-share]");
     await page.waitForTimeout(250);
     let clip = null;
@@ -746,7 +772,7 @@ if (!chromium) {
     const page = await ctx.newPage();
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
-    await waitT(page, 6.0);
+    await waitT(page, 6.0 + INTRO);
 
     const tokens = await page.evaluate(() => {
       const root = getComputedStyle(document.documentElement);
@@ -868,7 +894,7 @@ if (!chromium) {
     const page = await ctx.newPage();
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
-    await waitT(page, 5.5);
+    await waitT(page, 5.5 + INTRO);
 
     const g = await page.evaluate(() => {
       const screen = document.querySelector("[data-phone-screen]");
@@ -922,7 +948,7 @@ if (!chromium) {
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
 
-    await waitT(page, 0.1);
+    await waitT(page, 0.1 + INTRO);
     const early = await page.evaluate((EFF) => {
       const vis = eval(EFF);
       const el = document.querySelector("[data-call-card]");
@@ -931,7 +957,7 @@ if (!chromium) {
       return { id: el.getAttribute("data-call-card"), visible: vis(el) > 0.5 };
     }, EFF);
 
-    await waitT(page, 6.0);
+    await waitT(page, 6.0 + INTRO);
     const late = await page.evaluate((EFF) => {
       const vis = eval(EFF);
       const el = document.querySelector("[data-call-card]");
@@ -966,7 +992,7 @@ if (!chromium) {
     const page = await ctx.newPage();
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
-    await waitT(page, 5.6); // settled: leak (LEAK_DUR=5.4) shows the OLD preset's full total
+    await waitT(page, 5.6 + INTRO); // settled: leak (LEAK_DUR=5.4) shows the OLD preset's full total
 
     const sampled = await page.evaluate(async (presetId) => {
       const num = (s) => Number(String(s ?? "").replace(/[^0-9.-]/g, ""));
@@ -1015,7 +1041,7 @@ if (!chromium) {
     const page = await ctx.newPage();
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
-    await waitT(page, 5.6); // settled: panel recovered shows the OLD preset's full total
+    await waitT(page, 5.6 + INTRO); // settled: panel recovered shows the OLD preset's full total
 
     const sampled = await page.evaluate(async (presetId) => {
       const num = (s) => Number(String(s ?? "").replace(/[^0-9.-]/g, ""));
@@ -1065,6 +1091,10 @@ if (!chromium) {
       const page = await ctx.newPage();
       await page.goto(base, { waitUntil: "domcontentloaded" });
       await page.evaluate(() => document.fonts.ready);
+      /* Change 10: the headline block lands at t=3.6 (gate 49/50 cover the
+         choreography); this gate's own claim — the sub-headline is visible —
+         is sampled once the landing completes. */
+      await waitT(page, 4.5);
       const r = await page.evaluate(() => {
         const el = document.querySelector("[data-sub]");
         if (!el) return null;
@@ -1100,55 +1130,53 @@ if (!chromium) {
     );
   });
 
-  /* --- 34 (amended, change 6): the FULL marketing frame — header + both
-   * device boxes + anything stacked in the phone column (Controls; the
-   * phone-side "Lost this month" card that used to also stack there is gone
-   * as of this change) — fits 1440x900 with no scroll.
+  /* --- 34 (amended, change 10): the desktop HERO section — header + name
+   * field block + both device boxes — fits 1440x900 with no scroll.
    *
-   * Change 5 scoped this to the device boxes alone (matching gate 30),
-   * because closing the FULL-column gap was unreachable by the levers that
-   * change offered (227px short, with only the phone's own height as a
-   * lever). Deleting the duplicate Lost card removed most of that stacked
-   * height, and change 6 explicitly asks for the fuller measurement again —
-   * so this gate now covers the whole left column, not just the phone.
+   * Change 6-9 included Controls in this frame because they stacked under
+   * the phone. Change 10's section layout (C3) deliberately moves Controls
+   * into the second full-viewport section on desktop, so they are no longer
+   * part of the first frame; the assertion on what IS in the first frame is
+   * unchanged: everything the first screenful claims to show must actually
+   * fit it.
    */
   await block("marketing-frame-fit", async () => {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const page = await ctx.newPage();
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
-    await waitT(page, 6.0);
+    await waitT(page, 6.0 + INTRO);
 
     const g = await page.evaluate(() => {
       const header = document.querySelector("header");
       const screen = document.querySelector("[data-phone-screen]");
       let phone = screen;
       for (let i = 0; i < 2 && phone && phone.parentElement; i++) phone = phone.parentElement;
-      const controls = document.querySelector("[data-controls]");
+      const nameField = document.querySelector("[data-name-input]");
       const panel = document.querySelector("[data-ledger-panel]");
-      if (!header || !phone || !controls || !panel) return null;
+      if (!header || !phone || !nameField || !panel) return null;
       const hr = header.getBoundingClientRect();
       const pr = phone.getBoundingClientRect();
-      const cr = controls.getBoundingClientRect();
+      const nr = nameField.getBoundingClientRect();
       const lr = panel.getBoundingClientRect();
       return {
         headerBottom: hr.bottom,
         phoneBottom: pr.bottom,
-        controlsBottom: cr.bottom,
+        nameBottom: nr.bottom,
         panelBottom: lr.bottom,
-        frameBottom: Math.max(hr.bottom, pr.bottom, cr.bottom, lr.bottom),
+        frameBottom: Math.max(hr.bottom, pr.bottom, nr.bottom, lr.bottom),
         innerHeight: window.innerHeight,
       };
     });
 
     check(
       34,
-      "full marketing frame (header + both device boxes + phone-column stack) fits 1440x900 with no scroll",
+      "desktop hero section (header + name field + both device boxes) fits 1440x900 with no scroll",
       g != null && g.frameBottom <= g.innerHeight,
       g == null
-        ? "header, phone, controls, or ledger panel not found"
+        ? "header, phone, name field, or ledger panel not found"
         : `frame bottom ${Math.round(g.frameBottom)}px (header ${Math.round(g.headerBottom)}px, ` +
-          `phone ${Math.round(g.phoneBottom)}px, controls ${Math.round(g.controlsBottom)}px, ` +
+          `name ${Math.round(g.nameBottom)}px, phone ${Math.round(g.phoneBottom)}px, ` +
           `panel ${Math.round(g.panelBottom)}px) vs viewport ${g.innerHeight}px (need frame bottom <= viewport)`,
     );
 
@@ -1162,7 +1190,7 @@ if (!chromium) {
     const page = await ctx.newPage();
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
-    await waitT(page, 6.0);
+    await waitT(page, 6.0 + INTRO);
 
     const g = await page.evaluate(() => {
       const root = getComputedStyle(document.documentElement);
@@ -1265,7 +1293,7 @@ if (!chromium) {
     const page = await ctx.newPage();
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
-    await waitT(page, 6.0);
+    await waitT(page, 6.0 + INTRO);
 
     const g = await page.evaluate(() => {
       const root = getComputedStyle(document.documentElement);
@@ -1320,7 +1348,7 @@ if (!chromium) {
       const page = await ctx.newPage();
       await page.goto(base, { waitUntil: "domcontentloaded" });
       await page.evaluate(() => document.fonts.ready);
-      await waitT(page, 6.0);
+      await waitT(page, 6.0 + INTRO);
 
       const g = await page.evaluate(() => {
         const root = getComputedStyle(document.documentElement);
@@ -1355,6 +1383,356 @@ if (!chromium) {
         .map((r) => `${r.vp} -> ${r.numeralCount} numeral(s) (need 2), colours ${JSON.stringify(r.numeralColors)}`)
         .join(" | "),
     );
+  });
+
+  /* --- 46 + 47: device fidelity — 19.5:9 box, system stack inside the
+   * screen, Fraunces outside it. --- */
+  await block("device-fidelity", async () => {
+    const rows = [];
+    for (const vp of [
+      { w: 390, h: 844 },
+      { w: 1440, h: 900 },
+    ]) {
+      const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h } });
+      const page = await ctx.newPage();
+      await page.goto(base, { waitUntil: "domcontentloaded" });
+      await page.evaluate(() => document.fonts.ready);
+      const g = await page.evaluate(() => {
+        const device = document.querySelector("[data-phone-device]");
+        const bizName = document.querySelector("[data-biz-name]");
+        const h1 = document.querySelector("h1");
+        if (!device) return null;
+        const r = device.getBoundingClientRect();
+        return {
+          w: r.width,
+          h: r.height,
+          ratio: r.width > 0 ? r.height / r.width : NaN,
+          screenFont: bizName ? getComputedStyle(bizName).fontFamily : null,
+          headlineFont: h1 ? getComputedStyle(h1).fontFamily : null,
+        };
+      });
+      rows.push({ vp: `${vp.w}x${vp.h}`, g });
+      await ctx.close();
+    }
+
+    const TARGET = 19.5 / 9;
+    const aspectOk = (g) =>
+      g != null && Number.isFinite(g.ratio) && g.ratio > 0 && Math.abs(g.ratio - TARGET) / TARGET <= 0.01;
+    check(
+      46,
+      "phone box aspect 19.5:9 within 1% at 390x844 and 1440x900",
+      rows.length === 2 && rows.every((r) => aspectOk(r.g)),
+      rows
+        .map(
+          (r) =>
+            `${r.vp} -> ${r.g ? `${r.g.w.toFixed(1)}x${r.g.h.toFixed(1)} ratio ${r.g.ratio?.toFixed(4)}` : "device not found"} ` +
+            `(target ${TARGET.toFixed(4)} ±1%)`,
+        )
+        .join(" | "),
+    );
+
+    const fontsOk = (g) =>
+      g != null &&
+      g.screenFont != null &&
+      (g.screenFont.includes("-apple-system") || g.screenFont.includes("Segoe UI")) &&
+      !g.screenFont.includes("Inter") &&
+      g.headlineFont != null &&
+      g.headlineFont.includes("Fraunces");
+    check(
+      47,
+      "screen font resolves to the system stack (not Inter); headline resolves to Fraunces",
+      rows.length === 2 && rows.every((r) => fontsOk(r.g)),
+      rows
+        .map(
+          (r) =>
+            `${r.vp} -> screen ${JSON.stringify(r.g?.screenFont ?? null)}, headline ${JSON.stringify(r.g?.headlineFont ?? null)}`,
+        )
+        .join(" | "),
+    );
+  });
+
+  /* --- 48: landscape coarse-pointer devices get only the rotate card. --- */
+  await block("rotate-guard", async () => {
+    const ctx = await browser.newContext({
+      viewport: { width: 844, height: 390 },
+      isMobile: true,
+      hasTouch: true,
+    });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+    const g = await page.evaluate(() => {
+      const guard = document.querySelector("[data-rotate-guard]");
+      const screen = document.querySelector("[data-phone-screen]");
+      const coarse = window.matchMedia("(pointer: coarse)").matches;
+      const guardCs = guard ? getComputedStyle(guard) : null;
+      return {
+        coarse,
+        guardDisplay: guardCs ? guardCs.display : null,
+        guardHasText: guard ? (guard.textContent || "").trim().length > 0 : false,
+        phoneRendered: screen ? screen.offsetParent != null : false,
+      };
+    });
+
+    check(
+      48,
+      "landscape 844x390 coarse: rotate card visible, phone not rendered",
+      g.coarse === true && g.guardDisplay === "flex" && g.guardHasText && g.phoneRendered === false,
+      `pointer coarse ${g.coarse}; rotate card display ${JSON.stringify(g.guardDisplay)} (need "flex"), ` +
+        `has text ${g.guardHasText}; phone rendered ${g.phoneRendered} (need false)`,
+    );
+    await ctx.close();
+  });
+
+  /* --- 49 + 50: the lock-screen choreography. Global-clock samples: at 0.5
+   * the call is ringing (thread and headline must not exist visually); at
+   * 4.0 the miss has landed and the headline has landed with it. --- */
+  await block("lock-choreography", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+
+    await waitT(page, 0.5);
+    const early = await page.evaluate((EFF) => {
+      const vis = eval(EFF);
+      const lock = document.querySelector("[data-lock]");
+      const bubbles = [...document.querySelectorAll("[data-bubble]")];
+      const headline = document.querySelector("[data-headline]");
+      return {
+        t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
+        lockVisible: lock ? vis(lock) > 0.5 : false,
+        visibleBubbles: bubbles.filter((b) => vis(b) > 0.5).length,
+        bubbleCount: bubbles.length,
+        headlineOpacity: headline ? vis(headline) : null,
+      };
+    }, EFF);
+
+    check(
+      49,
+      "at t=0.5: lock screen visible, thread not rendered, headline not visible",
+      early.lockVisible === true &&
+        early.bubbleCount > 0 &&
+        early.visibleBubbles === 0 &&
+        early.headlineOpacity != null &&
+        early.headlineOpacity < 0.1,
+      `t=${early.t}: lock visible ${early.lockVisible} (need true); visible bubbles ` +
+        `${early.visibleBubbles}/${early.bubbleCount} in DOM (need 0 visible, > 0 in DOM); ` +
+        `headline effective opacity ${early.headlineOpacity} (need < 0.1)`,
+    );
+
+    await waitT(page, 4.0);
+    const missed = await page.evaluate((EFF) => {
+      const vis = eval(EFF);
+      const missedEl = document.querySelector("[data-lock-missed]");
+      const headline = document.querySelector("[data-headline]");
+      return {
+        t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
+        missedVisible: missedEl ? vis(missedEl) > 0.5 : false,
+        missedText: missedEl ? missedEl.textContent.trim() : null,
+        headlineVisible: headline ? vis(headline) > 0.5 : false,
+      };
+    }, EFF);
+
+    check(
+      50,
+      "at t=4.0: missedLabel visible with callerName beneath it, headline visible",
+      missed.missedVisible === true &&
+        missed.missedText != null &&
+        missed.missedText.includes("Missed Call") &&
+        missed.missedText.includes(expected.callerName) &&
+        missed.headlineVisible === true,
+      `t=${missed.t}: missed state visible ${missed.missedVisible}, text ${JSON.stringify(missed.missedText)} ` +
+        `(must contain "Missed Call" and ${JSON.stringify(expected.callerName)}); headline visible ${missed.headlineVisible}`,
+    );
+
+    await ctx.close();
+  });
+
+  /* --- 51 + 52: the two-sided moment — the owner notification. --- */
+  await block("owner-notification", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+
+    await waitT(page, 9.5);
+    const at95 = await page.evaluate((EFF) => {
+      const vis = eval(EFF);
+      const screen = document.querySelector("[data-phone-screen]");
+      const phoneCard = document.querySelector("[data-notify-phone]");
+      const ledgerCard = document.querySelector("[data-notify-ledger]");
+      const panel = document.querySelector("[data-ledger-panel]");
+      const sr = screen ? screen.getBoundingClientRect() : null;
+      const pr = phoneCard ? phoneCard.getBoundingClientRect() : null;
+      const lr = ledgerCard ? ledgerCard.getBoundingClientRect() : null;
+      const nr = panel ? panel.getBoundingClientRect() : null;
+      const inside = (a, b) =>
+        a && b && a.left >= b.left - 1 && a.right <= b.right + 1 && a.top >= b.top - 1 && a.bottom <= b.bottom + 1;
+      const intersects = (a, b) =>
+        a && b && !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top);
+      return {
+        t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
+        phoneCardVisible: phoneCard ? vis(phoneCard) > 0.5 : false,
+        phoneCardInsideScreen: inside(pr, sr),
+        phoneCardText: phoneCard ? phoneCard.textContent.trim() : null,
+        ledgerCardVisible: ledgerCard ? vis(ledgerCard) > 0.5 : false,
+        ledgerCardOnPanel: intersects(lr, nr),
+      };
+    }, EFF);
+
+    await waitT(page, 12.5);
+    const at125 = await page.evaluate((EFF) => {
+      const vis = eval(EFF);
+      const phoneCard = document.querySelector("[data-notify-phone]");
+      return {
+        t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
+        phoneCardVisible: phoneCard ? vis(phoneCard) > 0.5 : false,
+      };
+    }, EFF);
+
+    check(
+      51,
+      "at t=9.5: notification card visible inside the phone screen with bizName and caught[0].amount; gone by t=12.5",
+      at95.phoneCardVisible === true &&
+        at95.phoneCardInsideScreen === true &&
+        at95.phoneCardText != null &&
+        at95.phoneCardText.includes(expected.bizName) &&
+        at95.phoneCardText.includes(`$${row0.amount}`) &&
+        at125.phoneCardVisible === false,
+      `t=${at95.t}: visible ${at95.phoneCardVisible}, inside screen ${at95.phoneCardInsideScreen}, ` +
+        `text ${JSON.stringify(at95.phoneCardText)} (must contain ${JSON.stringify(expected.bizName)} and "$${row0.amount}"); ` +
+        `t=${at125.t}: visible ${at125.phoneCardVisible} (need false)`,
+    );
+
+    check(
+      52,
+      "desktop 1440x900 at t=9.5: a notification card is ALSO visible on the ledger panel",
+      at95.ledgerCardVisible === true && at95.ledgerCardOnPanel === true,
+      `ledger card visible ${at95.ledgerCardVisible}, overlaps panel ${at95.ledgerCardOnPanel}`,
+    );
+
+    await ctx.close();
+  });
+
+  /* --- 53 + 55 + 56: the live name field. --- */
+  await block("name-field", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+
+    await page.fill("[data-name-input]", "Test Salon");
+    await page.waitForTimeout(300);
+    const named = await page.evaluate(() => ({
+      phoneHeader: document.querySelector("[data-biz-name]")?.textContent?.trim() ?? null,
+      notifyText: document.querySelector("[data-notify-phone]")?.textContent?.trim() ?? null,
+      ledgerHeader: document.querySelector("[data-ledger-biz]")?.textContent?.trim() ?? null,
+      url: location.href,
+    }));
+
+    check(
+      53,
+      'typing "Test Salon" re-skins the phone header, notification template, and ledger header within 300ms; URL carries name=Test%20Salon',
+      named.phoneHeader === "Test Salon" &&
+        named.notifyText != null &&
+        named.notifyText.includes("Test Salon") &&
+        named.ledgerHeader === "Test Salon" &&
+        named.url.includes("name=Test%20Salon"),
+      `phone header ${JSON.stringify(named.phoneHeader)}, notify contains "Test Salon": ` +
+        `${named.notifyText != null && named.notifyText.includes("Test Salon")}, ledger header ` +
+        `${JSON.stringify(named.ledgerHeader)}, url ${named.url}`,
+    );
+
+    await page.fill("[data-name-input]", "<b>x</b>");
+    await page.waitForTimeout(300);
+    const escaped = await page.evaluate(() => {
+      const header = document.querySelector("[data-biz-name]");
+      const ledger = document.querySelector("[data-ledger-biz]");
+      return {
+        headerText: header?.textContent ?? null,
+        headerInjected: header ? header.querySelector("b") != null : null,
+        ledgerText: ledger?.textContent ?? null,
+        ledgerInjected: ledger ? ledger.querySelector("b") != null : null,
+      };
+    });
+
+    check(
+      55,
+      'name input "<b>x</b>" renders literally — no element injected',
+      escaped.headerText === "<b>x</b>" &&
+        escaped.headerInjected === false &&
+        escaped.ledgerText === "<b>x</b>" &&
+        escaped.ledgerInjected === false,
+      `phone header text ${JSON.stringify(escaped.headerText)} (injected <b>: ${escaped.headerInjected}), ` +
+        `ledger text ${JSON.stringify(escaped.ledgerText)} (injected <b>: ${escaped.ledgerInjected})`,
+    );
+
+    /* 56: preset click clears the field and restarts at the lock screen. */
+    await page.fill("[data-name-input]", "Test Salon");
+    await page.waitForTimeout(300);
+    await page.click("[data-preset='home']");
+    await page.waitForTimeout(200);
+    const afterClick = await page.evaluate((EFF) => {
+      const vis = eval(EFF);
+      const input = document.querySelector("[data-name-input]");
+      const lock = document.querySelector("[data-lock]");
+      return {
+        inputValue: input ? input.value : null,
+        lockVisible: lock ? vis(lock) > 0.5 : false,
+        t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
+      };
+    }, EFF);
+
+    const tOk =
+      afterClick.t === "swap" || (Number.isFinite(parseFloat(afterClick.t)) && parseFloat(afterClick.t) < 2);
+    check(
+      56,
+      "preset click after typing clears the field and restarts at the lock screen within 200ms",
+      afterClick.inputValue === "" && afterClick.lockVisible === true && tOk,
+      `input value ${JSON.stringify(afterClick.inputValue)} (need ""), lock visible ${afterClick.lockVisible}, ` +
+        `data-t ${JSON.stringify(afterClick.t)} (need "swap" or < 2)`,
+    );
+
+    await ctx.close();
+  });
+
+  /* --- 57: the first frame on a phone — the device fully inside 390x844,
+   * nothing above it but the page padding. --- */
+  await block("first-frame-fit", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+    const g = await page.evaluate(() => {
+      const device = document.querySelector("[data-phone-device]");
+      if (!device) return null;
+      const r = device.getBoundingClientRect();
+      return {
+        top: r.top,
+        bottom: r.bottom,
+        left: r.left,
+        right: r.right,
+        vw: window.innerWidth,
+        vh: window.innerHeight,
+      };
+    });
+
+    check(
+      57,
+      "first load 390x844: phone device box fully within viewport, top edge <= 32px",
+      g != null &&
+        g.top >= 0 &&
+        g.top <= 32 &&
+        g.bottom <= g.vh + 0.5 &&
+        g.left >= -0.5 &&
+        g.right <= g.vw + 0.5,
+      g == null
+        ? "device not found"
+        : `device top ${g.top.toFixed(1)} (need 0..32), bottom ${g.bottom.toFixed(1)} (need <= ${g.vh}), ` +
+          `left ${g.left.toFixed(1)}, right ${g.right.toFixed(1)} (viewport ${g.vw}x${g.vh})`,
+    );
+    await ctx.close();
   });
 
   await browser.close();
