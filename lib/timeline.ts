@@ -6,27 +6,32 @@
 
 /** Bubble index -> reveal time (seconds). Four bubbles; the missed call itself
  *  is the call card, which is already on screen at t=0. */
-export const BEATS = [1.3, 2.6, 3.7, 4.4];
+export const BEATS = [0.9, 2.2, 3.3, 4.0];
 
 /** Typing indicators, keyed by the bubble index they precede. */
 export const TYPING = [
-  { before: 0, at: 0.5 },
-  { before: 1, at: 2.2 },
-  { before: 2, at: 3.3 },
+  { before: 0, at: 0.2 },
+  { before: 1, at: 1.8 },
+  { before: 2, at: 2.9 },
 ];
 
 export const BUBBLE_ENTER = 0.24;
 export const BUBBLE_RISE = 12;
 
-export const DELIVERED_AT = 4.4;
+export const DELIVERED_AT = 4.0;
+
+/** The owner-side caught row: it slides in the beat the thread closes. */
+export const CAUGHT_ROW_AT = 4.4;
+export const CAUGHT_ROW_ENTER = 0.3;
+export const CAUGHT_ROW_RISE = 12;
 
 export const LEDGER_AT = 4.6;
 export const LEDGER_DUR = 0.8;
 
 /** The leak runs the entire timeline: money leaves while one call is saved. */
-export const LEAK_DUR = 5.2;
+export const LEAK_DUR = 5.4;
 
-export const CONTROLS_AT = 5.2;
+export const CONTROLS_AT = 5.4;
 export const CONTROLS_FADE = 0.3;
 
 /** Ledger finishes last, at 5.4. Loop past it so gates can sample a settled t=6. */
@@ -40,11 +45,12 @@ export const SWAP_ROLL = 0.5;
 /**
  * Fixed phone screen height. Reserves the call card plus the full settled
  * thread for every preset at every width, so the stack can be bottom-anchored
- * and clientHeight never changes between beats. Verified against all three
- * presets. The floor is width-dependent because the phone shrinks with the
- * viewport and the text rewraps: 676 at a 390px viewport (the reference width),
- * 696 at 360-375px, 715 at 344px. 716 clears all of those. A 320px viewport
- * needs 752 and will clip the top of the box.
+ * and clientHeight never changes between beats. Unaffected by change 4: bubble
+ * text is unchanged, only the timing of their reveal moved. The floor is
+ * width-dependent because the phone shrinks with the viewport and the text
+ * rewraps: 676 at a 390px viewport (the reference width), 696 at 360-375px,
+ * 715 at 344px. 716 clears all of those. A 320px viewport needs 752 and will
+ * clip the top of the box.
  */
 export const PHONE_SCREEN_HEIGHT = 716;
 
@@ -58,3 +64,18 @@ export const ledgerAt = (t: number, recovered: number) =>
   Math.round(easeOut(clamp01((t - LEDGER_AT) / LEDGER_DUR)) * recovered);
 
 export const leakAt = (t: number, lost: number) => Math.round(clamp01(t / LEAK_DUR) * lost);
+
+/**
+ * The owner panel's Recovered tile. It does NOT climb from zero: the three
+ * standing rows already account for (recovered - row0Amount), so the panel
+ * opens showing that partial total and rolls the remaining row0Amount in when
+ * the row slides in at CAUGHT_ROW_AT / rolls at LEDGER_AT. This is the causal
+ * link the whole change is built around — the thread closing IS the roll.
+ */
+export const panelRecoveredAt = (t: number, recovered: number, row0Amount: number) => {
+  const base = recovered - row0Amount;
+  return Math.round(base + easeOut(clamp01((t - LEDGER_AT) / LEDGER_DUR)) * row0Amount);
+};
+
+/** Reveal progress (0-1) for the caught-list row that slides in. */
+export const caughtRowProgress = (t: number) => easeOut(clamp01((t - CAUGHT_ROW_AT) / CAUGHT_ROW_ENTER));

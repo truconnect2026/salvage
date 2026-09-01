@@ -66,6 +66,11 @@ const presets = (() => {
       recovered: Number(pick(/recovered:\s*(\d+)/, "recovered")),
       lost: Number(pick(/lost:\s*(\d+)/, "lost")),
       bubbles: (block.match(/\{\s*from:/g) ?? []).length,
+      caught: [
+        ...block.matchAll(
+          /\{\s*number:\s*"([^"]+)",\s*detail:\s*"([^"]+)",\s*amount:\s*(\d+),\s*date:\s*"([^"]+)"\s*\}/g,
+        ),
+      ].map((m) => ({ number: m[1], detail: m[2], amount: Number(m[3]), date: m[4] })),
     };
   });
 })();
@@ -80,10 +85,17 @@ const expected = { ...byId(defaultId), ctaHref };
 
 /*
  * Playback expectations, held here rather than imported from the timeline.
- * Beats are 1.3 / 2.6 / 3.7 / 4.4, so at these sample times the visible bubble
- * count is fully determined.
+ * Beats are 0.9 / 2.2 / 3.3 / 4.0, so at these sample times the visible bubble
+ * count is fully determined. Held independently of lib/timeline.ts on purpose:
+ * a gate that imported the timeline would move with it and could never catch
+ * a rebeat.
  */
-const VISIBLE_AT = { 0.3: 0, 2.5: 1, 6.0: expected.bubbles };
+const VISIBLE_AT = { 0.3: 0, 2.5: 2, 6.0: expected.bubbles };
+
+if (expected.caught.length !== 4) {
+  throw new Error(`gate setup: preset "${expected.id}" has ${expected.caught.length} caught entries, need 4`);
+}
+const row0 = expected.caught[0];
 
 /* Independent reimplementation of lib/format.ts — deliberately not imported. */
 const usd = (n) =>
@@ -301,7 +313,69 @@ check(
     .join(" | "),
 );
 
-/* ---------- 12-20, 22-24: the live DOM ----------------------------------- */
+/* 25 + 27: the owner ledger panel is server-rendered — the no-JS floor covers
+   the owner side too, not just the phone. Pure fetch, no browser needed: SSR
+   is settled state (row0 visible, panel-recovered at the FINAL figure), so
+   these read straight off the raw HTML. */
+const ledgerRows = [];
+for (const p of [byId("salon"), homePreset, dentalPreset]) {
+  const page = await getPage(`/?biz=${p.id}`);
+  // Row divs nest other divs (number/detail/amount/date), which breaks
+  // elementsIn's lazy same-tag-close assumption — so amounts are read from the
+  // dedicated leaf-level data-caught-amount marker, not the row wrapper.
+  const rowTexts = [0, 1, 2, 3].map((i) => elementsIn(page.html, `data-caught-row="${i}"`)[0] ?? null);
+  const amounts = [0, 1, 2, 3].map((i) => {
+    const hit = elementsIn(page.html, `data-caught-amount="${i}"`)[0];
+    if (!hit) return null;
+    const m = hit.match(/[\d,]+/);
+    return m ? Number(m[0].replace(/,/g, "")) : null;
+  });
+  const panelRecovered = elementsIn(page.html, "data-panel-recovered");
+  ledgerRows.push({
+    id: p.id,
+    path: `/?biz=${p.id}`,
+    status: page.status,
+    rowCount: rowTexts.filter(Boolean).length,
+    row0HasNumber: rowTexts[0] != null && rowTexts[0].includes(p.caught[0].number),
+    wantRow0Number: p.caught[0].number,
+    row0Text: rowTexts[0],
+    panelRecovered: panelRecovered[0] ?? null,
+    wantPanelRecovered: usd(p.recovered),
+    amounts,
+    sum: amounts.every((a) => a != null) ? amounts.reduce((a, b) => a + b, 0) : null,
+    wantSum: p.recovered,
+  });
+}
+
+check(
+  25,
+  "SSR renders the owner panel: 4 caught rows + final recovered, per preset",
+  ledgerRows.length === 3 &&
+    ledgerRows.every(
+      (r) =>
+        r.status === 200 &&
+        r.rowCount === 4 &&
+        r.row0HasNumber &&
+        r.panelRecovered === r.wantPanelRecovered,
+    ),
+  ledgerRows
+    .map(
+      (r) =>
+        `${r.path} -> HTTP ${r.status}, ${r.rowCount}/4 rows, row0 ${JSON.stringify(r.row0Text)} ` +
+        `(want caller ${JSON.stringify(r.wantRow0Number)}), recovered ${JSON.stringify(r.panelRecovered)} ` +
+        `(want ${JSON.stringify(r.wantPanelRecovered)})`,
+    )
+    .join(" | "),
+);
+
+check(
+  27,
+  "sum(caught[].amount) === recovered, from rendered HTML",
+  ledgerRows.length === 3 && ledgerRows.every((r) => r.sum != null && r.sum === r.wantSum),
+  ledgerRows.map((r) => `${r.path} -> amounts ${JSON.stringify(r.amounts)} sum ${r.sum} (want ${r.wantSum})`).join(" | "),
+);
+
+/* ---------- 12-20, 22-24, 26, 28-32: the live DOM ------------------------- */
 
 let chromium = null;
 let browserError = null;
@@ -340,6 +414,9 @@ const sampleFn = (EFF) => {
   const replay = document.querySelector("[data-replay]");
   const share = document.querySelector("[data-share]");
   const delivered = document.querySelector("[data-delivered]");
+  const panelRecovered = document.querySelector("[data-panel-recovered]");
+  const caughtRows = [0, 1, 2, 3].map((i) => document.querySelector(`[data-caught-row="${i}"]`));
+  const caughtList = caughtRows[0] ? caughtRows[0].parentElement : null;
 
   const vpcs = vp ? getComputedStyle(vp) : null;
   const vpr = vp ? vp.getBoundingClientRect() : null;
@@ -347,6 +424,10 @@ const sampleFn = (EFF) => {
   const stackr = stack ? stack.getBoundingClientRect() : null;
 
   return {
+    panelRecovered: panelRecovered ? panelRecovered.textContent.trim() : null,
+    caughtVisible: caughtRows.filter((r) => r && vis(r) > 0.5).length,
+    caughtRow0Number: caughtRows[0] ? caughtRows[0].textContent.trim() : null,
+    caughtListH: caughtList ? caughtList.clientHeight : null,
     t: root ? root.getAttribute("data-t") : null,
     total: bubbles.length,
     visible: shown.length,
@@ -386,7 +467,7 @@ async function waitT(page, target) {
 
 const numeric = (s) => (s == null ? NaN : Number(String(s).replace(/[^0-9.-]/g, "")));
 
-const BROWSER_GATES = [12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 23, 24];
+const BROWSER_GATES = [12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 23, 24, 26, 28, 29, 30, 31, 32];
 
 if (!chromium) {
   for (const n of BROWSER_GATES) {
@@ -413,7 +494,11 @@ if (!chromium) {
     await page.evaluate(() => document.fonts.ready);
 
     const snaps = {};
-    for (const T of [0.3, 2.5, 6.0]) {
+    /* Samples at 5.5, not the spec's literal 5.0: the recovered roll is
+       LEDGER_AT(4.6) + LEDGER_DUR(0.8) = settles at 5.4, so 5.0 would always
+       read a mid-roll value regardless of correctness. 5.5 is unambiguously
+       past settle. */
+    for (const T of [0.3, 2.5, 3.0, 5.5, 6.0]) {
       await waitT(page, T);
       snaps[T] = await page.evaluate(sampleFn, EFF);
     }
@@ -495,6 +580,38 @@ if (!chromium) {
         `t=6.0: stack bottom ${e.stackBottomGap}px, last bubble ${e.lastBubbleGap}px above stack bottom`,
     );
 
+    const settled = snaps[5.5];
+    check(
+      26,
+      "caught-row insert: 3 rows at t=0.3, all 4 once settled",
+      snaps[0.3].caughtVisible === 3 &&
+        settled.caughtVisible === 4 &&
+        settled.caughtRow0Number != null &&
+        settled.caughtRow0Number.includes(row0.number),
+      `t=0.3 visible rows ${snaps[0.3].caughtVisible}/3, t=5.5 visible rows ${settled.caughtVisible}/4, ` +
+        `row[0] at t=5.5 ${JSON.stringify(settled.caughtRow0Number)} (must contain ${JSON.stringify(row0.number)})`,
+    );
+
+    const finalPanelRecovered = usd(expected.recovered);
+    const openingPanelRecovered = usd(expected.recovered - row0.amount);
+    check(
+      28,
+      "panel recovered opens at (recovered - row0.amount), settles at recovered",
+      snaps[0.3].panelRecovered === openingPanelRecovered && settled.panelRecovered === finalPanelRecovered,
+      `t=0.3 ${JSON.stringify(snaps[0.3].panelRecovered)} (want ${JSON.stringify(openingPanelRecovered)}), ` +
+        `t=5.5 ${JSON.stringify(settled.panelRecovered)} (want ${JSON.stringify(finalPanelRecovered)})`,
+    );
+
+    const listHeights = [snaps[0.3].caughtListH, snaps[3.0].caughtListH, settled.caughtListH];
+    check(
+      29,
+      "caught list never reflows on row insert",
+      listHeights.every((h) => typeof h === "number" && h > 0) &&
+        listHeights[0] === listHeights[1] &&
+        listHeights[1] === listHeights[2],
+      `clientHeight at t=0.3/3.0/5.5 -> ${listHeights.join(" / ")}`,
+    );
+
     await ctx.close();
   });
 
@@ -519,10 +636,13 @@ if (!chromium) {
         r.cardVisible === true &&
         r.ledger === usd(expected.recovered) &&
         r.leak === usd(expected.lost) &&
+        r.panelRecovered === usd(expected.recovered) &&
+        r.caughtVisible === 4 &&
         r.replay === false &&
         r.share === true,
       `visible ${r.visible}/${expected.bubbles}, call card ${r.cardVisible}, ledger ${JSON.stringify(r.ledger)}, ` +
-        `leak ${JSON.stringify(r.leak)}, replay visible ${r.replay} (need false), ` +
+        `leak ${JSON.stringify(r.leak)}, panel recovered ${JSON.stringify(r.panelRecovered)}, ` +
+        `caught rows visible ${r.caughtVisible}/4, replay visible ${r.replay} (need false), ` +
         `share visible ${r.share} (need true)`,
     );
 
@@ -580,7 +700,7 @@ if (!chromium) {
     const page = await ctx.newPage();
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
-    await waitT(page, 5.3);
+    await waitT(page, 5.8); // past CONTROLS_AT (5.4) + CONTROLS_FADE (0.3), fully visible
     await page.click("[data-share]");
     await page.waitForTimeout(250);
     let clip = null;
@@ -622,6 +742,14 @@ if (!chromium) {
         : [];
       const card = document.querySelector("[data-call-card]");
       const cardCs = card ? getComputedStyle(card) : null;
+
+      // Whole-page tally: every [data-money] region, not just the first.
+      const allMoneyRegions = [...document.querySelectorAll("[data-money]")];
+      const allGold = allMoneyRegions.flatMap((r) =>
+        [...r.querySelectorAll("*")].filter((el) => getComputedStyle(el).color === gold),
+      );
+      const panelRecoveredEl = document.querySelector("[data-panel-recovered]");
+
       return {
         gold,
         muted: toRgb("--color-muted"),
@@ -636,6 +764,9 @@ if (!chromium) {
         leakColor: region ? getComputedStyle(region.querySelector("[data-leak-lost]")).color : null,
         ruleColor: cardCs ? cardCs.borderLeftColor : null,
         ruleWidth: cardCs ? cardCs.borderLeftWidth : null,
+        moneyRegionCount: allMoneyRegions.length,
+        totalGoldCount: allGold.length,
+        panelRecoveredColor: panelRecoveredEl ? getComputedStyle(panelRecoveredEl).color : null,
       };
     });
 
@@ -661,6 +792,70 @@ if (!chromium) {
         tokens.ruleColor !== tokens.teal &&
         parseFloat(tokens.ruleWidth) >= 2,
       `rule ${tokens.ruleColor} @ ${tokens.ruleWidth}; muted ${tokens.muted}, gold ${tokens.gold}, teal ${tokens.teal}`,
+    );
+
+    check(
+      31,
+      "gold across the whole page is exactly 2: phone-side figure + panel recovered",
+      tokens.moneyRegionCount >= 2 &&
+        tokens.totalGoldCount === 2 &&
+        tokens.ledgerColor === tokens.gold &&
+        tokens.panelRecoveredColor === tokens.gold,
+      `${tokens.moneyRegionCount} [data-money] region(s), ${tokens.totalGoldCount} gold element(s) total (need 2); ` +
+        `phone-side figure ${tokens.ledgerColor}, panel recovered ${tokens.panelRecoveredColor} (both must equal gold ${tokens.gold})`,
+    );
+
+    await ctx.close();
+  });
+
+  /* --- 30: at 1440x900, phone LEFT, ledger panel RIGHT, tops aligned, no overlap --- */
+  await block("desktop-pair-geometry", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+    await waitT(page, 5.5);
+
+    const g = await page.evaluate(() => {
+      const screen = document.querySelector("[data-phone-screen]");
+      let phone = screen;
+      for (let i = 0; i < 2 && phone.parentElement; i++) phone = phone.parentElement;
+      const panel = document.querySelector("[data-ledger-panel]");
+      if (!phone || !panel) return null;
+      const pr = phone.getBoundingClientRect();
+      const lr = panel.getBoundingClientRect();
+      const overlap = !(pr.right <= lr.left || lr.right <= pr.left || pr.bottom <= lr.top || lr.bottom <= pr.top);
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      return {
+        phone: { top: pr.top, bottom: pr.bottom, left: pr.left, right: pr.right },
+        ledger: { top: lr.top, bottom: lr.bottom, left: lr.left, right: lr.right },
+        overlap,
+        phoneInViewport: pr.left >= -0.5 && pr.right <= vw + 0.5 && pr.top >= -0.5 && pr.bottom <= vh + 0.5,
+        ledgerInViewport: lr.left >= -0.5 && lr.right <= vw + 0.5 && lr.top >= -0.5 && lr.bottom <= vh + 0.5,
+        topDiff: Math.abs(pr.top - lr.top),
+        // Non-overlap alone doesn't establish which box is on which side —
+        // a panel-left/phone-right composition would satisfy every other
+        // condition here too. Require the phone's right edge to clear the
+        // panel's left edge.
+        phoneIsLeft: pr.right <= lr.left,
+      };
+    });
+
+    check(
+      30,
+      "at 1440x900: phone left, ledger panel right, fully visible, tops aligned",
+      g != null &&
+        g.overlap === false &&
+        g.phoneIsLeft === true &&
+        g.phoneInViewport === true &&
+        g.ledgerInViewport === true &&
+        g.topDiff <= 8,
+      g == null
+        ? "phone or ledger panel not found"
+        : `overlap ${g.overlap}, phone left of ledger ${g.phoneIsLeft}, ` +
+          `phone in viewport ${g.phoneInViewport} (${JSON.stringify(g.phone)}), ` +
+          `ledger in viewport ${g.ledgerInViewport} (${JSON.stringify(g.ledger)}), topDiff ${g.topDiff}px (need <= 8)`,
     );
 
     await ctx.close();
@@ -717,7 +912,7 @@ if (!chromium) {
     const page = await ctx.newPage();
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
-    await waitT(page, 5.3); // settled: the leak shows the OLD preset's full total
+    await waitT(page, 5.6); // settled: leak (LEAK_DUR=5.4) shows the OLD preset's full total
 
     const sampled = await page.evaluate(async (presetId) => {
       const num = (s) => Number(String(s ?? "").replace(/[^0-9.-]/g, ""));
@@ -741,6 +936,55 @@ if (!chromium) {
     check(
       24,
       "preset switch never climbs before it drops",
+      sampled != null &&
+        Number.isFinite(sampled.before) &&
+        sampled.before > 0 &&
+        series.length >= 5 &&
+        finite.length === series.length &&
+        peak <= sampled.before,
+      `old on-screen value at click ${sampled?.before ?? null}; ${series.length} samples over 700ms ` +
+        `(need >= 5, all finite); peak ${peak} (must not exceed ${sampled?.before ?? null}); ` +
+        `series [${series.join(", ")}]`,
+    );
+
+    await ctx.close();
+  });
+
+  /* --- 32: the owner panel's recovered figure must never climb before it drops ---
+   * Switches to "dental", not "home": home's own opening value (recovered -
+   * caught[0].amount = 4250 - 850 = 3400) exceeds salon's final (1360), so ANY
+   * correct switch salon->home necessarily climbs — that is real data, not an
+   * artifact. dental's opening value (1800 - 600 = 1200) is genuinely below
+   * salon's final, so this pair actually exercises the no-overshoot guarantee. */
+  await block("switch-transition-panel", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+    await waitT(page, 5.6); // settled: panel recovered shows the OLD preset's full total
+
+    const sampled = await page.evaluate(async (presetId) => {
+      const num = (s) => Number(String(s ?? "").replace(/[^0-9.-]/g, ""));
+      const el = document.querySelector("[data-panel-recovered]");
+      const btn = document.querySelector(`[data-preset="${presetId}"]`);
+      if (!el || !btn) return null;
+      const before = num(el.textContent);
+      btn.click();
+      const series = [];
+      const t0 = performance.now();
+      while (performance.now() - t0 < 700) {
+        series.push(num(el.textContent));
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return { before, series };
+    }, "dental");
+
+    const series = sampled?.series ?? [];
+    const finite = series.filter((n) => Number.isFinite(n));
+    const peak = finite.length ? Math.max(...finite) : NaN;
+    check(
+      32,
+      "panel recovered never climbs before it drops on preset switch",
       sampled != null &&
         Number.isFinite(sampled.before) &&
         sampled.before > 0 &&

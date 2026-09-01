@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import Ledger from "@/components/Ledger";
 import Phone from "@/components/Phone";
 import { COPY, PRESETS, SHARE_ORIGIN, type Preset } from "@/lib/client.config";
 import { usd } from "@/lib/format";
@@ -9,6 +10,7 @@ import {
   BEATS,
   BUBBLE_ENTER,
   BUBBLE_RISE,
+  CAUGHT_ROW_RISE,
   CONTROLS_AT,
   CONTROLS_FADE,
   DELIVERED_AT,
@@ -17,17 +19,20 @@ import {
   SWAP_FADE,
   SWAP_ROLL,
   TYPING,
+  caughtRowProgress,
   clamp01,
   easeOut,
   leakAt,
   ledgerAt,
+  panelRecoveredAt,
 } from "@/lib/timeline";
 
 /* ---------------------------------------------------------------------------
  * The playback engine lives outside React on purpose. It is imperative DOM
  * animation, not state: one rAF loop owns the phase signal, and every animated
- * element derives from it. No per-bubble timers, no second clock, and only this
- * loop ever writes transform/opacity/display on these nodes.
+ * element derives from it — on the phone AND on the owner ledger panel. No
+ * per-bubble timers, no second clock, and only this loop ever writes
+ * transform/opacity/display on these nodes.
  * ------------------------------------------------------------------------- */
 
 type Nodes = {
@@ -40,9 +45,12 @@ type Nodes = {
   ledger: HTMLElement | null;
   leak: HTMLElement | null;
   controls: HTMLElement | null;
+  ledgerPanel: HTMLElement | null;
+  caughtRow0: HTMLElement | null;
+  panelRecovered: HTMLElement | null;
 };
 
-type Totals = { recovered: number; lost: number };
+type Totals = { recovered: number; lost: number; panelRecovered: number };
 type Transition = {
   at: number | null;
   from: Totals;
@@ -81,13 +89,17 @@ function collect(root: HTMLElement): Nodes {
     ledger: root.querySelector<HTMLElement>("[data-ledger-recovered]"),
     leak: root.querySelector<HTMLElement>("[data-leak-lost]"),
     controls: root.querySelector<HTMLElement>("[data-controls]"),
+    ledgerPanel: root.querySelector<HTMLElement>("[data-ledger-panel]"),
+    caughtRow0: root.querySelector<HTMLElement>('[data-caught-row="0"]'),
+    panelRecovered: root.querySelector<HTMLElement>("[data-panel-recovered]"),
   };
 }
 
-function paintNumbers(ctx: Ctx, recovered: number, lost: number) {
-  ctx.shown = { recovered, lost };
+function paintNumbers(ctx: Ctx, recovered: number, lost: number, panelRecovered: number) {
+  ctx.shown = { recovered, lost, panelRecovered };
   if (ctx.nodes.ledger) ctx.nodes.ledger.textContent = usd(recovered);
   if (ctx.nodes.leak) ctx.nodes.leak.textContent = usd(lost);
+  if (ctx.nodes.panelRecovered) ctx.nodes.panelRecovered.textContent = usd(panelRecovered);
 }
 
 function paintFade(ctx: Ctx, o: number) {
@@ -95,9 +107,10 @@ function paintFade(ctx: Ctx, o: number) {
   if (ctx.nodes.bizName) ctx.nodes.bizName.style.opacity = s;
   if (ctx.nodes.threadArea) ctx.nodes.threadArea.style.opacity = s;
   if (ctx.nodes.callCard) ctx.nodes.callCard.style.opacity = s;
+  if (ctx.nodes.ledgerPanel) ctx.nodes.ledgerPanel.style.opacity = s;
 }
 
-function paintThread(ctx: Ctx, t: number) {
+function paintScene(ctx: Ctx, t: number) {
   const n = ctx.nodes;
 
   n.rows.forEach((row, i) => {
@@ -125,6 +138,15 @@ function paintThread(ctx: Ctx, t: number) {
   });
 
   if (n.delivered) n.delivered.style.display = t >= DELIVERED_AT ? "block" : "none";
+
+  /* The owner-side caught row. It never toggles display: it always occupies
+     its slot in the list (so the list's height is reserved from t=0 and never
+     reflows), only opacity/transform animate as it "slides in". */
+  if (n.caughtRow0) {
+    const p = caughtRowProgress(t);
+    n.caughtRow0.style.opacity = String(p);
+    n.caughtRow0.style.transform = `translateY(${(1 - p) * CAUGHT_ROW_RISE}px)`;
+  }
 
   if (n.controls) {
     const c = clamp01((t - CONTROLS_AT) / CONTROLS_FADE);
@@ -160,6 +182,7 @@ function tick(ctx: Ctx, now: number) {
         ctx,
         Math.round(tr.from.recovered + (tr.target.recovered - tr.from.recovered) * rp),
         Math.round(tr.from.lost + (tr.target.lost - tr.from.lost) * rp),
+        Math.round(tr.from.panelRecovered + (tr.target.panelRecovered - tr.from.panelRecovered) * rp),
       );
       ctx.root.dataset.t = "swap";
       schedule(ctx);
@@ -172,16 +195,34 @@ function tick(ctx: Ctx, now: number) {
 
   if (ctx.start == null) ctx.start = now;
   const t = (now - ctx.start) / 1000;
+  const p = ctx.preset;
 
-  paintThread(ctx, t);
+  paintScene(ctx, t);
   paintFade(ctx, 1);
-  paintNumbers(ctx, ledgerAt(t, ctx.preset.recovered), leakAt(t, ctx.preset.lost));
+  paintNumbers(
+    ctx,
+    ledgerAt(t, p.recovered),
+    leakAt(t, p.lost),
+    panelRecoveredAt(t, p.recovered, p.caught[0].amount),
+  );
   ctx.root.dataset.t = t.toFixed(3);
 
   if (t < LOOP_UNTIL) schedule(ctx);
 }
 
 /* ------------------------------------------------------------------------- */
+
+const settledTotals = (p: Preset): Totals => ({
+  recovered: p.recovered,
+  lost: p.lost,
+  panelRecovered: p.recovered,
+});
+
+const beatZeroTotals = (p: Preset): Totals => ({
+  recovered: ledgerAt(0, p.recovered),
+  lost: leakAt(0, p.lost),
+  panelRecovered: panelRecoveredAt(0, p.recovered, p.caught[0].amount),
+});
 
 const ghost =
   "rounded-full border border-teal px-5 py-2.5 text-[13px] font-medium text-teal-bright " +
@@ -208,13 +249,13 @@ export default function Demo({ initialPresetId }: { initialPresetId: string }) {
     ctx.nodes = collect(ctx.root);
 
     if (ctx.reduced) {
-      ctx.shown = { recovered: preset.recovered, lost: preset.lost };
+      ctx.shown = settledTotals(preset);
       return;
     }
     if (ctx.transition?.swapped) {
-      paintThread(ctx, 0);
+      paintScene(ctx, 0);
       paintFade(ctx, 0);
-      paintNumbers(ctx, ctx.shown.recovered, ctx.shown.lost);
+      paintNumbers(ctx, ctx.shown.recovered, ctx.shown.lost, ctx.shown.panelRecovered);
     }
   }, [preset]);
 
@@ -227,7 +268,7 @@ export default function Demo({ initialPresetId }: { initialPresetId: string }) {
       root,
       nodes: collect(root),
       preset,
-      shown: { recovered: preset.recovered, lost: preset.lost },
+      shown: settledTotals(preset),
       start: null,
       transition: null,
       raf: null,
@@ -241,9 +282,9 @@ export default function Demo({ initialPresetId }: { initialPresetId: string }) {
       return;
     }
 
-    paintThread(ctx, 0);
+    paintScene(ctx, 0);
     paintFade(ctx, 1);
-    paintNumbers(ctx, 0, 0);
+    paintNumbers(ctx, 0, 0, panelRecoveredAt(0, preset.recovered, preset.caught[0].amount));
     root.dataset.t = "0.000";
     schedule(ctx);
 
@@ -293,7 +334,7 @@ export default function Demo({ initialPresetId }: { initialPresetId: string }) {
       at: null,
       from: { ...ctx.shown },
       to: next,
-      target: { recovered: ledgerAt(0, next.recovered), lost: leakAt(0, next.lost) },
+      target: beatZeroTotals(next),
       swapped: false,
     };
     schedule(ctx);
@@ -322,9 +363,9 @@ export default function Demo({ initialPresetId }: { initialPresetId: string }) {
   return (
     <div ref={rootRef} data-demo data-t="settled">
       {/* B — preset row */}
-      <section className="mt-10">
+      <section className="mt-10 min-[1100px]:mt-3">
         <p className="text-[12px] uppercase tracking-[0.18em] text-muted">{COPY.presetPrompt}</p>
-        <div className="mt-3 flex flex-wrap gap-2.5">
+        <div className="mt-3 min-[1100px]:mt-1.5 flex flex-wrap gap-2.5">
           {PRESETS.map((p) => {
             const active = p.id === preset.id;
             return (
@@ -347,9 +388,10 @@ export default function Demo({ initialPresetId }: { initialPresetId: string }) {
         </div>
       </section>
 
-      <div className="mt-12 grid grid-cols-1 gap-12 min-[900px]:mt-16 min-[900px]:grid-cols-[390px_minmax(0,1fr)] min-[900px]:items-center min-[900px]:gap-16">
+      {/* C + owner ledger — the two-up. Tops aligned; stacks below 900px. */}
+      <div className="mt-12 grid grid-cols-1 items-start gap-10 min-[900px]:mt-16 min-[900px]:grid-cols-[390px_minmax(260px,1fr)] min-[900px]:gap-12 min-[1100px]:mt-3 min-[1100px]:grid-cols-[390px_minmax(420px,1fr)] min-[1100px]:gap-16">
         <div>
-          {/* C — phone */}
+          {/* Phone (customer side) */}
           <Phone preset={preset} screenHeight={PHONE_SCREEN_HEIGHT} typingBefore={[0, 1, 2]} />
 
           {/* Controls. Space is reserved so their arrival shifts nothing. */}
@@ -372,11 +414,9 @@ export default function Demo({ initialPresetId }: { initialPresetId: string }) {
               className="mt-3 w-full rounded-lg border border-line bg-surface px-3 py-2 text-[12px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-teal-bright"
             />
           )}
-        </div>
 
-        <div className="flex flex-col gap-9">
-          {/* D — the two ledgers, adjacent so the contrast is unavoidable */}
-          <div data-money className="grid grid-cols-1 gap-4 min-[560px]:grid-cols-2">
+          {/* Quick pitch: what this is costing you, right under the phone. */}
+          <div data-money className="mt-6 grid grid-cols-1 gap-4 min-[560px]:grid-cols-2">
             <section
               className="relative overflow-hidden rounded-2xl border border-line bg-surface p-6"
               style={{ boxShadow: "0 0 44px -14px rgba(216,180,90,0.30)" }}
@@ -409,32 +449,38 @@ export default function Demo({ initialPresetId }: { initialPresetId: string }) {
               <p className="mt-1.5 text-[13px] text-muted">{COPY.leakCaption}</p>
             </section>
           </div>
+        </div>
 
-          {/* E — math line */}
-          <p data-math className="max-w-lg text-[17px] leading-relaxed text-ink">
-            {COPY.mathLead}{" "}
-            <span className="font-display text-[1.4em] font-semibold text-gold lining-nums">
-              {preset.missedPerMonth}
-            </span>{" "}
-            {COPY.mathMid}{" "}
-            <span className="font-display text-[1.4em] font-semibold text-gold lining-nums">
-              ${preset.ticket}
-            </span>{" "}
-            {COPY.mathTail}
-          </p>
+        {/* Owner side */}
+        <div data-ledger-panel>
+          <Ledger preset={preset} />
+        </div>
+      </div>
 
-          {/* F — CTA */}
-          <div>
-            <a
-              href={COPY.ctaHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block rounded-full bg-gold px-8 py-4 text-[15px] font-semibold text-abyss outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-abyss"
-            >
-              {COPY.ctaLabel}
-            </a>
-            <p className="mt-3 text-[12px] text-muted">{COPY.footNote}</p>
-          </div>
+      {/* Below the pair — math + CTA */}
+      <div className="mt-14 flex flex-col gap-9 min-[900px]:mt-16">
+        <p data-math className="max-w-lg text-[17px] leading-relaxed text-ink">
+          {COPY.mathLead}{" "}
+          <span className="font-display text-[1.4em] font-semibold text-gold lining-nums">
+            {preset.missedPerMonth}
+          </span>{" "}
+          {COPY.mathMid}{" "}
+          <span className="font-display text-[1.4em] font-semibold text-gold lining-nums">
+            ${preset.ticket}
+          </span>{" "}
+          {COPY.mathTail}
+        </p>
+
+        <div>
+          <a
+            href={COPY.ctaHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block rounded-full bg-gold px-8 py-4 text-[15px] font-semibold text-abyss outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-abyss"
+          >
+            {COPY.ctaLabel}
+          </a>
+          <p className="mt-3 text-[12px] text-muted">{COPY.footNote}</p>
         </div>
       </div>
     </div>

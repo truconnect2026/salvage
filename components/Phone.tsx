@@ -54,8 +54,9 @@ function BatteryGlyph() {
   );
 }
 
-/* Missed call: a handset with the inbound arrow that never got answered. */
-function MissedCallGlyph() {
+/* Missed call: a handset with the inbound arrow that never got answered.
+   Exported for reuse in the owner panel's caught-call rows. */
+export function MissedCallGlyph() {
   return (
     <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
       <path
