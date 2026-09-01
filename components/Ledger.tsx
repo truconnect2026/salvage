@@ -24,9 +24,9 @@ export default function Ledger({
   const [row0, ...rest] = preset.caught;
   const L = COPY.ledger;
 
-  const pad = compact ? "p-4" : "p-6";
+  const pad = compact ? "p-3.5" : "p-6";
   const tileValue = `mt-1.5 font-display font-semibold leading-none lining-nums ${
-    compact ? "text-[28px]" : "text-[26px] min-[500px]:text-[30px]"
+    compact ? "text-[24px]" : "text-[26px] min-[500px]:text-[30px]"
   }`;
 
   return (
@@ -52,7 +52,7 @@ export default function Ledger({
       {/* Three metric tiles */}
       <div
         data-money
-        className={`grid gap-3 grid-cols-[repeat(auto-fit,minmax(150px,1fr))] ${compact ? "mt-4" : "mt-6"}`}
+        className={`grid gap-3 grid-cols-[repeat(auto-fit,minmax(150px,1fr))] ${compact ? "mt-3" : "mt-6"}`}
       >
         <div className={`rounded-xl border border-line bg-surface-2 ${compact ? "p-3" : "p-4"}`}>
           <p className="text-[11px] uppercase tracking-[0.14em] text-muted">{L.recoveredLabel}</p>
@@ -100,10 +100,16 @@ export default function Ledger({
       </div>
 
       {/* Caught list */}
-      <p className={`text-[12px] uppercase tracking-[0.18em] text-muted ${compact ? "mt-4" : "mt-6"}`}>
+      <p className={`text-[12px] uppercase tracking-[0.18em] text-muted ${compact ? "mt-3" : "mt-6"}`}>
         {L.caughtLabel}
       </p>
-      <div className="mt-3 overflow-hidden rounded-xl border border-line bg-surface">
+      {/* rounded-tl-none: row [0]'s flush teal rule needs a square corner to
+          land against, not the panel's usual rounded one. Spelled out per
+          corner (never a bare `rounded-xl` plus an override) so the result
+          doesn't depend on Tailwind's utility ordering in the stylesheet. */}
+      <div
+        className={`overflow-hidden rounded-tl-none rounded-tr-xl rounded-br-xl rounded-bl-xl border border-line ${compact ? "mt-2" : "mt-3"}`}
+      >
         <div className="divide-y divide-line">
           <CaughtRow index={0} entry={row0} compact={compact} />
           {rest.map((entry, i) => (
@@ -113,6 +119,19 @@ export default function Ledger({
       </div>
 
       {!compact && <p className="mt-4 text-[12px] text-muted">{L.reviewNote}</p>}
+
+      {/* Since-install strip: the panel's last element, closing the gap
+          against the phone at >=1100px with a running total rather than
+          empty space. Renders in both variants — the OG composite wants it
+          too. The dollar figure is ink, deliberately not gold: gold stays
+          reserved for the one recovered figure above (gates 31/38). */}
+      <div className={`border-t border-line ${compact ? "mt-3 pt-2" : "mt-5 pt-4"}`}>
+        <p className="text-[10px] uppercase tracking-[0.2em] text-muted">{L.sinceLabel}</p>
+        <p data-since-strip className={`mt-1.5 text-muted ${compact ? "text-[14px]" : "text-[13px]"}`}>
+          <span data-since-calls>{preset.sinceCalls}</span> calls caught ·{" "}
+          <span data-since-recovered className="font-semibold text-ink">{usd(preset.sinceRecovered)}</span> recovered
+        </p>
+      </div>
     </div>
   );
 }
@@ -126,10 +145,16 @@ function CaughtRow({
   entry: Preset["caught"][number];
   compact: boolean;
 }) {
+  /* Row [0] is the call the phone just closed — SSR carries its highlight
+     from the first paint, not only once the playback engine slides it in. */
+  const isFirst = index === 0;
+
   return (
     <div
       data-caught-row={index}
-      className={`flex items-start gap-3 ${compact ? "px-3 py-2" : "px-4 py-3.5"}`}
+      className={`flex items-start gap-3 ${compact ? "px-3 py-2" : "px-4 py-3.5"} ${
+        isFirst ? "border-l-2 border-l-teal bg-surface-3" : "bg-surface-2"
+      }`}
     >
       <span className="mt-0.5 shrink-0 text-muted">
         <MissedCallGlyph />
@@ -140,7 +165,14 @@ function CaughtRow({
         >
           {entry.number}
         </div>
-        {!compact && <div className="mt-0.5 truncate text-[12px] text-muted">{entry.detail}</div>}
+        <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-[12px] text-muted">{entry.detail}</span>
+          {isFirst && (
+            <span className="shrink-0 rounded-full bg-teal/15 px-1.5 py-0.5 text-[10px] font-medium text-teal-bright">
+              {COPY.ledger.justNow}
+            </span>
+          )}
+        </div>
       </div>
       <div className="shrink-0 text-right">
         <div

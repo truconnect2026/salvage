@@ -4,6 +4,7 @@ export type Preset = {
   id: string; label: string; bizName: string;
   callerNumber: string; callReason: string;
   ticket: number; missedPerMonth: number; callsCaught: number; recovered: number; lost: number;
+  sinceCalls: number; sinceRecovered: number;
   caught: CaughtEntry[];
   thread: Bubble[];
 };
@@ -45,6 +46,8 @@ export const COPY = {
     replyCaption: "average",
     caughtLabel: "Caught this month",
     reviewNote: "Review requests sent automatically after each visit.",
+    sinceLabel: "Since install",
+    justNow: "Just now",
   },
 
   // Phone / OG chrome. Same human veto as everything else in this file.
@@ -63,8 +66,9 @@ export const COPY = {
 export const PRESETS: Preset[] = [
   {
     id: "salon", label: "Salon & Spa", bizName: "Harbor Row Aesthetics",
-    callerNumber: "(804) 555-0142", callReason: "Front desk closed at 6.",
+    callerNumber: "(804) 555-0142", callReason: "Front desk closed at 6",
     ticket: 340, missedPerMonth: 12, callsCaught: 4, recovered: 1360, lost: 4080,
+    sinceCalls: 31, sinceRecovered: 9240,
     // Entry [0] is this thread's own booking. Sum of all 4 amounts === recovered.
     caught: [
       { number: "(804) 555-0142", detail: "Thu 2:00 with Marisa · filler", amount: 340, date: "Mar 14" },
@@ -81,8 +85,9 @@ export const PRESETS: Preset[] = [
   },
   {
     id: "home", label: "Home Services", bizName: "Ridgeline Plumbing",
-    callerNumber: "(804) 555-0197", callReason: "Line was busy.",
+    callerNumber: "(804) 555-0197", callReason: "Line was busy",
     ticket: 850, missedPerMonth: 15, callsCaught: 5, recovered: 4250, lost: 12750,
+    sinceCalls: 24, sinceRecovered: 18700,
     caught: [
       { number: "(804) 555-0197", detail: "Tue 8:00 · water heater", amount: 850, date: "Mar 13" },
       { number: "(804) 555-0155", detail: "Fri 1:00 · drain clog", amount: 900, date: "Mar 10" },
@@ -98,8 +103,9 @@ export const PRESETS: Preset[] = [
   },
   {
     id: "dental", label: "Dental", bizName: "Fairfield Dental",
-    callerNumber: "(804) 555-0168", callReason: "After hours.",
+    callerNumber: "(804) 555-0168", callReason: "After hours",
     ticket: 600, missedPerMonth: 9, callsCaught: 3, recovered: 1800, lost: 5400,
+    sinceCalls: 19, sinceRecovered: 9800,
     caught: [
       { number: "(804) 555-0168", detail: "Fri 9:15 with Dr. Nakamura · chipped tooth", amount: 600, date: "Mar 12" },
       { number: "(804) 555-0122", detail: "Wed 10:30 with Dr. Nakamura · cleaning", amount: 300, date: "Mar 9" },

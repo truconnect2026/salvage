@@ -127,6 +127,7 @@ export default function Phone({
   screenMinHeight,
   screenHeight,
   typingBefore = [],
+  hideCallCard = false,
 }: {
   preset: Preset;
   /* Forces a full-device screen height so a short thread still reads as a real
@@ -137,6 +138,10 @@ export default function Phone({
   screenHeight?: number;
   /* Bubble indices that get a typing indicator rendered before them. */
   typingBefore?: number[];
+  /* OG composition only: shows the settled thread's tail (last bubbles +
+     Delivered) without the call card that opened it, so a short crop reads
+     as a resolved conversation rather than a mid-scroll fragment. */
+  hideCallCard?: boolean;
 }) {
   const thread = preset.thread;
   const typing = new Set(typingBefore);
@@ -158,15 +163,24 @@ export default function Phone({
 
   return (
     <div className="w-[390px] max-w-full shrink-0">
-      {/* Bezel */}
+      {/* Bezel. The inset top highlight is device chrome, not the app's
+          elevation system (which is luminance-only, no shadows) — a real
+          phone bezel catches a hairline of light along its top edge. */}
       <div
         className="relative rounded-[2.75rem] bg-[#05090F] p-[10px] ring-1 ring-inset ring-line/60"
-        style={{ boxShadow: "0 44px 90px -28px rgba(0,0,0,0.9), 0 8px 28px -12px rgba(0,0,0,0.7)" }}
+        style={{
+          boxShadow:
+            "inset 0 1px 0 0 rgba(255,255,255,0.08), 0 44px 90px -28px rgba(0,0,0,0.9), 0 8px 28px -12px rgba(0,0,0,0.7)",
+        }}
       >
-        {/* Screen */}
+        {/* Screen. rounded-[1.75rem] is deliberately well short of the
+            bezel's 2.75rem, not the ~concentric 2.15rem this used to carry —
+            the corner should read as visibly tighter than the bezel's, not
+            as a same-curve inset. bg-surface: the phone screen and the
+            owner panel are the same "device/panel" elevation step. */}
         <div
           data-phone-screen
-          className={`relative flex flex-col overflow-hidden rounded-[2.15rem] bg-[#0A1526] ${
+          className={`relative flex flex-col overflow-hidden rounded-[1.75rem] bg-surface ${
             // 638px must match lib/timeline.ts's PHONE_SCREEN_HEIGHT_WIDE —
             // Tailwind's JIT scanner needs the literal in source, so this
             // can't be a template interpolation of the constant.
@@ -205,7 +219,7 @@ export default function Phone({
             data-thread-viewport
             className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-5 pt-4"
           >
-            <CallCard preset={preset} />
+            {!hideCallCard && <CallCard preset={preset} />}
 
             <div
               /* overflow-hidden matters: an overflowing justify-end box spills
@@ -268,6 +282,10 @@ export default function Phone({
               </div>
             </div>
           </div>
+
+          {/* Home indicator. Muted, low-alpha: chrome, not content — it
+              should read as hardware, never compete with the thread. */}
+          <div className="absolute bottom-2 left-1/2 z-20 h-1.25 w-35 -translate-x-1/2 rounded-full bg-muted/30" />
         </div>
       </div>
     </div>

@@ -4,6 +4,7 @@
   --color-abyss: #060B14;
   --color-surface: #0F1E33;
   --color-surface-2: #162A44;
+  --color-surface-3: #1D3655;
   --color-line: #22384F;
   --color-teal: #2CC7B6;
   --color-teal-bright: #74E9DC;
@@ -26,5 +27,20 @@ body {
 @media (prefers-reduced-motion: reduce) {
   [data-replay] {
     display: none !important;
+  }
+}
+
+/* Two-up area order. Below 900px the three blocks stack phone -> ledger ->
+   controls, so the two sides of the story appear together before the ask.
+   At >=900px it reflows to two columns with controls stacked under the
+   phone, ledger spanning both rows — the original desktop composition.
+   A named-area grid, not Tailwind's `order-*`, because the desktop shape
+   needs the ledger to span two rows, which `order` alone cannot express. */
+.demo-grid {
+  grid-template-areas: "phone" "ledger" "controls";
+}
+@media (min-width: 900px) {
+  .demo-grid {
+    grid-template-areas: "phone ledger" "controls ledger";
   }
 }

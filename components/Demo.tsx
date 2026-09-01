@@ -350,10 +350,12 @@ export default function Demo({ initialPresetId }: { initialPresetId: string }) {
 
   return (
     <div ref={rootRef} data-demo data-t="settled">
-      {/* B — preset row */}
+      {/* B — preset row. A hairline baseline under the row, not a border on
+          each pill, so the three read as one control group and only the
+          active pill's own border interrupts it. */}
       <section className="mt-10 min-[1100px]:mt-3">
         <p className="text-[12px] uppercase tracking-[0.18em] text-muted">{COPY.presetPrompt}</p>
-        <div className="mt-3 min-[1100px]:mt-1.5 flex flex-wrap gap-2.5">
+        <div className="mt-3 min-[1100px]:mt-1.5 flex flex-wrap items-end gap-2.5 border-b border-line pb-1">
           {PRESETS.map((p) => {
             const active = p.id === preset.id;
             return (
@@ -365,8 +367,8 @@ export default function Demo({ initialPresetId }: { initialPresetId: string }) {
                 onClick={() => onPreset(p.id)}
                 className={`rounded-full border px-4 py-2 text-[13px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-teal-bright focus-visible:ring-offset-2 focus-visible:ring-offset-abyss ${
                   active
-                    ? "border-teal text-ink"
-                    : "border-line text-muted hover:border-teal/60 hover:text-ink"
+                    ? "border-teal bg-teal/10 text-teal-bright"
+                    : "border-transparent text-muted underline-offset-4 hover:underline"
                 }`}
               >
                 {p.label}
@@ -376,14 +378,23 @@ export default function Demo({ initialPresetId }: { initialPresetId: string }) {
         </div>
       </section>
 
-      {/* C + owner ledger — the two-up. Tops aligned; stacks below 900px. */}
-      <div className="mt-12 grid grid-cols-1 items-start gap-10 min-[900px]:mt-16 min-[900px]:grid-cols-[390px_minmax(260px,1fr)] min-[900px]:gap-12 min-[1100px]:mt-3 min-[1100px]:grid-cols-[390px_minmax(420px,1fr)] min-[1100px]:gap-16">
-        <div>
-          {/* Phone (customer side) */}
+      {/* C + owner ledger — the two-up. Tops aligned; stacks below 900px.
+          Phone, ledger, and controls are three independent grid items
+          (areas defined in .demo-grid, globals.css) rather than controls
+          nesting under the phone: below 1100px that put controls between
+          the phone and the ledger, so the two sides never appeared
+          together. The named-area grid reorders to phone -> ledger ->
+          controls on mobile while keeping controls stacked under the phone
+          at >=900px, unchanged from before. */}
+      <div className="demo-grid mt-12 grid grid-cols-1 items-start gap-x-10 gap-y-10 min-[900px]:mt-16 min-[900px]:grid-cols-[390px_minmax(260px,1fr)] min-[900px]:gap-x-12 min-[900px]:gap-y-5 min-[1100px]:mt-2 min-[1100px]:grid-cols-[390px_minmax(420px,1fr)] min-[1100px]:gap-x-16 min-[1100px]:gap-y-3">
+        {/* Phone (customer side) */}
+        <div className="[grid-area:phone]">
           <Phone preset={preset} screenHeight={PHONE_SCREEN_HEIGHT} typingBefore={[0, 1, 2]} />
+        </div>
 
-          {/* Controls. Space is reserved so their arrival shifts nothing. */}
-          <div data-controls className="mt-5 min-[1100px]:mt-3 flex min-h-[42px] flex-wrap items-center gap-3">
+        {/* Controls. Space is reserved so their arrival shifts nothing. */}
+        <div className="[grid-area:controls]">
+          <div data-controls className="flex min-h-[42px] flex-wrap items-center gap-3">
             <button data-replay type="button" onClick={onReplay} className={ghost}>
               {COPY.replayLabel}
             </button>
@@ -402,46 +413,44 @@ export default function Demo({ initialPresetId }: { initialPresetId: string }) {
               className="mt-3 w-full rounded-lg border border-line bg-surface px-3 py-2 text-[12px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-teal-bright"
             />
           )}
-
-          {/* change 6: the phone-side "Still lost" card is gone too — it was
-              showing the same figure the owner panel's own Still-lost tile
-              already carries, and the duplicate pushed the loss figure below
-              the fold at 1440x900. data-leak-lost now lives on the panel
-              tile alone; collect()'s querySelector picks it up unchanged,
-              so the climbing animation just keeps working with zero engine
-              changes. Recovery and loss both live on the owner panel now. */}
         </div>
 
         {/* Owner side */}
-        <div data-ledger-panel>
+        <div data-ledger-panel className="[grid-area:ledger]">
           <Ledger preset={preset} />
         </div>
       </div>
 
-      {/* Below the pair — math + CTA */}
-      <div className="mt-14 flex flex-col gap-9 min-[900px]:mt-16">
-        <p data-math className="max-w-lg text-[17px] leading-relaxed text-ink">
-          {COPY.mathLead}{" "}
-          <span className="font-display text-[1.4em] font-semibold text-gold lining-nums">
-            {preset.missedPerMonth}
-          </span>{" "}
-          {COPY.mathMid}{" "}
-          <span className="font-display text-[1.4em] font-semibold text-gold lining-nums">
-            ${preset.ticket}
-          </span>{" "}
-          {COPY.mathTail}
-        </p>
+      {/* Bottom band — math + CTA bound into one closing unit. bg-surface is
+          one step lighter than the page ground (abyss), matching the
+          elevation ladder in globals.css. Gold stays reserved for the one
+          recovered figure on the owner panel (gates 31/38) — these numbers
+          are ink, same tier as the since-install strip's dollar figure. */}
+      <div className="mt-14 border-t border-line bg-surface min-[900px]:mt-16">
+        <div className="flex flex-col gap-7 py-8 min-[1100px]:flex-row min-[1100px]:items-center min-[1100px]:justify-between min-[1100px]:gap-12 min-[1100px]:py-10">
+          <p data-math className="max-w-lg text-[17px] leading-relaxed text-ink">
+            {COPY.mathLead}{" "}
+            <span className="font-display text-[1.4em] font-semibold text-ink lining-nums">
+              {preset.missedPerMonth}
+            </span>{" "}
+            {COPY.mathMid}{" "}
+            <span className="font-display text-[1.4em] font-semibold text-ink lining-nums">
+              ${preset.ticket}
+            </span>{" "}
+            {COPY.mathTail}
+          </p>
 
-        <div>
-          <a
-            href={COPY.ctaHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block rounded-full bg-gold px-8 py-4 text-[15px] font-semibold text-abyss outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-abyss"
-          >
-            {COPY.ctaLabel}
-          </a>
-          <p className="mt-3 text-[12px] text-muted">{COPY.footNote}</p>
+          <div className="min-[1100px]:shrink-0 min-[1100px]:text-right">
+            <a
+              href={COPY.ctaHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block rounded-full bg-gold px-8 py-4 text-[15px] font-semibold text-abyss outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-abyss"
+            >
+              {COPY.ctaLabel}
+            </a>
+            <p className="mt-3 text-[12px] text-muted">{COPY.footNote}</p>
+          </div>
         </div>
       </div>
     </div>

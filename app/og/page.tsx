@@ -13,8 +13,11 @@ import { COPY, DEFAULT_PRESET, PRESETS } from "@/lib/client.config";
  */
 export default function OgFrame() {
   const base = PRESETS.find((p) => p.id === DEFAULT_PRESET) ?? PRESETS[0];
-  /* Call card + the first business reply: the missed call and the save. */
-  const cropped = { ...base, thread: base.thread.slice(0, 1) };
+  /* The settled thread's tail — last 3 bubbles + Delivered — not the call
+     card plus one reply: showing the missed call next to a single response
+     read as a broken screenshot, not a resolved one. The call card is
+     cropped out entirely (hideCallCard) rather than shrunk to fit. */
+  const settledTail = { ...base, thread: base.thread.slice(-3) };
 
   return (
     <div className="relative h-[630px] w-[1200px] overflow-hidden">
@@ -27,8 +30,8 @@ export default function OgFrame() {
       </div>
 
       {/* Devices row */}
-      <div className="absolute left-16 top-[168px] flex items-start gap-8">
-        <Phone preset={cropped} screenMinHeight={360} />
+      <div className="absolute left-16 top-[132px] flex items-start gap-8">
+        <Phone preset={settledTail} screenMinHeight={452} hideCallCard />
         <div className="w-[660px]">
           <Ledger preset={base} compact />
         </div>

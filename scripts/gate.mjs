@@ -65,6 +65,8 @@ const presets = (() => {
       callsCaught: Number(pick(/callsCaught:\s*(\d+)/, "callsCaught")),
       recovered: Number(pick(/recovered:\s*(\d+)/, "recovered")),
       lost: Number(pick(/lost:\s*(\d+)/, "lost")),
+      sinceCalls: Number(pick(/sinceCalls:\s*(\d+)/, "sinceCalls")),
+      sinceRecovered: Number(pick(/sinceRecovered:\s*(\d+)/, "sinceRecovered")),
       bubbles: (block.match(/\{\s*from:/g) ?? []).length,
       caught: [
         ...block.matchAll(
@@ -375,6 +377,22 @@ check(
   ledgerRows.map((r) => `${r.path} -> amounts ${JSON.stringify(r.amounts)} sum ${r.sum} (want ${r.wantSum})`).join(" | "),
 );
 
+/* 36: change 7 stripped the trailing period from every callReason, since
+   Phone.tsx's call card joins it to COPY.callCard.meta with " · " — a
+   surviving period would render as ". ·". Checked on plain decoded page
+   text (not a specific element), across all three presets. */
+const dotMiddotRows = [];
+for (const p of [byId("salon"), homePreset, dentalPreset]) {
+  const page = await getPage(`/?biz=${p.id}`);
+  dotMiddotRows.push({ id: p.id, status: page.status, hasBad: page.text.includes(". ·") });
+}
+check(
+  36,
+  'no rendered string contains ". ·" — all three ?biz values, SSR',
+  dotMiddotRows.length === 3 && dotMiddotRows.every((r) => r.status === 200 && !r.hasBad),
+  dotMiddotRows.map((r) => `?biz=${r.id} -> HTTP ${r.status}, contains ". ·": ${r.hasBad}`).join(" | "),
+);
+
 /* ---------- 12-20, 22-24, 26, 28-32: the live DOM ------------------------- */
 
 let chromium = null;
@@ -467,7 +485,9 @@ async function waitT(page, target) {
 
 const numeric = (s) => (s == null ? NaN : Number(String(s).replace(/[^0-9.-]/g, "")));
 
-const BROWSER_GATES = [12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 23, 24, 26, 28, 29, 30, 31, 32, 33, 34, 35];
+const BROWSER_GATES = [
+  12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 23, 24, 26, 28, 29, 30, 31, 32, 33, 34, 35, 37, 38, 39,
+];
 
 if (!chromium) {
   for (const n of BROWSER_GATES) {
@@ -750,6 +770,14 @@ if (!chromium) {
       );
       const panelRecoveredEl = document.querySelector("[data-panel-recovered]");
 
+      // 38: true page-wide tally, not scoped to [data-money] — change 7 added
+      // gold-adjacent regions (the since-install strip, the bottom band's
+      // math numbers) outside those regions, so gate 31's own scope can't
+      // see them. Every element on the page, not just money regions.
+      const pageGold = [...document.querySelectorAll("*")].filter(
+        (el) => getComputedStyle(el).color === gold,
+      );
+
       return {
         gold,
         muted: toRgb("--color-muted"),
@@ -767,6 +795,11 @@ if (!chromium) {
         moneyRegionCount: allMoneyRegions.length,
         totalGoldCount: allGold.length,
         panelRecoveredColor: panelRecoveredEl ? getComputedStyle(panelRecoveredEl).color : null,
+        pageGoldCount: pageGold.length,
+        pageGoldIsPanelRecovered: pageGold.length === 1 && pageGold[0].hasAttribute("data-panel-recovered"),
+        pageGoldTags: pageGold.map((el) =>
+          el.hasAttribute("data-panel-recovered") ? "data-panel-recovered" : el.tagName.toLowerCase(),
+        ),
       };
     });
 
@@ -802,6 +835,14 @@ if (!chromium) {
         tokens.panelRecoveredColor === tokens.gold,
       `${tokens.moneyRegionCount} [data-money] region(s), ${tokens.totalGoldCount} gold element(s) total (need 1); ` +
         `panel recovered ${tokens.panelRecoveredColor} (must equal gold ${tokens.gold})`,
+    );
+
+    check(
+      38,
+      "exactly one gold element page-wide (gate 31 extended to the since-install strip and bottom band)",
+      tokens.pageGoldCount === 1 && tokens.pageGoldIsPanelRecovered,
+      `${tokens.pageGoldCount} gold element(s) page-wide ${JSON.stringify(tokens.pageGoldTags)} ` +
+        `(need exactly 1, on data-panel-recovered)`,
     );
 
     await ctx.close();
@@ -1133,6 +1174,119 @@ if (!chromium) {
       g.count === 1 && g.count > 0 && g.insidePanel && g.color === g.muted && g.color !== g.gold,
       `${g.count} element(s) with data-leak-lost (need exactly 1, > 0), inside panel: ${g.insidePanel}, ` +
         `color ${g.color} (need muted ${g.muted}, must not be gold ${g.gold})`,
+    );
+
+    await ctx.close();
+  });
+
+  /* --- 37: since-install strip renders sinceCalls + sinceRecovered per
+   * preset, and its dollar figure is not gold. calls/recovered text is SSR
+   * content (present at domcontentloaded, no animation involved) — only the
+   * colour check genuinely needs a computed style, so this stays a browser
+   * gate rather than a plain fetch. */
+  await block("since-strip", async () => {
+    const rows = [];
+    for (const p of [byId("salon"), homePreset, dentalPreset]) {
+      const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      const page = await ctx.newPage();
+      await page.goto(`${base}/?biz=${p.id}`, { waitUntil: "domcontentloaded" });
+      await page.evaluate(() => document.fonts.ready);
+
+      const r = await page.evaluate(() => {
+        const root = getComputedStyle(document.documentElement);
+        const toRgb = (name) => {
+          const h = root.getPropertyValue(name).trim().replace("#", "");
+          if (h.length < 6) return null;
+          return `rgb(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)})`;
+        };
+        const calls = document.querySelector("[data-since-calls]");
+        const recovered = document.querySelector("[data-since-recovered]");
+        return {
+          calls: calls ? calls.textContent.trim() : null,
+          recoveredText: recovered ? recovered.textContent.trim() : null,
+          recoveredColor: recovered ? getComputedStyle(recovered).color : null,
+          gold: toRgb("--color-gold"),
+        };
+      });
+
+      rows.push({
+        id: p.id,
+        calls: r.calls,
+        wantCalls: String(p.sinceCalls),
+        recoveredText: r.recoveredText,
+        wantRecovered: usd(p.sinceRecovered),
+        recoveredColor: r.recoveredColor,
+        gold: r.gold,
+      });
+      await ctx.close();
+    }
+
+    check(
+      37,
+      "since-install strip renders sinceCalls + sinceRecovered per preset (SSR); dollar figure is not gold",
+      rows.length === 3 &&
+        rows.every(
+          (r) =>
+            r.calls != null &&
+            r.calls === r.wantCalls &&
+            r.recoveredText === r.wantRecovered &&
+            r.recoveredColor != null &&
+            r.recoveredColor !== r.gold,
+        ),
+      rows
+        .map(
+          (r) =>
+            `?biz=${r.id} -> calls ${JSON.stringify(r.calls)} (want ${r.wantCalls}), ` +
+            `recovered ${JSON.stringify(r.recoveredText)} (want ${r.wantRecovered}), ` +
+            `colour ${r.recoveredColor} (must not be gold ${r.gold})`,
+        )
+        .join(" | "),
+    );
+  });
+
+  /* --- 39: caught row [0] carries the teal left rule and a background
+   * distinct from rows 1-3, which must carry neither. */
+  await block("caught-row0-highlight", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+    await waitT(page, 6.0);
+
+    const g = await page.evaluate(() => {
+      const root = getComputedStyle(document.documentElement);
+      const toRgb = (name) => {
+        const h = root.getPropertyValue(name).trim().replace("#", "");
+        if (h.length < 6) return null;
+        return `rgb(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)})`;
+      };
+      const rows = [0, 1, 2, 3].map((i) => document.querySelector(`[data-caught-row="${i}"]`));
+      if (rows.some((r) => !r)) return null;
+      const styles = rows.map((r) => getComputedStyle(r));
+      return {
+        teal: toRgb("--color-teal"),
+        ruleColors: styles.map((s) => s.borderLeftColor),
+        ruleWidths: styles.map((s) => s.borderLeftWidth),
+        bgColors: styles.map((s) => s.backgroundColor),
+      };
+    });
+
+    const row0RuleOk = g != null && g.ruleColors[0] === g.teal && parseFloat(g.ruleWidths[0]) >= 2;
+    const restNoRuleOk =
+      g != null &&
+      g.ruleColors.slice(1).every((c, i) => !(c === g.teal && parseFloat(g.ruleWidths[i + 1]) > 0));
+    const restBgMatchOk = g != null && g.bgColors[1] === g.bgColors[2] && g.bgColors[2] === g.bgColors[3];
+    const row0BgDiffersOk = g != null && g.bgColors[0] != null && g.bgColors[0] !== g.bgColors[1];
+
+    check(
+      39,
+      "row[0] left rule is teal (rows 1-3 have none), row[0] background differs from rows 1-3",
+      row0RuleOk && restNoRuleOk && restBgMatchOk && row0BgDiffersOk,
+      g == null
+        ? "one or more caught rows not found"
+        : `rule colours ${JSON.stringify(g.ruleColors)} @ widths ${JSON.stringify(g.ruleWidths)} ` +
+          `(row0 must equal teal ${g.teal} at >=2px; rows 1-3 must not), ` +
+          `bg colours ${JSON.stringify(g.bgColors)} (rows 1-3 must match each other, row0 must differ)`,
     );
 
     await ctx.close();
