@@ -423,12 +423,13 @@ export default function Demo({ initialPresetId }: { initialPresetId: string }) {
 
       {/* Bottom band — math + CTA bound into one closing unit. bg-surface is
           one step lighter than the page ground (abyss), matching the
-          elevation ladder in globals.css. Gold is per-frame, not per-page
-          (change 8): this band is its own frame, and it gets its own gold
-          moment for the money/count that closes the pitch — gate 38 asserts
-          this frame's gold and the owner panel's gold never share a 900px
-          viewport window, rather than counting gold page-wide. */}
-      <div data-bottom-band className="mt-14 border-t border-line bg-surface min-[900px]:mt-105">
+          elevation ladder in globals.css. Gold is per-region, not per-page:
+          the owner panel (hero region) carries the recovered figure, this
+          band carries the math numerals, and gate 38 asserts each region's
+          gold is exactly that and nothing strays outside either region —
+          not a minimum on-screen distance between them (change 8's window
+          rule forced a ~420px dead gap to satisfy that; this is ~64px). */}
+      <div data-bottom-band className="mt-16 border-t border-line bg-surface">
         <div className="flex flex-col gap-7 py-8 min-[1100px]:flex-row min-[1100px]:items-center min-[1100px]:justify-between min-[1100px]:gap-12 min-[1100px]:py-10">
           <p data-math className="max-w-lg text-[17px] leading-relaxed text-ink">
             {COPY.mathLead}{" "}
