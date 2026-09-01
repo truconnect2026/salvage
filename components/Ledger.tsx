@@ -24,7 +24,7 @@ export default function Ledger({
   const [row0, ...rest] = preset.caught;
   const L = COPY.ledger;
 
-  const pad = compact ? "p-3.5" : "p-6";
+  const pad = compact ? "p-3" : "p-6";
   const tileValue = `mt-1.5 font-display font-semibold leading-none lining-nums ${
     compact ? "text-[24px]" : "text-[26px] min-[500px]:text-[30px]"
   }`;
@@ -52,7 +52,7 @@ export default function Ledger({
       {/* Three metric tiles */}
       <div
         data-money
-        className={`grid gap-3 grid-cols-[repeat(auto-fit,minmax(150px,1fr))] ${compact ? "mt-3" : "mt-6"}`}
+        className={`grid gap-3 grid-cols-[repeat(auto-fit,minmax(150px,1fr))] ${compact ? "mt-2" : "mt-6"}`}
       >
         <div className={`rounded-xl border border-line bg-surface-2 ${compact ? "p-3" : "p-4"}`}>
           <p className="text-[11px] uppercase tracking-[0.14em] text-muted">{L.recoveredLabel}</p>
@@ -100,7 +100,7 @@ export default function Ledger({
       </div>
 
       {/* Caught list */}
-      <p className={`text-[12px] uppercase tracking-[0.18em] text-muted ${compact ? "mt-3" : "mt-6"}`}>
+      <p className={`text-[12px] uppercase tracking-[0.18em] text-muted ${compact ? "mt-2" : "mt-6"}`}>
         {L.caughtLabel}
       </p>
       {/* rounded-tl-none: row [0]'s flush teal rule needs a square corner to
@@ -108,7 +108,7 @@ export default function Ledger({
           corner (never a bare `rounded-xl` plus an override) so the result
           doesn't depend on Tailwind's utility ordering in the stylesheet. */}
       <div
-        className={`overflow-hidden rounded-tl-none rounded-tr-xl rounded-br-xl rounded-bl-xl border border-line ${compact ? "mt-2" : "mt-3"}`}
+        className={`overflow-hidden rounded-tl-none rounded-tr-xl rounded-br-xl rounded-bl-xl border border-line ${compact ? "mt-1.5" : "mt-3"}`}
       >
         <div className="divide-y divide-line">
           <CaughtRow index={0} entry={row0} compact={compact} />
@@ -125,7 +125,7 @@ export default function Ledger({
           empty space. Renders in both variants — the OG composite wants it
           too. The dollar figure is ink, deliberately not gold: gold stays
           reserved for the one recovered figure above (gates 31/38). */}
-      <div className={`border-t border-line ${compact ? "mt-3 pt-2" : "mt-5 pt-4"}`}>
+      <div className={`border-t border-line ${compact ? "mt-2 pt-1.5" : "mt-5 pt-4"}`}>
         <p className="text-[10px] uppercase tracking-[0.2em] text-muted">{L.sinceLabel}</p>
         <p data-since-strip className={`mt-1.5 text-muted ${compact ? "text-[14px]" : "text-[13px]"}`}>
           <span data-since-calls>{preset.sinceCalls}</span> calls caught ·{" "}
@@ -165,9 +165,14 @@ function CaughtRow({
         >
           {entry.number}
         </div>
+        {/* change 8: at 500px the caught rows read as four anonymous numbers
+            unless the detail line itself is legible, so compact carries a
+            ~40% larger size here than the interactive panel's 12px. The
+            "Just now" tag is dropped in compact — decoration competing with
+            that detail line for the same sliver of space loses. */}
         <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-          <span className="truncate text-[12px] text-muted">{entry.detail}</span>
-          {isFirst && (
+          <span className={`truncate text-muted ${compact ? "text-[17px]" : "text-[12px]"}`}>{entry.detail}</span>
+          {isFirst && !compact && (
             <span className="shrink-0 rounded-full bg-teal/15 px-1.5 py-0.5 text-[10px] font-medium text-teal-bright">
               {COPY.ledger.justNow}
             </span>

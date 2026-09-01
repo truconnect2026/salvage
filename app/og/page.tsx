@@ -30,7 +30,7 @@ export default function OgFrame() {
       </div>
 
       {/* Devices row */}
-      <div className="absolute left-16 top-[132px] flex items-start gap-8">
+      <div className="absolute left-16 top-[102px] flex items-start gap-8">
         <Phone preset={settledTail} screenMinHeight={452} hideCallCard />
         <div className="w-[660px]">
           <Ledger preset={base} compact />

@@ -486,7 +486,7 @@ async function waitT(page, target) {
 const numeric = (s) => (s == null ? NaN : Number(String(s).replace(/[^0-9.-]/g, "")));
 
 const BROWSER_GATES = [
-  12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 23, 24, 26, 28, 29, 30, 31, 32, 33, 34, 35, 37, 38, 39,
+  12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 23, 24, 26, 28, 29, 30, 31, 32, 33, 34, 35, 37, 38, 39, 45,
 ];
 
 if (!chromium) {
@@ -770,14 +770,6 @@ if (!chromium) {
       );
       const panelRecoveredEl = document.querySelector("[data-panel-recovered]");
 
-      // 38: true page-wide tally, not scoped to [data-money] — change 7 added
-      // gold-adjacent regions (the since-install strip, the bottom band's
-      // math numbers) outside those regions, so gate 31's own scope can't
-      // see them. Every element on the page, not just money regions.
-      const pageGold = [...document.querySelectorAll("*")].filter(
-        (el) => getComputedStyle(el).color === gold,
-      );
-
       return {
         gold,
         muted: toRgb("--color-muted"),
@@ -795,11 +787,6 @@ if (!chromium) {
         moneyRegionCount: allMoneyRegions.length,
         totalGoldCount: allGold.length,
         panelRecoveredColor: panelRecoveredEl ? getComputedStyle(panelRecoveredEl).color : null,
-        pageGoldCount: pageGold.length,
-        pageGoldIsPanelRecovered: pageGold.length === 1 && pageGold[0].hasAttribute("data-panel-recovered"),
-        pageGoldTags: pageGold.map((el) =>
-          el.hasAttribute("data-panel-recovered") ? "data-panel-recovered" : el.tagName.toLowerCase(),
-        ),
       };
     });
 
@@ -835,14 +822,6 @@ if (!chromium) {
         tokens.panelRecoveredColor === tokens.gold,
       `${tokens.moneyRegionCount} [data-money] region(s), ${tokens.totalGoldCount} gold element(s) total (need 1); ` +
         `panel recovered ${tokens.panelRecoveredColor} (must equal gold ${tokens.gold})`,
-    );
-
-    check(
-      38,
-      "exactly one gold element page-wide (gate 31 extended to the since-install strip and bottom band)",
-      tokens.pageGoldCount === 1 && tokens.pageGoldIsPanelRecovered,
-      `${tokens.pageGoldCount} gold element(s) page-wide ${JSON.stringify(tokens.pageGoldTags)} ` +
-        `(need exactly 1, on data-panel-recovered)`,
     );
 
     await ctx.close();
@@ -1290,6 +1269,116 @@ if (!chromium) {
     );
 
     await ctx.close();
+  });
+
+  /* --- 38 (amended, change 8) + 45: gold is per-frame, not per-page.
+   * The owner panel (data-ledger-panel) and the bottom band
+   * (data-bottom-band) are each allowed their own gold moment — the
+   * recovered figure in one, the math numerals in the other — but those
+   * two frames' gold must never be able to land in the same 900px-tall
+   * viewport window (i.e. the same screenshot/scroll position). Checked at
+   * both 1440x900 and 390x844, since the two frames' relative distance
+   * changes with viewport width (the two-up collapses to one column below
+   * 900px). Gate 45 is the plain existence half: the numerals actually
+   * carry gold at both sizes, independent of where they sit. */
+  await block("per-frame-gold", async () => {
+    const rows = [];
+    for (const vp of [
+      { w: 1440, h: 900 },
+      { w: 390, h: 844 },
+    ]) {
+      const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h } });
+      const page = await ctx.newPage();
+      await page.goto(base, { waitUntil: "domcontentloaded" });
+      await page.evaluate(() => document.fonts.ready);
+      await waitT(page, 6.0);
+
+      const g = await page.evaluate(() => {
+        const root = getComputedStyle(document.documentElement);
+        const toRgb = (name) => {
+          const h = root.getPropertyValue(name).trim().replace("#", "");
+          if (h.length < 6) return null;
+          return `rgb(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)})`;
+        };
+        const gold = toRgb("--color-gold");
+        const isGold = (el) => getComputedStyle(el).color === gold;
+
+        const bboxOf = (els) => {
+          const rects = els.map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0 || r.height > 0);
+          if (!rects.length) return null;
+          return {
+            top: Math.min(...rects.map((r) => r.top)),
+            bottom: Math.max(...rects.map((r) => r.bottom)),
+          };
+        };
+
+        const panel = document.querySelector("[data-ledger-panel]");
+        const band = document.querySelector("[data-bottom-band]");
+        const panelGold = panel ? [...panel.querySelectorAll("*")].filter(isGold) : [];
+        const bandGold = band ? [...band.querySelectorAll("*")].filter(isGold) : [];
+
+        const numerals = [...document.querySelectorAll("[data-math-numeral]")];
+
+        return {
+          gold,
+          panelBox: bboxOf(panelGold),
+          bandBox: bboxOf(bandGold),
+          panelGoldCount: panelGold.length,
+          bandGoldCount: bandGold.length,
+          numeralCount: numerals.length,
+          numeralColors: numerals.map((el) => getComputedStyle(el).color),
+        };
+      });
+
+      // A 900px window can touch both boxes (even just a sliver of each) iff
+      // the gap between their NEAR edges is <= 900 — not their combined
+      // outer span, which double-counts each box's own height and would
+      // over-report violations.
+      const WINDOW = 900;
+      let framesCoOccur = null;
+      if (g.panelBox != null && g.bandBox != null) {
+        const [earlier, later] =
+          g.panelBox.top <= g.bandBox.top ? [g.panelBox, g.bandBox] : [g.bandBox, g.panelBox];
+        const gap = later.top - earlier.bottom;
+        framesCoOccur = gap <= WINDOW;
+      }
+
+      rows.push({
+        vp: `${vp.w}x${vp.h}`,
+        panelBox: g.panelBox,
+        bandBox: g.bandBox,
+        panelGoldCount: g.panelGoldCount,
+        bandGoldCount: g.bandGoldCount,
+        framesCoOccur,
+        numeralCount: g.numeralCount,
+        numeralColors: g.numeralColors,
+        numeralsGold: g.numeralCount === 2 && g.numeralColors.every((c) => c === g.gold),
+      });
+      await ctx.close();
+    }
+
+    check(
+      38,
+      "gold is per-frame: the owner panel's gold and the bottom band's gold can never share a 900px window",
+      rows.length === 2 &&
+        rows.every((r) => r.panelGoldCount >= 1 && r.bandGoldCount >= 1 && !r.framesCoOccur),
+      rows
+        .map(
+          (r) =>
+            `${r.vp} -> panel gold ${r.panelGoldCount} ${JSON.stringify(r.panelBox)}, ` +
+            `band gold ${r.bandGoldCount} ${JSON.stringify(r.bandBox)}, co-occur in a 900px window: ${r.framesCoOccur} (must be false)`,
+        )
+        .join(" | "),
+    );
+
+    check(
+      45,
+      "math-line numerals computed color === gold at 1440x900 and 390x844",
+      rows.length === 2 && rows.every((r) => r.numeralsGold),
+      rows
+        .map((r) => `${r.vp} -> ${r.numeralCount} numeral(s) (need 2), colours ${JSON.stringify(r.numeralColors)}`)
+        .join(" | "),
+    );
   });
 
   await browser.close();

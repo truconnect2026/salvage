@@ -423,18 +423,20 @@ export default function Demo({ initialPresetId }: { initialPresetId: string }) {
 
       {/* Bottom band — math + CTA bound into one closing unit. bg-surface is
           one step lighter than the page ground (abyss), matching the
-          elevation ladder in globals.css. Gold stays reserved for the one
-          recovered figure on the owner panel (gates 31/38) — these numbers
-          are ink, same tier as the since-install strip's dollar figure. */}
-      <div className="mt-14 border-t border-line bg-surface min-[900px]:mt-16">
+          elevation ladder in globals.css. Gold is per-frame, not per-page
+          (change 8): this band is its own frame, and it gets its own gold
+          moment for the money/count that closes the pitch — gate 38 asserts
+          this frame's gold and the owner panel's gold never share a 900px
+          viewport window, rather than counting gold page-wide. */}
+      <div data-bottom-band className="mt-14 border-t border-line bg-surface min-[900px]:mt-105">
         <div className="flex flex-col gap-7 py-8 min-[1100px]:flex-row min-[1100px]:items-center min-[1100px]:justify-between min-[1100px]:gap-12 min-[1100px]:py-10">
           <p data-math className="max-w-lg text-[17px] leading-relaxed text-ink">
             {COPY.mathLead}{" "}
-            <span className="font-display text-[1.4em] font-semibold text-ink lining-nums">
+            <span data-math-numeral className="font-display text-[1.4em] font-semibold text-gold lining-nums">
               {preset.missedPerMonth}
             </span>{" "}
             {COPY.mathMid}{" "}
-            <span className="font-display text-[1.4em] font-semibold text-ink lining-nums">
+            <span data-math-numeral className="font-display text-[1.4em] font-semibold text-gold lining-nums">
               ${preset.ticket}
             </span>{" "}
             {COPY.mathTail}
