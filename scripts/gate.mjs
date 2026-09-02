@@ -21,7 +21,7 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const base = (process.argv[2] ?? "http://localhost:3000").replace(/\/$/, "");
@@ -3644,7 +3644,9 @@ if (!chromium) {
     let lighthouse, launcher;
     try {
       const req = createRequire(import.meta.url);
-      lighthouse = (await import(req.resolve("lighthouse"))).default;
+      /* pathToFileURL: a bare Windows path (c:\...) is not a valid ESM
+         specifier. */
+      lighthouse = (await import(pathToFileURL(req.resolve("lighthouse")).href)).default;
       launcher = req("chrome-launcher");
     } catch (err) {
       check(108, "Lighthouse mobile LCP <= 2.5s, CLS <= 0.05", false, `lighthouse unavailable: ${err.message}`);
