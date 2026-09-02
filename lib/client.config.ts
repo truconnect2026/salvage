@@ -76,15 +76,27 @@ export const COPY = {
     yours: { kicker: "03", title: "Make it yours" },
     math: { kicker: "04", title: "The math" },
   },
+  // change 15 (A3/A1): cues.down retired — the rail chevron is the standing
+  // affordance; cues.right retired with the mobile section-2 track it
+  // explained. cues.presets remains the one swipe cue.
   cues: {
-    down: "Swipe up",
-    right: "Swipe to see the owner's side",
     presets: "Swipe to change trade",
   },
   a11y: {
     pager: "Demo sections",
     dot: "Go to section",
     panelDot: "Go to panel",
+    share: "Copy demo link",
+    next: "Next section",
+    soundOn: "Sound on",
+    soundOff: "Sound off",
+  },
+
+  // Desktop section-1 scene type (change 15, A2). Approved copy.
+  scene: {
+    closed: "Closed since 6.",
+    dialing: "She's already dialing the next one.",
+    caught: "Not this time.",
   },
 
   // Section-3 tiles (change 13, S3d). Approved copy — the numerals come from

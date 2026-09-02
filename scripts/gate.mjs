@@ -39,7 +39,9 @@ const need = (re, label) => {
 const defaultId = need(/export const DEFAULT_PRESET = "([^"]+)"/, "DEFAULT_PRESET");
 const ctaHref = need(/ctaHref:\s*"([^"]+)"/, "COPY.ctaHref");
 const shareOrigin = need(/export const SHARE_ORIGIN = "([^"]+)"/, "SHARE_ORIGIN");
-const cueDown = need(/down:\s*"([^"]+)"/, "COPY.cues.down");
+const sceneClosed = need(/closed:\s*"([^"]+)"/, "COPY.scene.closed");
+const sceneDialing = need(/dialing:\s*"([^"]+)"/, "COPY.scene.dialing");
+const sceneCaught = need(/caught:\s*"([^"]+)"/, "COPY.scene.caught");
 
 /* Every preset, sliced out of the PRESETS array by its id marker. */
 const presets = (() => {
@@ -297,6 +299,8 @@ retired(16, "change 11 removed the call card; the thread box geometry it anchore
 retired(21, "change 11 removed the call card and its callerNumber/callReason copy");
 retired(22, "change 11 removed the call card; there is no node whose identity could persist");
 retired(23, "change 11 removed the call card and its muted left rule");
+retired(73, "change 15 (A3) replaced the settled-gated down-cue with the persistent rail chevron; COPY.cues.down retired");
+retired(75, "change 15 (A1) removed the phone from mobile section 2 — there is no section-2 mobile device to compare");
 
 /* 25 + 27: the owner ledger panel is server-rendered — the no-JS floor covers
    the owner side too, not just the phone. Pure fetch, no browser needed: SSR
@@ -525,8 +529,9 @@ async function snapTrack(page, idx) {
 const BROWSER_GATES = [
   12, 13, 14, 15, 17, 18, 19, 20, 24, 26, 28, 29, 30, 31, 32, 33, 34, 35, 37, 38, 39, 45,
   46, 47, 48, 49, 50, 51, 52, 53, 55, 56, 57, 58, 59, 60, 61, 62, 63,
-  64, 65, 66, 67, 68, 69, 70, 71, 72, 73,
-  74, 75, 76, 77, 78, 79, 80, 81, 82, 83,
+  64, 65, 66, 67, 68, 69, 70, 71, 72,
+  74, 76, 77, 78, 79, 80, 81, 82, 83,
+  84, 85, 86, 87, 88, 89, 90,
 ];
 
 if (!chromium) {
@@ -2133,32 +2138,43 @@ if (!chromium) {
     const state = () =>
       page.evaluate(() => ({
         pagerTop: document.querySelector("[data-pager]").scrollTop,
-        trackLeft: document.querySelector('[data-section="save"] [data-track]').scrollLeft,
+        trackLeft: document.querySelector('[data-section="yours"] [data-track]').scrollLeft,
       }));
 
-    await page.evaluate(() => {
-      document.querySelector("[data-pager]").scrollTop = window.innerHeight;
-    });
-    await page.waitForTimeout(400);
+    /* Change 15 (A1) removed section 2's track — the preset track in
+       section 3 is the page's one horizontal scroller now, so the axis
+       assertions run there. Assertions unchanged. A prior drag's snap
+       animation can fight a bare scrollTop assignment, so the position is
+       re-asserted until it sticks. */
+    const settleAt = async (top) => {
+      for (let i = 0; i < 10; i++) {
+        await page.evaluate((n) => {
+          document.querySelector("[data-pager]").scrollTop = n;
+        }, top);
+        await page.waitForTimeout(250);
+        const now = await page.evaluate(() => document.querySelector("[data-pager]").scrollTop);
+        if (Math.abs(now - top) <= 2) return;
+      }
+    };
+    await settleAt(844 * 2);
     const before66 = await state();
-    const end66 = await drag(195, 560, 0, -300, state);
+    const end66 = await drag(195, 380, 0, -300, state);
 
     check(
       66,
-      "vertical 300px touch drag over a section-2 track panel moves the pager scrollTop >= 200px and the track scrollLeft by 0 (sampled at gesture end)",
+      "vertical 300px touch drag over a section-3 track panel moves the pager scrollTop >= 200px and the track scrollLeft by 0 (sampled at gesture end)",
       end66.pagerTop - before66.pagerTop >= 200 && end66.trackLeft === before66.trackLeft,
       `pager scrollTop ${before66.pagerTop} -> ${end66.pagerTop} (delta ${(end66.pagerTop - before66.pagerTop).toFixed(1)}, need >= 200); ` +
         `track scrollLeft ${before66.trackLeft} -> ${end66.trackLeft} (need unchanged)`,
     );
 
+    await settleAt(844 * 2);
     await page.evaluate(() => {
-      const pager = document.querySelector("[data-pager]");
-      pager.scrollTop = window.innerHeight;
-      document.querySelector('[data-section="save"] [data-track]').scrollLeft = 0;
+      document.querySelector('[data-section="yours"] [data-track]').scrollLeft = 0;
     });
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(300);
     const before67 = await state();
-    const end67 = await drag(330, 500, -200, 0, state);
+    const end67 = await drag(330, 300, -200, 0, state);
 
     check(
       67,
@@ -2335,45 +2351,6 @@ if (!chromium) {
     await ctx.close();
   });
 
-  /* --- 73: the down-cue is settled-gated. --- */
-  await block("down-cue", async () => {
-    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
-    const page = await ctx.newPage();
-    await page.goto(base, { waitUntil: "domcontentloaded" });
-    await page.evaluate(() => document.fonts.ready);
-    await waitT(page, 9.0);
-    const before = await page.evaluate((EFF) => {
-      const vis = eval(EFF);
-      const cue = document.querySelector("[data-down-cue]");
-      return {
-        t: document.querySelector("[data-demo]").getAttribute("data-t"),
-        visible: cue ? vis(cue) > 0.5 : false,
-        text: cue ? cue.textContent.trim() : null,
-      };
-    }, EFF);
-    await waitT(page, 11.3);
-    const after = await page.evaluate((EFF) => {
-      const vis = eval(EFF);
-      const cue = document.querySelector("[data-down-cue]");
-      return {
-        t: document.querySelector("[data-demo]").getAttribute("data-t"),
-        visible: cue ? vis(cue) > 0.5 : false,
-      };
-    }, EFF);
-
-    check(
-      73,
-      "section 1 down-cue: not visible during playback (t=9.0), visible once settled (t=11.3), carrying COPY.cues.down",
-      before.visible === false &&
-        after.visible === true &&
-        before.text != null &&
-        before.text.includes(cueDown),
-      `t=${before.t}: visible ${before.visible} (need false), text ${JSON.stringify(before.text)} ` +
-        `(must contain ${JSON.stringify(cueDown)}); t=${after.t}: visible ${after.visible} (need true)`,
-    );
-    await ctx.close();
-  });
-
   /* --- 74 + 76 + 77 + 79 + 80 + 81: frame scale, desktop pass. --- */
   await block("frame-scale-desktop", async () => {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -2453,6 +2430,7 @@ if (!chromium) {
         : -1;
       const share = document.querySelector("[data-share]");
       const scs = share ? getComputedStyle(share) : null;
+      const sr = share ? share.getBoundingClientRect() : null;
       const root = getComputedStyle(document.documentElement);
       const toRgb = (name) => {
         const h = root.getPropertyValue(name).trim().replace("#", "");
@@ -2462,8 +2440,9 @@ if (!chromium) {
       return {
         visibleTiles,
         teal: toRgb("--color-teal"),
-        shareBg: scs ? scs.backgroundColor : null,
-        shareW: share ? share.getBoundingClientRect().width : 0,
+        shareBorder: scs ? scs.borderTopColor : null,
+        shareW: sr ? sr.width : 0,
+        shareH: sr ? sr.height : 0,
       };
     });
 
@@ -2511,6 +2490,7 @@ if (!chromium) {
       for (const el of document.querySelectorAll("body *")) {
         const cs = getComputedStyle(el);
         if (cs.display === "none" || cs.visibility === "hidden") continue;
+        if (el.closest("[data-scene]")) continue;
         if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
         const fs = parseFloat(cs.fontSize);
         if (fs > max) {
@@ -2547,10 +2527,10 @@ if (!chromium) {
     await pageM.evaluate(() => document.fonts.ready);
 
     const m = await pageM.evaluate(() => {
-      const call = document.querySelector('[data-section="call"] [data-phone-device]');
-      const save = document.querySelector('[data-section="save"] [data-phone-device]');
       const money = document.querySelector("[data-money]");
       const share = document.querySelector("[data-share]");
+      const scs = share ? getComputedStyle(share) : null;
+      const sr = share ? share.getBoundingClientRect() : null;
       const math = document.querySelector("[data-math]");
       const root = getComputedStyle(document.documentElement);
       const toRgb = (name) => {
@@ -2563,6 +2543,7 @@ if (!chromium) {
       for (const el of document.querySelectorAll("body *")) {
         const cs = getComputedStyle(el);
         if (cs.display === "none" || cs.visibility === "hidden") continue;
+        if (el.closest("[data-scene]")) continue;
         if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
         const fs = parseFloat(cs.fontSize);
         if (fs > max) {
@@ -2571,26 +2552,18 @@ if (!chromium) {
         }
       }
       return {
-        callW: call ? call.getBoundingClientRect().width : 0,
-        saveW: save ? save.getBoundingClientRect().width : 0,
         visibleTiles: money
           ? [...money.children].filter((el) => getComputedStyle(el).display !== "none").length
           : -1,
         teal: toRgb("--color-teal"),
-        shareBg: share ? getComputedStyle(share).backgroundColor : null,
-        shareW: share ? share.getBoundingClientRect().width : 0,
+        shareBorder: scs ? scs.borderTopColor : null,
+        shareW: sr ? sr.width : 0,
+        shareH: sr ? sr.height : 0,
         mathFS: math ? parseFloat(getComputedStyle(math).fontSize) : 0,
         max,
         maxTag,
       };
     });
-
-    check(
-      75,
-      "section 2 mobile panel-1 phone width === section 1 phone width ±2px at 390x844",
-      m.callW > 0 && Math.abs(m.callW - m.saveW) <= 2,
-      `section-1 device ${m.callW.toFixed(1)}px, section-2 device ${m.saveW.toFixed(1)}px (need equal ±2)`,
-    );
 
     check(
       76,
@@ -2599,17 +2572,28 @@ if (!chromium) {
       `390x844 visible tiles ${m.visibleTiles} (need 2); 1440x900 visible tiles ${tiles.visibleTiles} (need 3)`,
     );
 
+    /* Amended (change 15, A3): the Share control is the rail's teal-outline
+       circle now — the section-2 fill button it replaced is gone. */
     check(
       77,
-      "share button computed background === teal and width >= 280 at 390x844 and 1440x900",
-      m.shareBg === m.teal && m.shareW >= 280 && tiles.shareBg === tiles.teal && tiles.shareW >= 280,
-      `390: bg ${m.shareBg}, width ${m.shareW.toFixed(1)}px; 1440: bg ${tiles.shareBg}, width ${tiles.shareW.toFixed(1)}px ` +
-        `(need bg teal ${m.teal}, width >= 280)`,
+      "rail share control: teal outline circle >= 36px, present at 390x844 and 1440x900",
+      m.shareBorder === m.teal &&
+        m.shareW >= 36 &&
+        Math.abs(m.shareW - m.shareH) <= 1 &&
+        tiles.shareBorder === tiles.teal &&
+        tiles.shareW >= 36 &&
+        Math.abs(tiles.shareW - tiles.shareH) <= 1,
+      `390: border ${m.shareBorder}, ${m.shareW.toFixed(1)}x${m.shareH.toFixed(1)}px; ` +
+        `1440: border ${tiles.shareBorder}, ${tiles.shareW.toFixed(1)}x${tiles.shareH.toFixed(1)}px ` +
+        `(need teal ${m.teal} border, circular, >= 36px)`,
     );
 
+    /* 80 (amended, change 15): the desktop scene type's 96px clock line is
+       excluded from the scan — A2 sets it larger by spec; the math line
+       remains the largest text everywhere else. */
     check(
       80,
-      "math line font-size >= 40px at 390 and >= 64px at 1440, and it is the largest text on the page at both",
+      "math line font-size >= 40px at 390 and >= 64px at 1440, and the largest text outside the scene type at both",
       m.mathFS >= 40 &&
         m.max <= m.mathFS + 0.5 &&
         m.maxTag === "in-math" &&
@@ -2623,6 +2607,405 @@ if (!chromium) {
     );
 
     await ctxM.close();
+    await ctx.close();
+  });
+
+  /* --- 84 + 87: change-15 structure — owner-first mobile, section-3 device. --- */
+  await block("structure-15", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+    await waitHydrated(page);
+
+    const g84 = await page.evaluate(() => {
+      const save = document.querySelector('[data-section="save"]');
+      if (!save) return null;
+      const sr = save.getBoundingClientRect();
+      const dev = save.querySelector("[data-phone-device]");
+      const card = save.querySelector("[data-notify-ledger]");
+      const panel = save.querySelector("[data-panel-content]");
+      const inside = (r) => r.left >= sr.left - 1 && r.right <= sr.right + 1 && r.top >= sr.top - 1 && r.bottom <= sr.bottom + 1;
+      return {
+        phoneRendered: dev ? dev.offsetParent != null : false,
+        trackPresent: save.querySelector("[data-track]") != null,
+        cardInside: card ? inside(card.getBoundingClientRect()) : false,
+        ledgerInside: panel ? inside(panel.getBoundingClientRect()) : false,
+      };
+    });
+
+    check(
+      84,
+      "mobile section 2: no rendered phone, no [data-track]; docked card and ledger fully inside the section",
+      g84 != null &&
+        g84.phoneRendered === false &&
+        g84.trackPresent === false &&
+        g84.cardInside === true &&
+        g84.ledgerInside === true,
+      g84 == null
+        ? "save section not found"
+        : `phone rendered ${g84.phoneRendered} (need false), track present ${g84.trackPresent} (need false), ` +
+          `card inside ${g84.cardInside}, ledger inside ${g84.ledgerInside} (both need true)`,
+    );
+
+    const g87m = await page.evaluate(() => {
+      const yours = document.querySelector('[data-section="yours"]');
+      if (!yours) return null;
+      const yr = yours.getBoundingClientRect();
+      const dev = yours.querySelector("[data-phone-device]");
+      const track = yours.querySelector("[data-track]");
+      const tiles = [...yours.querySelectorAll("[data-panel] [data-tile]")];
+      const header = yours.querySelector("[data-crop-biz]");
+      const bubble = yours.querySelector("[data-s-bubble]");
+      if (!dev || !track || tiles.length < 3 || !header || !bubble) return null;
+      const dr = dev.getBoundingClientRect();
+      const tr = track.getBoundingClientRect();
+      const third = tiles[2].getBoundingClientRect();
+      const hr = header.getBoundingClientRect();
+      const br = bubble.getBoundingClientRect();
+      return {
+        devTopVsThirdTile: dr.top - third.bottom,
+        devBottomVsPanel: dr.bottom - tr.bottom,
+        headerInside: hr.top >= yr.top - 1 && hr.bottom <= yr.bottom + 1,
+        bubbleInside: br.top >= yr.top - 1 && br.bottom <= yr.bottom + 1,
+        visiblePct: ((yr.bottom - dr.top) / dr.height) * 100,
+      };
+    });
+
+    /* Desktop half of 87. */
+    const ctxD = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const pageD = await ctxD.newPage();
+    await pageD.goto(base, { waitUntil: "domcontentloaded" });
+    await pageD.evaluate(() => document.fonts.ready);
+    const g87d = await pageD.evaluate(() => {
+      const yours = document.querySelector('[data-section="yours"]');
+      const dev = yours?.querySelector("[data-phone-device]");
+      const input = document.querySelector("[data-name-input]");
+      if (!yours || !dev || !input) return null;
+      const yr = yours.getBoundingClientRect();
+      const dr = dev.getBoundingClientRect();
+      const ir = input.getBoundingClientRect();
+      return {
+        clearance: yr.bottom - dr.bottom,
+        inputGap: dr.top - ir.bottom,
+        devW: dr.width,
+      };
+    });
+
+    check(
+      87,
+      "section 3 — desktop: phone contained (clearance >= 24) with the name input within 40px above it; mobile: phone below the third tile, bleeding past the panel bottom, header + thread[0] visible",
+      g87d != null &&
+        g87d.clearance >= 24 &&
+        g87d.inputGap >= 0 &&
+        g87d.inputGap <= 40 &&
+        g87m != null &&
+        g87m.devTopVsThirdTile > 0 &&
+        g87m.devBottomVsPanel > 0 &&
+        g87m.headerInside === true &&
+        g87m.bubbleInside === true,
+      `desktop: ${g87d == null ? "nodes missing" : `clearance ${g87d.clearance.toFixed(1)}px (need >= 24), input->phone gap ${g87d.inputGap.toFixed(1)}px (need 0..40), width ${g87d.devW.toFixed(1)}px`}; ` +
+        `mobile: ${g87m == null ? "nodes missing" : `top ${g87m.devTopVsThirdTile.toFixed(1)}px below third tile (need > 0), bottom ${g87m.devBottomVsPanel.toFixed(1)}px past panel (need > 0), header inside ${g87m.headerInside}, thread[0] inside ${g87m.bubbleInside}, ~${g87m.visiblePct.toFixed(0)}% visible`}`,
+    );
+
+    await ctxD.close();
+    await ctx.close();
+  });
+
+  /* --- 85: the desktop scene type rides the one clock. --- */
+  await block("scene-type", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+
+    const readScene = () =>
+      page.evaluate((EFF) => {
+        const vis = eval(EFF);
+        const lines = [...document.querySelectorAll("[data-scene-line]")];
+        const visible = lines.filter((l) => vis(l) > 0.5);
+        return {
+          t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
+          visibleTexts: visible.map((l) => l.textContent.trim()),
+        };
+      }, EFF);
+
+    await waitT(page, 0.5);
+    const early = await readScene();
+    await waitT(page, 4.0);
+    const mid = await readScene();
+    await waitT(page, 6.5);
+    const late = await readScene();
+
+    /* Absent below 1100px. */
+    const ctxM = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const pageM = await ctxM.newPage();
+    await pageM.goto(base, { waitUntil: "domcontentloaded" });
+    const mobileScene = await pageM.evaluate((EFF) => {
+      const vis = eval(EFF);
+      const scene = document.querySelector("[data-scene]");
+      return scene ? vis(scene) : null;
+    }, EFF);
+    await ctxM.close();
+
+    check(
+      85,
+      `desktop scene type: "${sceneClosed}" at t=0.5, "${sceneDialing}" at t=4.0, "${sceneCaught}" at t=6.5; absent at 390x844`,
+      early.visibleTexts.length === 1 &&
+        early.visibleTexts[0] === sceneClosed &&
+        mid.visibleTexts.length === 1 &&
+        mid.visibleTexts[0] === sceneDialing &&
+        late.visibleTexts.length === 1 &&
+        late.visibleTexts[0] === sceneCaught &&
+        mobileScene === 0,
+      `t=${early.t}: ${JSON.stringify(early.visibleTexts)} (want ${JSON.stringify([sceneClosed])}); ` +
+        `t=${mid.t}: ${JSON.stringify(mid.visibleTexts)} (want ${JSON.stringify([sceneDialing])}); ` +
+        `t=${late.t}: ${JSON.stringify(late.visibleTexts)} (want ${JSON.stringify([sceneCaught])}); ` +
+        `390x844 scene effective opacity ${mobileScene} (need 0)`,
+    );
+    await ctx.close();
+  });
+
+  /* --- 86: the rail carries share, sound, and next everywhere. --- */
+  await block("rail", async () => {
+    const origin = new URL(base).origin;
+    for (const vp of [
+      { w: 390, h: 844 },
+      { w: 1440, h: 900 },
+    ]) {
+      const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h } });
+      if (vp.w === 1440) await ctx.grantPermissions(["clipboard-read", "clipboard-write"], { origin });
+      const page = await ctx.newPage();
+      await page.goto(base, { waitUntil: "domcontentloaded" });
+      await page.evaluate(() => document.fonts.ready);
+      await waitHydrated(page);
+
+      const present = await page.evaluate((EFF) => {
+        const vis = eval(EFF);
+        const q = (sel, min = 0.5) => {
+          const el = document.querySelector(sel);
+          return el ? vis(el) > min : false;
+        };
+        return {
+          share: q("[data-rail-share]"),
+          sound: q("[data-sound-toggle]"),
+          /* The chevron runs 40% opacity by spec (A3) — presence, not
+             prominence, is the claim. */
+          next: q("[data-rail-next]", 0.2),
+          dots: document.querySelectorAll("[data-pager-dot]").length,
+        };
+      }, EFF);
+
+      await goSection(page, 3);
+      await page.waitForTimeout(500);
+      const onLast = await page.evaluate((EFF) => {
+        const vis = eval(EFF);
+        const next = document.querySelector("[data-rail-next]");
+        return { nextVisible: next ? vis(next) > 0.5 : false };
+      }, EFF);
+
+      let clip = "(not tested at this width)";
+      let clipOk = true;
+      if (vp.w === 1440) {
+        await goSection(page, 2);
+        await page.fill("[data-name-input]", "Test Salon");
+        await page.waitForTimeout(300);
+        await page.click("[data-rail-share]");
+        await page.waitForTimeout(250);
+        try {
+          clip = await page.evaluate(() => navigator.clipboard.readText());
+        } catch (err) {
+          clip = `clipboard error: ${err.message}`;
+        }
+        clipOk = clip === `${shareOrigin}/?biz=${expected.id}&name=Test%20Salon`;
+      }
+
+      check(
+        86,
+        `rail at ${vp.w}x${vp.h}: share + sound + chevron present with 4 dots; chevron hidden on section 4; rail share copies the ?biz&name deep link`,
+        present.share && present.sound && present.next && present.dots === 4 && onLast.nextVisible === false && clipOk,
+        `share ${present.share}, sound ${present.sound}, next ${present.next}, dots ${present.dots} (need 4); ` +
+          `next visible on section 4: ${onLast.nextVisible} (need false); clipboard ${JSON.stringify(clip)}`,
+      );
+      await ctx.close();
+    }
+  });
+
+  /* --- 88 + 89: synthesized sound — counts and clock fidelity. --- */
+  await block("sound-schedule", async () => {
+    const SPY = () => {
+      window.__acCount = 0;
+      window.__oscStarts = [];
+      const Orig = window.AudioContext;
+      const Wrapped = function (...args) {
+        const inst = new Orig(...args);
+        window.__acCount++;
+        window.__acLast = inst;
+        return inst;
+      };
+      Wrapped.prototype = Orig.prototype;
+      window.AudioContext = Wrapped;
+      const origStart = OscillatorNode.prototype.start;
+      OscillatorNode.prototype.start = function (when) {
+        window.__oscStarts.push({
+          when: when ?? this.context.currentTime,
+          ctxTime: this.context.currentTime,
+          phase: parseFloat(document.querySelector("[data-demo]")?.getAttribute("data-t") ?? "NaN"),
+          freq: this.frequency.value,
+          type: this.type,
+        });
+        return origStart.call(this, when);
+      };
+    };
+
+    /* Sound OFF: a full playback must create NOTHING. */
+    const ctxOff = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const pageOff = await ctxOff.newPage();
+    await pageOff.addInitScript(SPY);
+    await pageOff.goto(base, { waitUntil: "domcontentloaded" });
+    await waitT(pageOff, 13.5);
+    const off = await pageOff.evaluate(() => ({
+      acCount: window.__acCount,
+      oscStarts: window.__oscStarts.length,
+    }));
+    await ctxOff.close();
+
+    /* Sound ON: toggle (the gesture), then replay — exactly 5 oscillator
+       starts: 3 ring (40Hz custom PeriodicWave carrying 440+480), 1 chime
+       (triangle), 1 land (220 sine). */
+    const ctxOn = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const pageOn = await ctxOn.newPage();
+    await pageOn.addInitScript(SPY);
+    await pageOn.goto(base, { waitUntil: "domcontentloaded" });
+    await waitT(pageOn, 13.5);
+    await pageOn.click("[data-sound-toggle]");
+    await pageOn.waitForTimeout(200);
+    await pageOn.evaluate(() => {
+      window.__oscStarts.length = 0;
+    });
+    await pageOn.click("[data-replay]");
+    /* data-t was already ~13.8 — wait for the reset to a small value first,
+       or waitT(11) returns before the replay even begins. */
+    await pageOn.waitForFunction(() => {
+      const v = parseFloat(document.querySelector("[data-demo]")?.getAttribute("data-t") ?? "");
+      return Number.isFinite(v) && v < 2;
+    });
+    await waitT(pageOn, 11.0);
+    const starts = await pageOn.evaluate(() => window.__oscStarts);
+    await ctxOn.close();
+
+    const rings = starts.filter((r) => r.type === "custom");
+    const chimes = starts.filter((r) => r.type === "triangle");
+    const lands = starts.filter((r) => r.type === "sine");
+
+    check(
+      88,
+      "sound OFF: zero AudioContexts and zero oscillator starts after full playback; sound ON (toggle then replay): exactly 5 oscillator starts — 3 ring, 1 chime, 1 land",
+      off.acCount === 0 &&
+        off.oscStarts === 0 &&
+        starts.length === 5 &&
+        rings.length === 3 &&
+        chimes.length === 1 &&
+        lands.length === 1,
+      `OFF: ${off.acCount} AudioContext(s), ${off.oscStarts} start(s) (need 0/0); ` +
+        `ON: ${starts.length} start(s) — ${rings.length} ring, ${chimes.length} chime, ${lands.length} land (need 3/1/1); ` +
+        `schedule: ${starts.map((r) => `${r.type}@phase ${Number.isFinite(r.phase) ? r.phase.toFixed(3) : "?"}`).join(", ")}`,
+    );
+
+    const BEATS_15 = [0.2, 1.4, 2.6, 4.4, 10.0];
+    const byPhase = [...starts].sort((a, b) => a.phase - b.phase);
+    const rows = byPhase.map((r, i) => {
+      const beat = BEATS_15[i];
+      const phaseAtStart = r.phase + (r.when - r.ctxTime);
+      return { beat, phaseAtStart, delta: Math.abs(phaseAtStart - beat), type: r.type };
+    });
+
+    check(
+      89,
+      "each oscillator's scheduled start, converted to phase seconds, is within 50ms of its beat (0.2, 1.4, 2.6, 4.4, 10.0)",
+      rows.length === 5 && rows.every((r) => Number.isFinite(r.phaseAtStart) && r.delta <= 0.05),
+      rows.length === 0
+        ? "no oscillator starts recorded"
+        : rows
+            .map((r) => `${r.type}: beat ${r.beat} vs ${r.phaseAtStart.toFixed(3)} (delta ${(r.delta * 1000).toFixed(0)}ms)`)
+            .join("; "),
+    );
+  });
+
+  /* --- 90: the sound preference persists; the gesture gate does not.
+     Playwright pre-grants user activation on navigation AND allows
+     autoplay, so "no gesture has occurred" is unreproducible here. The gate
+     therefore asserts the app's side of the contract mechanically: the
+     restored context is DRIVEN into the suspended state a real browser
+     hands over (ctx.suspend() right at hydration, before playback's first
+     beat), three beats then cross in silence (the engine's state guard),
+     and one real click resumes it through the app's own gesture listener
+     and sound follows. The UA-side link — that a gesture-less context
+     starts suspended — is Chrome's documented autoplay behavior. --- */
+  await block("sound-persist", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await ctx.newPage();
+    await page.addInitScript(() => {
+      try {
+        window.sessionStorage.setItem("salvage:sound", "1");
+      } catch {}
+      window.__acCount = 0;
+      window.__oscStarts = [];
+      const Orig = window.AudioContext;
+      const Wrapped = function (...args) {
+        const inst = new Orig(...args);
+        window.__acCount++;
+        window.__acLast = inst;
+        return inst;
+      };
+      Wrapped.prototype = Orig.prototype;
+      window.AudioContext = Wrapped;
+      const origStart = OscillatorNode.prototype.start;
+      OscillatorNode.prototype.start = function (when) {
+        window.__oscStarts.push({ when: when ?? 0 });
+        return origStart.call(this, when);
+      };
+    });
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await waitHydrated(page);
+    /* Hydrated but parked ("0.000") — suspend NOW, before the first beat. */
+    await page.evaluate(async () => {
+      if (window.__acLast) await window.__acLast.suspend();
+    });
+    await waitT(page, 3.5);
+
+    const before = await page.evaluate(() => ({
+      toggleOn: document.querySelector("[data-sound-toggle]")?.getAttribute("data-on") ?? null,
+      acCount: window.__acCount,
+      state: window.__acLast ? window.__acLast.state : null,
+      oscStarts: window.__oscStarts.length,
+    }));
+
+    /* One real gesture (not the toggle — that would turn sound OFF); the
+       remaining beats (4.4, 10.0) must then sound. */
+    await page.mouse.click(200, 100);
+    await page
+      .waitForFunction(() => window.__acLast && window.__acLast.state === "running", null, { timeout: 5000 })
+      .catch(() => {});
+    await waitT(page, 10.5);
+    const after = await page.evaluate(() => ({
+      state: window.__acLast ? window.__acLast.state : null,
+      oscStarts: window.__oscStarts.length,
+    }));
+
+    check(
+      90,
+      'salvage:sound=1 persists across reload: toggle "on" with no prompt, ONE restored AudioContext; while suspended, three crossed beats stay silent; a real click resumes it and sound follows',
+      before.toggleOn === "true" &&
+        before.acCount === 1 &&
+        before.state === "suspended" &&
+        before.oscStarts === 0 &&
+        after.state === "running" &&
+        after.oscStarts > 0,
+      `after reload at t=3.5: toggle data-on ${JSON.stringify(before.toggleOn)} (need "true"), ${before.acCount} AudioContext(s) (need 1), ` +
+        `state ${JSON.stringify(before.state)} (need "suspended"), oscillator starts ${before.oscStarts} (need 0 — three beats had crossed); ` +
+        `after gesture: state ${JSON.stringify(after.state)} (need "running"), starts ${after.oscStarts} (need > 0)`,
+    );
     await ctx.close();
   });
 

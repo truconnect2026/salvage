@@ -109,3 +109,29 @@ a typed name; the rapid-snap queue including A→B→A return; dot jumps across
 an intermediate panel chaining correctly; name debounce and Share during
 queued transitions; playback re-arm on preset switch and fresh restart on
 returning to section 1.
+
+## Change 15 — adversarial review (1 lens)
+
+Lens: is there ANY code path where audio is scheduled from a clock other
+than the rAF phase, or where sound plays without a prior user gesture?
+Confirmed findings fixed and re-measured before the change-15 commit.
+
+| # | Finding | Verdict |
+|---|---------|---------|
+| 1 | **Beat pile-up after rAF starvation.** `crossed()` had no staleness bound while the phase is wall-clock based: backgrounding the tab mid-run and returning fired every gap-spanning beat at once — measured 3 rings + chime + haptic + land within 2ms of each other, ~10s late. | **Fixed.** Beats more than 250ms stale are dropped (`t - beat < 0.25`); the normal one-frame-late contract (~16ms, gate 89) is untouched. Re-measured: a 6s stall starting at t≈0.7 now yields exactly the pre-stall burst and the still-fresh land beat — stale beats and the haptic stay silent. |
+| 2 | **Toggle OFF was not a silencer.** It only stopped FUTURE scheduling: an in-flight ring tail (~0.85s) kept sounding, and the AudioContext stayed running for the page's lifetime, holding audio hardware. | **Fixed.** All voices route through one master GainNode; OFF ramps it to zero in ~30ms (killing the tail) and then suspends the context; ON ramps back and resumes. The suspend rides an 80ms courtesy timeout — a UI cleanup, not an audio scheduler: no sound is ever *timed* by it. |
+| 3 | Residual no-gesture hole on legacy UAs: a browser without `navigator.userActivation` (Firefox ≤111, Safari ≤16.3) whose user force-allowed autoplay could start a session-restored context running — both guards pass, sound with zero gestures on that page. | **Dismissed.** The spec's own gate 90 mandates this design (the restored context must exist suspended after reload); the hole needs a legacy browser AND a per-site autoplay override — a user who opted into sound twice. Documented, accepted. |
+| 4 | Reduced-motion tap on the sound toggle created and resumed a context that can never sound (playback never runs there) — a resource hold, not a gesture violation. | **Fixed.** Under reduced motion the preference still toggles (the spec's "stays off until tapped") but no AudioContext is created or resumed. |
+
+Traced clean by the reviewer: one clock ever (`when − currentTime` measured
+0.0000 on all five voices — nothing is scheduled into the context's future,
+so LOOP_UNTIL parking cannot strand a beat); no second scheduler repo-wide;
+zero starts during "swap" frames; toggling ON mid-run is never retroactive;
+replay spam structurally impossible (controls hidden until every voice has
+ended); session restore consumes silently-crossed beats rather than
+replaying them; the haptic rides only the chime crossing inside all guards;
+the StrictMode context singleton held at one constructor call. Honest
+limit: Playwright pre-grants user activation and allows autoplay, so
+UA-level gesture suspension is asserted mechanically (gate 90 drives the
+restored context into the suspended state a real browser hands over) and
+reasoned for the legacy matrix, not measured on-device.

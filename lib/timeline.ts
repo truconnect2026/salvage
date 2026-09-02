@@ -81,6 +81,21 @@ export const SHIMMER_DUR = 0.6;
  *  a fully settled t=13.3. */
 export const LOOP_UNTIL = 13.8;
 
+/* ---- Sound (change 15, B1). Beats on the SAME clock as everything else —
+   the engine schedules a sound only when the rAF phase crosses its beat.
+   Three ring bursts inside the ring window; the chime rides the banner
+   beat; the landing tone rides the in-phone confirmation card. ---- */
+export const RING_BEATS = [0.2, 1.4, 2.6];
+export const RING_BURST_DUR = 0.8;
+export const CHIME_AT = BANNER_AT; // 4.4
+export const LAND_AT = NOTIFY_AT; // 10.0
+
+/* Scene-type beats (change 15, A2): line 2 crossfades on the miss and on the
+   thread's first beat. */
+export const SCENE_DIALING_AT = CALL_ENDED_AT; // 3.6
+export const SCENE_CAUGHT_AT = THREAD_START; // 5.6
+export const SCENE_FADE = 0.4;
+
 /** Preset crossfade: text dissolves through zero, numbers roll old -> beat 0. */
 export const SWAP_FADE = 0.22;
 export const SWAP_ROLL = 0.5;

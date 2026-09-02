@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import Ledger from "@/components/Ledger";
-import Phone, { NotifyCard, StatusGlyphs } from "@/components/Phone";
+import Phone, { NotifyCard } from "@/components/Phone";
 import { COPY, MAX_NAME_LEN, PRESETS, SHARE_ORIGIN, resolveName, type Preset } from "@/lib/client.config";
 import { usd } from "@/lib/format";
 import {
@@ -16,11 +16,18 @@ import {
   CALL_ENDED_AT,
   CALL_RINGING_AT,
   CAUGHT_ROW_RISE,
+  CHIME_AT,
   CONTROLS_AT,
   CONTROLS_FADE,
   DELIVERED_AT,
   DOT_PERIOD,
+  LAND_AT,
   LOOP_UNTIL,
+  RING_BEATS,
+  RING_BURST_DUR,
+  SCENE_CAUGHT_AT,
+  SCENE_DIALING_AT,
+  SCENE_FADE,
   SHIMMER_AT,
   SHIMMER_DUR,
   SWAP_FADE,
@@ -76,7 +83,9 @@ type Nodes = {
   threadArea: HTMLElement | null;
   leak: HTMLElement | null;
   controls: HTMLElement | null;
-  downCue: HTMLElement | null;
+  sceneClosed: HTMLElement | null;
+  sceneDialing: HTMLElement | null;
+  sceneCaught: HTMLElement | null;
   ledgerPanel: HTMLElement | null;
   caughtRow0: HTMLElement | null;
   panelRecovered: HTMLElement | null;
@@ -89,6 +98,102 @@ type Nodes = {
   notifyPhone: HTMLElement | null;
   shimmer: HTMLElement | null;
 };
+
+/* ---------------------------------------------------------------------------
+ * Sound (change 15, B). Web Audio synthesis only — no samples. Every event is
+ * scheduled by the ONE rAF loop the moment the phase signal crosses its beat:
+ * no setTimeout, no second scheduler, no other clock. Audio stays OFF until
+ * the rail toggle's tap creates/resumes the AudioContext (the gesture
+ * unlock); a session restore re-creates the context WITHOUT a gesture, which
+ * the browser holds suspended until one arrives.
+ * ------------------------------------------------------------------------- */
+
+type AudioState = {
+  actx: AudioContext | null;
+  enabled: boolean;
+  /* Phase at the previous tick — beats fire on (lastT, t] crossings. -1
+     whenever the clock (re)starts, so beat 0.2 is crossable again. */
+  lastT: number;
+};
+
+/* One AudioContext per page lifetime, module-scoped: React StrictMode
+   double-mounts effects in dev, and a per-mount context would leak one
+   instance per remount (gate 88/90 count constructor calls). */
+let sharedAudioContext: AudioContext | null = null;
+/* Every voice routes through one master gain (change 15 review, finding 2):
+   toggling OFF ramps it to zero in ~30ms — silencing a ring tail already in
+   flight — and then suspends the context so no audio hardware stays held. */
+let sharedMasterGain: GainNode | null = null;
+
+function ensureAudioContext(a: AudioState): AudioContext | null {
+  if (typeof window === "undefined" || typeof AudioContext === "undefined") return null;
+  if (!sharedAudioContext) {
+    try {
+      sharedAudioContext = new AudioContext();
+      sharedMasterGain = sharedAudioContext.createGain();
+      sharedMasterGain.connect(sharedAudioContext.destination);
+    } catch {
+      sharedAudioContext = null;
+      sharedMasterGain = null;
+    }
+  }
+  a.actx = sharedAudioContext;
+  return a.actx;
+}
+
+/* One ring burst: BOTH sines (440 + 480 Hz) from a single oscillator — they
+   are harmonics 11 and 12 of a 40 Hz fundamental, so one PeriodicWave
+   carries the exact pair. 20ms attack, 80ms release, gain 0.12. */
+function playRing(actx: AudioContext, when: number) {
+  const real = new Float32Array(13);
+  const imag = new Float32Array(13);
+  imag[11] = 1;
+  imag[12] = 1;
+  const osc = actx.createOscillator();
+  osc.setPeriodicWave(actx.createPeriodicWave(real, imag));
+  osc.frequency.value = 40;
+  const g = actx.createGain();
+  g.gain.setValueAtTime(0, when);
+  g.gain.linearRampToValueAtTime(0.12, when + 0.02);
+  g.gain.setValueAtTime(0.12, when + RING_BURST_DUR - 0.08);
+  g.gain.linearRampToValueAtTime(0, when + RING_BURST_DUR);
+  osc.connect(g).connect(sharedMasterGain ?? actx.destination);
+  osc.start(when);
+  osc.stop(when + RING_BURST_DUR + 0.05);
+}
+
+/* The banner chime: triangle gliding 880 -> 1320 Hz over 90ms, 220ms
+   release, gain 0.10. */
+function playChime(actx: AudioContext, when: number) {
+  const osc = actx.createOscillator();
+  osc.type = "triangle";
+  osc.frequency.setValueAtTime(880, when);
+  osc.frequency.linearRampToValueAtTime(1320, when + 0.09);
+  const g = actx.createGain();
+  g.gain.setValueAtTime(0, when);
+  g.gain.linearRampToValueAtTime(0.1, when + 0.015);
+  g.gain.setValueAtTime(0.1, when + 0.09);
+  g.gain.linearRampToValueAtTime(0, when + 0.31);
+  osc.connect(g).connect(sharedMasterGain ?? actx.destination);
+  osc.start(when);
+  osc.stop(when + 0.36);
+}
+
+/* The landing tone: one 220 Hz sine, 60ms, gain 0.08 — the confirmation
+   card touching down on her phone. */
+function playLand(actx: AudioContext, when: number) {
+  const osc = actx.createOscillator();
+  osc.type = "sine";
+  osc.frequency.value = 220;
+  const g = actx.createGain();
+  g.gain.setValueAtTime(0, when);
+  g.gain.linearRampToValueAtTime(0.08, when + 0.008);
+  g.gain.setValueAtTime(0.08, when + 0.04);
+  g.gain.linearRampToValueAtTime(0, when + 0.06);
+  osc.connect(g).connect(sharedMasterGain ?? actx.destination);
+  osc.start(when);
+  osc.stop(when + 0.1);
+}
 
 type Totals = { lost: number; panelRecovered: number };
 type Transition = {
@@ -118,8 +223,47 @@ type Ctx = {
   /* A preset snapped mid-swap is queued, not discarded: the track is a
      physical position, and the page must land wherever the track rests. */
   pendingPresetId: string | null;
+  audio: AudioState;
   setPresetId: (id: string) => void;
 };
+
+/* Beat crossings -> Web Audio schedules, on the rAF phase and nothing else.
+   The offset (beat - t) is <= 0 by construction (we schedule the frame the
+   crossing is observed), so events land at most one frame after their beat
+   — inside gate 89's 50ms envelope. The haptic (B3) rides the same chime
+   crossing. */
+function scheduleAudio(ctx: Ctx, prevT: number, t: number) {
+  const a = ctx.audio;
+  if (!a.enabled || !a.actx || a.actx.state !== "running") return;
+  /* Belt and braces on the gesture gate (B2): a session-restored "on" must
+     stay silent until THIS page has seen a real interaction, even under a
+     user agent whose autoplay policy never suspends the context. Browsers
+     without navigator.userActivation still rely on the suspended-context
+     check above. */
+  if (
+    typeof navigator !== "undefined" &&
+    "userActivation" in navigator &&
+    !navigator.userActivation.hasBeenActive
+  )
+    return;
+  const actx = a.actx;
+  /* Freshness bound (change 15 review, finding 1): after rAF starvation
+     (hidden tab, long jank) the wall-clock phase jumps and every beat in
+     the gap would fire as one late blast — a beat more than 250ms stale is
+     dropped instead. The normal one-frame-late path (~16ms) is untouched. */
+  const crossed = (beat: number) => prevT < beat && t >= beat && t - beat < 0.25;
+  const at = (beat: number) => actx.currentTime + Math.max(0, beat - t);
+  for (const b of RING_BEATS) if (crossed(b)) playRing(actx, at(b));
+  if (crossed(CHIME_AT)) {
+    playChime(actx, at(CHIME_AT));
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+      try {
+        navigator.vibrate(30);
+      } catch {}
+    }
+  }
+  if (crossed(LAND_AT)) playLand(actx, at(LAND_AT));
+}
 
 function collect(root: HTMLElement): Nodes {
   const typings = new Map<number, HTMLElement>();
@@ -135,7 +279,9 @@ function collect(root: HTMLElement): Nodes {
     threadArea: q("[data-thread-area]"),
     leak: q("[data-leak-lost]"),
     controls: q("[data-controls]"),
-    downCue: q("[data-down-cue]"),
+    sceneClosed: q('[data-scene-line="closed"]'),
+    sceneDialing: q('[data-scene-line="dialing"]'),
+    sceneCaught: q('[data-scene-line="caught"]'),
     ledgerPanel: q("[data-ledger-panel]"),
     caughtRow0: q('[data-caught-row="0"]'),
     panelRecovered: q("[data-panel-recovered]"),
@@ -242,17 +388,22 @@ function paintScene(ctx: Ctx, t: number) {
     n.caughtRow0.style.transform = `translateY(${(1 - p) * CAUGHT_ROW_RISE}px)`;
   }
 
-  /* Replay (section 1, bottom-left) and the down-cue land together on the
-     settled beat — CONTROLS_AT is thread-relative 5.4 == global 11.0. */
+  /* Replay (section 1, bottom-left) lands on the settled beat —
+     CONTROLS_AT is thread-relative 5.4 == global 11.0. (The down affordance
+     is the persistent rail chevron now — change 15, A3.) */
   const c = clamp01((tt - CONTROLS_AT) / CONTROLS_FADE);
   if (n.controls) {
     n.controls.style.visibility = c > 0 ? "visible" : "hidden";
     n.controls.style.opacity = String(c);
   }
-  if (n.downCue) {
-    n.downCue.style.visibility = c > 0 ? "visible" : "hidden";
-    n.downCue.style.opacity = String(c);
-  }
+
+  /* --- Desktop scene type (change 15, A2): line 2 crossfades on the miss
+         and again when the thread begins. Same clock as everything else. --- */
+  const dialingIn = easeOut(clamp01((t - SCENE_DIALING_AT) / SCENE_FADE));
+  const caughtIn = easeOut(clamp01((t - SCENE_CAUGHT_AT) / SCENE_FADE));
+  if (n.sceneClosed) n.sceneClosed.style.opacity = String(1 - dialingIn);
+  if (n.sceneDialing) n.sceneDialing.style.opacity = String(Math.min(dialingIn, 1 - caughtIn));
+  if (n.sceneCaught) n.sceneCaught.style.opacity = String(caughtIn);
 
   /* --- The customer's closing beat: the booking confirmation on her phone.
          (The owner's ledger-side card is a static dock now — change 12, B2 —
@@ -283,6 +434,7 @@ function schedule(ctx: Ctx) {
 function park(ctx: Ctx) {
   ctx.armed = true;
   ctx.start = null;
+  ctx.audio.lastT = -1;
   paintScene(ctx, 0);
   paintFade(ctx, 1);
   paintNumbers(
@@ -297,6 +449,7 @@ function beginPlayback(ctx: Ctx) {
   if (ctx.reduced || !ctx.armed || ctx.transition) return;
   ctx.armed = false;
   ctx.start = null;
+  ctx.audio.lastT = -1;
   schedule(ctx);
 }
 
@@ -359,6 +512,7 @@ function tick(ctx: Ctx, now: number) {
       return;
     }
     ctx.start = now;
+    ctx.audio.lastT = -1;
   }
 
   if (ctx.start == null) ctx.start = now;
@@ -370,6 +524,10 @@ function tick(ctx: Ctx, now: number) {
   paintFade(ctx, 1);
   paintNumbers(ctx, leakAt(tt, p.lost), panelRecoveredAt(tt, p.recovered, p.caught[0].amount));
   ctx.root.dataset.t = t.toFixed(3);
+
+  /* Sound rides the same phase value this frame just painted with. */
+  scheduleAudio(ctx, ctx.audio.lastT, t);
+  ctx.audio.lastT = t;
 
   if (t < LOOP_UNTIL) schedule(ctx);
 }
@@ -391,13 +549,6 @@ const beatZeroTotals = (p: Preset): Totals => ({
 const ghost =
   "rounded-full border border-teal px-5 py-2.5 text-[13px] font-medium text-teal-bright " +
   "transition-colors hover:bg-teal/10 outline-none " +
-  "focus-visible:ring-2 focus-visible:ring-teal-bright focus-visible:ring-offset-2 focus-visible:ring-offset-abyss";
-
-/* change 13 (S2d): Share is a teal FILL now — the section's one big action.
-   Full width minus margins on phones, >=280px centered on desktop. */
-const shareFill =
-  "rounded-full bg-teal px-8 py-3.5 text-[15px] font-semibold text-abyss " +
-  "transition-colors hover:bg-teal-bright outline-none w-full min-[600px]:w-auto min-[600px]:min-w-[280px] " +
   "focus-visible:ring-2 focus-visible:ring-teal-bright focus-visible:ring-offset-2 focus-visible:ring-offset-abyss";
 
 const buildQuery = (biz: string, name: string) =>
@@ -431,40 +582,69 @@ function Glow() {
   );
 }
 
-/* Section 3's per-preset phone (change 13, S3a/b): the top of a real device —
-   status row, contact header, thread[0] — LIVE-skinned by the name field.
-   This is the one place the visitor watches their own name land on a phone.
-   thread[0]'s bizName mention follows the live name too: a pure substitution
-   inside the existing approved string, no new copy. */
-function PhoneTop({ preset, bizName }: { preset: Preset; bizName: string }) {
-  const text = preset.thread[0].text.replace(preset.bizName, bizName);
+/* Rail glyphs (change 15, A3/B2). Hand-written SVG, no icon library. */
+function ShareGlyph() {
   return (
-    <div
-      className="w-full overflow-hidden rounded-t-[56px] bg-[#05090F] p-3 pb-0 ring-1 ring-inset ring-line/60"
-      style={{ boxShadow: "inset 0 1px 0 0 rgba(255,255,255,0.08), 0 24px 60px -24px rgba(0,0,0,0.8)" }}
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
     >
-      <div className="relative overflow-hidden rounded-t-[44px] bg-surface pb-6 font-phone">
-        <div className="absolute left-1/2 top-0 z-40 h-[26px] w-[120px] -translate-x-1/2 rounded-b-[14px] bg-[#05090F]" />
-        <div className="relative z-10 flex h-[36px] items-center justify-between px-6 pt-1">
-          <span className="text-[13px] font-semibold tabular-nums text-ink">{COPY.chrome.phone.statusTime}</span>
-          <StatusGlyphs />
-        </div>
-        <div className="border-b border-line bg-surface-2 px-6 pb-3 pt-2 text-center">
-          <div data-crop-biz={preset.id} className="truncate text-[15px] font-semibold leading-tight text-ink">
-            {bizName}
-          </div>
-          <div className="mt-0.5 text-[11px] text-muted">{COPY.chrome.phone.threadLabel}</div>
-        </div>
-        <div className="px-4 pt-3">
-          <div className="pb-1.5 text-center text-[11px] tabular-nums text-muted">{preset.thread[0].time}</div>
-          <div className="flex justify-start">
-            <div className="max-w-[85%] rounded-[20px] rounded-bl-[6px] bg-surface-2 px-[14px] py-2 text-left text-[17px] leading-[1.29] text-ink">
-              {text}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+      <circle cx="4" cy="8" r="2.1" />
+      <circle cx="12" cy="3.4" r="2.1" />
+      <circle cx="12" cy="12.6" r="2.1" />
+      <path d="M5.9 7L10.1 4.5M5.9 9L10.1 11.5" />
+    </svg>
+  );
+}
+
+function SpeakerGlyph({ on }: { on: boolean }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M2 6v4h2.6L8.5 13V3L4.6 6H2z" fill="currentColor" stroke="none" />
+      {on ? (
+        <>
+          <path d="M10.7 5.6a3.4 3.4 0 0 1 0 4.8" />
+          <path d="M12.6 3.8a6 6 0 0 1 0 8.4" />
+        </>
+      ) : (
+        <path d="M10.6 6.2l3.6 3.6M14.2 6.2l-3.6 3.6" />
+      )}
+    </svg>
+  );
+}
+
+function ChevronGlyph() {
+  return (
+    <svg
+      width="18"
+      height="10"
+      viewBox="0 0 18 10"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M2 2l7 6l7-6" />
+    </svg>
   );
 }
 
@@ -482,18 +662,18 @@ export default function Demo({
      link renders the custom name with no flash of the default. */
   const [nameInput, setNameInput] = useState(initialName);
   const [name, setName] = useState(initialName);
-  /* Wayfinding state: the active section (right-edge dots) and each track's
-     active panel (dots beneath). Driven by IntersectionObservers, not scroll
-     math (A3). */
+  /* Wayfinding state: the active section (rail dots) and the preset track's
+     active panel. Driven by IntersectionObservers, not scroll math. */
   const [activeSection, setActiveSection] = useState(0);
-  const [savePanel, setSavePanel] = useState(0);
   const [yoursPanel, setYoursPanel] = useState(() =>
     Math.max(0, PRESETS.findIndex((p) => p.id === initialPresetId)),
   );
-  /* One-shot swipe cues (B2/B3): shown when their section first becomes
-     active, dismissed by the first horizontal scroll or a 4s timeout. */
-  const [saveCueGone, setSaveCueGone] = useState(false);
+  /* One-shot swipe cue: shown when section 3 first becomes active, dismissed
+     by the first horizontal scroll or a 4s timeout. */
   const [yoursCueGone, setYoursCueGone] = useState(false);
+  /* Sound (change 15, B2): off until the rail toggle's tap. Restored from
+     sessionStorage in the mount effect — never under reduced motion. */
+  const [soundOn, setSoundOn] = useState(false);
 
   const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[0];
   const bizName = name || preset.bizName;
@@ -501,7 +681,6 @@ export default function Demo({
 
   const rootRef = useRef<HTMLElement>(null);
   const ctxRef = useRef<Ctx | null>(null);
-  const saveTrackRef = useRef<HTMLDivElement>(null);
   const yoursTrackRef = useRef<HTMLDivElement>(null);
   const copyTimer = useRef<number | null>(null);
   const nameTimer = useRef<number | null>(null);
@@ -563,9 +742,26 @@ export default function Demo({
       armed: false,
       callSectionVisible: false,
       pendingPresetId: null,
+      audio: { actx: null, enabled: false, lastT: -1 },
       setPresetId,
     };
     ctxRef.current = ctx;
+
+    /* Sound restore (B2): salvage:sound=1 renders the toggle ON with no new
+       prompt; the AudioContext created here has NO gesture behind it, so the
+       browser holds it suspended until one arrives (gate 90). Reduced motion
+       never restores — the toggle stays off until tapped. */
+    if (!ctx.reduced) {
+      let restored = false;
+      try {
+        restored = window.sessionStorage.getItem("salvage:sound") === "1";
+      } catch {}
+      if (restored) {
+        ctx.audio.enabled = true;
+        setSoundOn(true);
+        ensureAudioContext(ctx.audio);
+      }
+    }
 
     /* A deep-linked preset starts with section 3's track already resting on
        its panel — the track, the URL, and the rendered preset must never
@@ -695,7 +891,6 @@ export default function Demo({
       panels.forEach((p) => io.observe(p));
       panelIOs.push(io);
     };
-    watchTrack(saveTrackRef.current, (i) => setSavePanel(i));
     watchTrack(yoursTrackRef.current, (i, el) => {
       setYoursPanel(i);
       const id = el.dataset.preset;
@@ -708,16 +903,23 @@ export default function Demo({
        the track fires an async scroll event that must not count as the
        visitor's first swipe — shared ?biz= links are exactly the audience
        the cue teaches (review lens 2, finding 2). */
-    const saveTrack = saveTrackRef.current;
     const yoursTrack = yoursTrackRef.current;
-    const dismissSave = () => setSaveCueGone(true);
     const dismissYours = () => setYoursCueGone(true);
     let cueRaf = requestAnimationFrame(() => {
       cueRaf = requestAnimationFrame(() => {
-        saveTrack?.addEventListener("scroll", dismissSave, { once: true, passive: true });
         yoursTrack?.addEventListener("scroll", dismissYours, { once: true, passive: true });
       });
     });
+
+    /* Sound resume-on-gesture (change 15, B2 / gate 90): a session-restored
+       "on" state has a suspended context — the first real gesture resumes
+       it. Observation + resume only, never scheduling. */
+    const resumeAudio = () => {
+      const a = ctxRef.current?.audio;
+      if (a?.enabled && a.actx && a.actx.state === "suspended") void a.actx.resume();
+    };
+    window.addEventListener("pointerdown", resumeAudio);
+    window.addEventListener("keydown", resumeAudio);
 
     /* Resize (rotate) re-asserts the switcher track's resting panel: the
        browser keeps scrollLeft in PIXELS while panel widths move, and a
@@ -801,26 +1003,22 @@ export default function Demo({
       sectionIO.disconnect();
       panelIOs.forEach((io) => io.disconnect());
       cancelAnimationFrame(cueRaf);
-      saveTrack?.removeEventListener("scroll", dismissSave);
       yoursTrack?.removeEventListener("scroll", dismissYours);
+      window.removeEventListener("pointerdown", resumeAudio);
+      window.removeEventListener("keydown", resumeAudio);
       window.removeEventListener("resize", onResize);
       window.removeEventListener("keydown", onKey);
     };
   }, []);
 
-  /* Cue timers: each cue starts its 4s dismissal when its section first
+  /* Cue timer: the swipe cue starts its 4s dismissal when section 3 first
      becomes active. UI plumbing (React state), not an animation clock. */
   useEffect(() => {
-    const id = SECTIONS[activeSection]?.id;
-    if (id === "save" && !saveCueGone) {
-      const t = window.setTimeout(() => setSaveCueGone(true), 4000);
-      return () => window.clearTimeout(t);
-    }
-    if (id === "yours" && !yoursCueGone) {
+    if (SECTIONS[activeSection]?.id === "yours" && !yoursCueGone) {
       const t = window.setTimeout(() => setYoursCueGone(true), 4000);
       return () => window.clearTimeout(t);
     }
-  }, [activeSection, saveCueGone, yoursCueGone]);
+  }, [activeSection, yoursCueGone]);
 
   useEffect(
     () => () => {
@@ -857,7 +1055,48 @@ export default function Demo({
     if (ctx.transition) return;
     ctx.armed = false;
     ctx.start = null;
+    ctx.audio.lastT = -1;
     schedule(ctx);
+  };
+
+  /* Sound toggle (B2): the tap IS the gesture unlock — it creates or
+     resumes the AudioContext. Persisted per session. OFF is a real silencer
+     (review finding 2): the master gain ramps to zero — killing a ring tail
+     already in flight — and the context suspends so no hardware stays held.
+     Under reduced motion the preference still toggles (the spec's "stays
+     off until tapped") but no context is created: playback never runs
+     there, so there is nothing to sound (review finding 4). */
+  const onSoundToggle = () => {
+    const ctx = ctxRef.current;
+    if (!ctx) return;
+    const next = !soundOn;
+    setSoundOn(next);
+    ctx.audio.enabled = next;
+    try {
+      window.sessionStorage.setItem("salvage:sound", next ? "1" : "0");
+    } catch {}
+    if (ctx.reduced) return;
+    if (next) {
+      const actx = ensureAudioContext(ctx.audio);
+      if (actx) {
+        if (sharedMasterGain) {
+          sharedMasterGain.gain.cancelScheduledValues(actx.currentTime);
+          sharedMasterGain.gain.setTargetAtTime(1, actx.currentTime, 0.01);
+        }
+        if (actx.state === "suspended") void actx.resume();
+      }
+    } else if (ctx.audio.actx) {
+      const actx = ctx.audio.actx;
+      if (sharedMasterGain) {
+        sharedMasterGain.gain.cancelScheduledValues(actx.currentTime);
+        sharedMasterGain.gain.setTargetAtTime(0, actx.currentTime, 0.01);
+      }
+      /* Suspend once the ~30ms ramp has rendered — a UI courtesy timer, not
+         an audio scheduler (no sound is ever timed by it). */
+      window.setTimeout(() => {
+        if (!ctxRef.current?.audio.enabled && actx.state === "running") void actx.suspend();
+      }, 80);
+    }
   };
 
   const onShare = async () => {
@@ -929,72 +1168,77 @@ export default function Demo({
       data-app-root
       aria-label={COPY.a11y.pager}
     >
-      {/* ---- SECTION 1 — the call. The phone, and nothing else. ---- */}
+      {/* ---- SECTION 1 — the call. The phone; at >=1100px the scene type
+           sits left of it (change 15, A2), all three lines on the one clock. ---- */}
       <section data-section="call">
         <Glow />
         <SectionMark {...COPY.sections.call} />
 
-        <div className="relative z-10 flex h-full w-full items-center justify-center p-6">
-          <Phone preset={preset} bizName={bizName} typingBefore={[2]} />
+        <div className="relative z-10 flex h-full w-full items-center justify-center gap-16 p-6">
+          <div data-scene className="hidden max-w-[30ch] shrink-0 min-[1100px]:block">
+            <p className="font-display text-[96px] font-medium leading-none text-ink lining-nums">
+              {preset.thread[0].time}
+            </p>
+            {/* Three stacked lines; the engine crossfades opacity on the
+                miss (3.6) and the thread's first beat (5.6). SSR seeds the
+                settled state — "caught" — as the no-JS floor. */}
+            <div className="relative mt-5 h-[80px]">
+              <p
+                data-scene-line="closed"
+                className="absolute inset-x-0 top-0 font-display text-[28px] italic leading-snug text-muted"
+                style={{ opacity: 0 }}
+              >
+                {COPY.scene.closed}
+              </p>
+              <p
+                data-scene-line="dialing"
+                className="absolute inset-x-0 top-0 font-display text-[28px] italic leading-snug text-muted"
+                style={{ opacity: 0 }}
+              >
+                {COPY.scene.dialing}
+              </p>
+              <p
+                data-scene-line="caught"
+                className="absolute inset-x-0 top-0 font-display text-[28px] italic leading-snug text-muted"
+                style={{ opacity: 1 }}
+              >
+                {COPY.scene.caught}
+              </p>
+            </div>
+          </div>
+
+          <div className="w-full max-w-[390px] shrink-0">
+            <Phone preset={preset} bizName={bizName} typingBefore={[2]} />
+          </div>
         </div>
 
-        {/* Replay: one ghost button, bottom-left, lands settled (engine). */}
+        {/* Replay: one ghost button, bottom-left, lands settled (engine).
+            The down affordance lives on the rail now (A3). */}
         <div data-controls className="absolute bottom-6 left-5 z-20 min-[1100px]:left-10">
           <button data-replay type="button" onClick={onReplay} className={ghost}>
             {COPY.replayLabel}
           </button>
         </div>
-
-        {/* Down-cue: bottom center, lands settled (engine), chevron bobs in
-            CSS (ambient wayfinding, not a playback beat — and the rAF loop
-            parks after LOOP_UNTIL, so a looping chevron cannot ride it). */}
-        <div
-          data-down-cue
-          className="pointer-events-none absolute inset-x-0 bottom-5 z-20 flex flex-col items-center gap-1 text-muted"
-        >
-          <span className="text-[12px]">{COPY.cues.down}</span>
-          <svg
-            width="16"
-            height="9"
-            viewBox="0 0 16 9"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-            className="cue-bob"
-          >
-            <path d="M2 2l6 5l6-5" />
-          </svg>
-        </div>
       </section>
 
-      {/* ---- SECTION 2 — the save. Headline + the two-sided moment.
-           change 13 (S2a/b): the headline lives INSIDE the left column /
-           first panel, and the static phone beneath it runs at full scale —
-           bleeding off the section bottom by design, thread anchored to its
-           FIRST bubble (the device clips from the bottom, never the top). ---- */}
+      {/* ---- SECTION 2 — the save. change 15 (A1): below 1100px this is the
+           OWNER'S SIDE ONLY — headline, docked card, ledger; no track, no
+           phone (the visitor just watched it in section 1). Desktop keeps
+           change 14's contained two-up. ---- */}
       <section data-section="save">
         <Glow />
         <SectionMark {...COPY.sections.save} />
 
-        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col px-6 pb-[84px] pt-[88px] min-[1100px]:px-10 min-[1100px]:pb-6 min-[1100px]:pt-6">
-          {/* Mobile: a two-panel horizontal track (headline + phone | ledger).
-              Desktop >=1100: the same two children as a 40/60 two-up grid —
-              the overrides live in globals.css under [data-section="save"].
-              change 14: the desktop frame starts at the 24px margin (beside
-              the section mark, not below it) — that headroom is what lets a
-              >=340px phone be FULLY CONTAINED (availH = section - headline -
-              48; the sub moved to the right column to buy the rest). */}
-          <div ref={saveTrackRef} data-track className="min-h-0 w-full flex-1">
-            <div data-panel className="flex min-h-0 flex-col px-1 min-[1100px]:px-0">
+        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pb-8 pl-6 pr-12 pt-[76px] min-[1100px]:px-10 min-[1100px]:pb-6 min-[1100px]:pt-6">
+          <div
+            data-save-grid
+            className="flex min-h-0 w-full flex-1 flex-col min-[1100px]:grid min-[1100px]:grid-cols-[2fr_3fr] min-[1100px]:grid-rows-[100%] min-[1100px]:items-start min-[1100px]:gap-x-12"
+          >
+            <div className="min-[1100px]:flex min-[1100px]:h-full min-[1100px]:min-h-0 min-[1100px]:flex-col">
               <header data-headline className="shrink-0">
-                {/* change 14: 30px on desktop — at clamp's 44px the h1 runs
-                    four lines in the 40% column and the >=340px phone can no
-                    longer be contained (availH = 852 - headline). Below
-                    1100px this matches change 13's rendered size exactly
-                    (the old clamp bottomed out at 32px there). */}
+                {/* change 14: 30px on desktop — at 44px the h1 runs four
+                    lines in the 40% column and the >=340px phone cannot be
+                    contained (availH = 852 - headline). */}
                 <h1 className="max-w-3xl font-display font-medium leading-[1.12] text-ink text-[32px] min-[1100px]:text-[30px]">
                   {COPY.headline}
                 </h1>
@@ -1005,36 +1249,31 @@ export default function Demo({
                 </p>
               </header>
 
-              {/* The settled phone: a second, STATIC instance — playback
-                  disabled, top-anchored thread (see Phone variant="static").
-                  Same size as section 1's phone on mobile (gate 75). Desktop
-                  (change 14): height-driven via container units so the whole
-                  device — last bubble, Delivered, home bar — stays inside
-                  the snap frame (gates 30/34/83). */}
+              {/* The settled phone — DESKTOP ONLY (change 15, A1). Static
+                  instance, top-anchored thread, screenshot-scaled to stay
+                  fully contained (change 14; gates 30/34/74/83). */}
               <div
                 data-save-phone-fit
-                className="mx-auto mt-5 w-full max-w-[390px] min-[1100px]:mx-0 min-[1100px]:mt-0 min-[1100px]:min-h-0 min-[1100px]:flex-1"
+                className="mt-0 hidden w-full max-w-[390px] min-[1100px]:block min-[1100px]:min-h-0 min-[1100px]:flex-1"
               >
                 <Phone preset={preset} bizName={bizName} variant="static" />
               </div>
             </div>
 
-            {/* No justify-center here: auto margins center the stack when it
-                fits but clamp to the TOP edge when it overflows, so the owner
-                card can never spill above the reachable origin on short
-                phones (change 12 review, lens 1 finding 1). */}
-            <div data-panel className="flex min-h-0 flex-col px-1 min-[1100px]:px-0">
+            {/* No justify-center: auto margins center the stack when it fits
+                and clamp to the reachable top edge when it doesn't (change 12
+                review, lens 1 finding 1). */}
+            <div className="mt-4 flex min-h-0 flex-1 flex-col min-[1100px]:mt-0 min-[1100px]:h-full">
               <div data-save-stack className="relative my-auto w-full min-[1100px]:my-0">
                 {/* The sub-headline, desktop only (change 14): moved out of
                     the left column so the phone's height budget closes at a
-                    >=340px width. Same element contract as the mobile copy —
-                    gate 33 accepts whichever [data-sub] is visible. */}
+                    >=340px width. Gate 33 accepts whichever [data-sub] is
+                    visible. */}
                 <p data-sub className="mb-3 hidden text-[16px] leading-relaxed text-muted min-[1100px]:block">
                   {COPY.sub}
                 </p>
                 {/* The owner card: DOCKED statically in flow, 12px above the
-                    panel at every width (change 13 flattens the old desktop
-                    float — the right column owns its full height now). */}
+                    panel at every width. */}
                 <div data-notify-ledger className="z-30 mx-auto mb-3 w-[min(92%,440px)]">
                   <NotifyCard bizName={bizName} entry={preset.caught[0]} />
                 </div>
@@ -1044,62 +1283,32 @@ export default function Demo({
               </div>
             </div>
           </div>
-
-          {/* Panel dots + the one-shot cue — the track exists below 1100 only. */}
-          {/* The cue floats over the bleeding phone, so it rides a chip. */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-[108px] z-20 flex justify-center min-[1100px]:hidden">
-            <p
-              className={`rounded-full bg-abyss/80 px-3 py-1 text-[12px] text-muted backdrop-blur transition-opacity duration-500 ${
-                saveCueGone ? "opacity-0" : "opacity-100"
-              }`}
-            >
-              {COPY.cues.right}
-            </p>
-          </div>
-          <div className="absolute inset-x-0 bottom-[88px] z-20 flex justify-center gap-2.5 min-[1100px]:hidden">
-            {[0, 1].map((i) => (
-              <button
-                key={i}
-                type="button"
-                data-panel-dot
-                data-active={savePanel === i ? "true" : "false"}
-                aria-label={`${COPY.a11y.panelDot} ${i + 1}`}
-                onClick={() => goPanel(saveTrackRef.current, i)}
-                className={panelDot(savePanel === i)}
-              />
-            ))}
-          </div>
         </div>
 
-        {/* Share (S2d): teal fill, bottom-center — full width on phones,
-            centered under the two-up on desktop. */}
-        <div className="absolute inset-x-6 bottom-5 z-30 flex flex-col items-center gap-2 min-[1100px]:bottom-6">
-          {share === "manual" && (
-            <input
-              data-share-fallback
-              readOnly
-              value={shareUrl}
-              onFocus={(e) => e.currentTarget.select()}
-              aria-label={COPY.shareLabel}
-              className="w-[min(80vw,360px)] rounded-lg border border-line bg-surface px-3 py-2 text-[12px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-teal-bright"
-            />
-          )}
-          <button data-share type="button" onClick={onShare} className={shareFill}>
-            {share === "copied" ? COPY.shareCopied : COPY.shareLabel}
-          </button>
-        </div>
+        {/* Share fallback (clipboard unavailable): floats beside the rail,
+            which carries the Share control itself now (A3). */}
+        {share === "manual" && (
+          <input
+            data-share-fallback
+            readOnly
+            value={shareUrl}
+            onFocus={(e) => e.currentTarget.select()}
+            aria-label={COPY.shareLabel}
+            className="fixed right-16 top-1/2 z-40 w-[min(70vw,320px)] -translate-y-1/2 rounded-lg border border-line bg-surface px-3 py-2 text-[12px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-teal-bright min-[1100px]:right-20"
+          />
+        )}
       </section>
 
-      {/* ---- SECTION 3 — make it yours (change 13 rebuild, S3a/b): each
-           panel is a full composition — preset label, a LIVE-skinned phone
-           top showing the contact header + thread[0], and three money tiles.
-           This is the one section where the visitor watches their typed name
-           land on a phone. ---- */}
+      {/* ---- SECTION 3 — make it yours (change 15, A4): ONE live-skin
+           device (the active preset's), full and contained on desktop,
+           bottom-anchored with a deliberate ~55% bleed on mobile. The track
+           carries label + tiles per preset and stays the page-wide
+           switcher; dots + cue sit ABOVE the phone on mobile. ---- */}
       <section data-section="yours">
         <Glow />
         <SectionMark {...COPY.sections.yours} />
 
-        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col px-6 pb-[76px] pt-[88px] min-[1100px]:px-10 min-[1100px]:pb-16 min-[1100px]:pt-24">
+        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pl-6 pr-12 pt-[76px] min-[1100px]:px-10 min-[1100px]:pb-8 min-[1100px]:pt-14">
           <div className="shrink-0 max-w-md min-[1100px]:max-w-[520px]">
             <label className="block">
               <span className="text-[12px] uppercase tracking-[0.18em] text-muted">{COPY.name.label}</span>
@@ -1117,47 +1326,44 @@ export default function Demo({
             <p className="mt-1.5 text-[12px] text-muted">{COPY.name.hint}</p>
           </div>
 
-          {/* The switcher IS the track: one panel per preset, snapping sets
-              the preset for the whole page. */}
-          <div ref={yoursTrackRef} data-track className="mt-3 min-h-0 w-full flex-1">
-            {PRESETS.map((p) => {
-              const panelName = p.id === preset.id ? bizName : p.bizName;
-              return (
-                <div
-                  key={p.id}
-                  data-panel
-                  data-preset={p.id}
-                  className="flex min-h-0 flex-col justify-center px-1 min-[1100px]:grid min-[1100px]:grid-cols-2 min-[1100px]:items-center min-[1100px]:gap-16 min-[1100px]:px-2"
-                >
-                  <p className="text-center font-display text-[28px] font-medium leading-tight text-ink min-[1100px]:hidden">
-                    {p.label}
-                  </p>
+          <div className="mt-3 flex min-h-0 w-full flex-1 flex-col min-[1100px]:grid min-[1100px]:grid-cols-2 min-[1100px]:grid-rows-[100%] min-[1100px]:items-start min-[1100px]:gap-x-12">
+            {/* The live-skin phone: name lands on its contact header AND on
+                thread[0]'s own mention of the business (skinThread). Mobile:
+                bottom-anchored, ~55% visible, bleeding off the section. */}
+            <div
+              data-yours-phone-fit
+              className="order-3 mx-auto h-[380px] w-full max-w-[390px] shrink-0 min-[1100px]:order-none min-[1100px]:mx-0 min-[1100px]:h-full min-[1100px]:min-h-0"
+            >
+              <Phone preset={preset} bizName={bizName} variant="static" staticId={preset.id} skinThread />
+            </div>
 
-                  <div className="mx-auto mt-3 w-full max-w-[390px] min-[1100px]:mt-0">
-                    <PhoneTop preset={p} bizName={panelName} />
-                  </div>
-
-                  <div className="mt-4 min-[1100px]:mt-0">
-                    <p className="hidden font-display text-[28px] font-medium leading-tight text-ink min-[1100px]:block">
-                      {p.label}
-                    </p>
-                    {/* Three money tiles (S3a/d): ticket gold, missed ink,
-                        lost muted — exactly ONE gold element per panel, the
-                        ticket value (gates 79/82). */}
+            {/* The switcher IS the track: label + tiles per preset. */}
+            <div className="order-1 flex min-h-0 flex-col min-[1100px]:order-none min-[1100px]:h-full">
+              <div ref={yoursTrackRef} data-track className="min-h-0 w-full flex-1">
+                {PRESETS.map((p) => (
+                  <div
+                    key={p.id}
+                    data-panel
+                    data-preset={p.id}
+                    className="flex min-h-0 flex-col justify-start px-1 min-[1100px]:px-2"
+                  >
+                    <p className="font-display text-[28px] font-medium leading-tight text-ink">{p.label}</p>
+                    {/* Three money tiles: ticket gold, missed ink, lost muted
+                        — exactly ONE gold element per panel (gates 79/82). */}
                     <div className="mt-3 grid grid-cols-2 gap-2 min-[1100px]:mt-5 min-[1100px]:grid-cols-1 min-[1100px]:gap-3">
-                      <div data-tile="ticket" className="rounded-xl border border-line bg-surface p-3 text-center min-[1100px]:p-5 min-[1100px]:text-left">
+                      <div data-tile="ticket" className="rounded-xl border border-line bg-surface p-3 min-[1100px]:p-5">
                         <span data-ticket data-tile-value className="font-display text-[28px] font-semibold text-gold lining-nums min-[1100px]:text-[56px]">
                           ${p.ticket}
                         </span>{" "}
                         <span className="text-[13px] text-ink min-[1100px]:text-[17px]">{COPY.yours.ticketSuffix}</span>
                       </div>
-                      <div data-tile="missed" className="rounded-xl border border-line bg-surface p-3 text-center min-[1100px]:p-5 min-[1100px]:text-left">
+                      <div data-tile="missed" className="rounded-xl border border-line bg-surface p-3 min-[1100px]:p-5">
                         <span data-tile-value className="font-display text-[28px] font-semibold text-ink lining-nums min-[1100px]:text-[56px]">
                           {p.missedPerMonth}
                         </span>{" "}
                         <span className="text-[13px] text-ink min-[1100px]:text-[17px]">{COPY.yours.missedSuffix}</span>
                       </div>
-                      <div data-tile="lost" className="col-span-2 rounded-xl border border-line bg-surface p-3 text-center min-[1100px]:col-span-1 min-[1100px]:p-5 min-[1100px]:text-left">
+                      <div data-tile="lost" className="col-span-2 rounded-xl border border-line bg-surface p-3 min-[1100px]:col-span-1 min-[1100px]:p-5">
                         <span data-tile-value className="font-display text-[28px] font-semibold text-muted lining-nums min-[1100px]:text-[56px]">
                           {usd(p.lost)}
                         </span>{" "}
@@ -1165,12 +1371,37 @@ export default function Demo({
                       </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                ))}
+              </div>
+            </div>
+
+            {/* Mobile: dots + cue ABOVE the phone (A4), in flow. */}
+            <div className="order-2 mt-3 flex shrink-0 flex-col items-center gap-2 min-[1100px]:hidden">
+              <p
+                className={`rounded-full bg-abyss/80 px-3 py-1 text-[12px] text-muted backdrop-blur transition-opacity duration-500 ${
+                  yoursCueGone ? "opacity-0" : "opacity-100"
+                }`}
+              >
+                {COPY.cues.presets}
+              </p>
+              <div className="flex justify-center gap-2.5">
+                {PRESETS.map((p, i) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    data-panel-dot
+                    data-active={yoursPanel === i ? "true" : "false"}
+                    aria-label={`${COPY.a11y.panelDot} ${i + 1}`}
+                    onClick={() => goPanel(yoursTrackRef.current, i)}
+                    className={panelDot(yoursPanel === i)}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
 
-          <div className="pointer-events-none absolute inset-x-0 bottom-12 z-20 flex justify-center">
+          {/* Desktop: dots + cue at the section's bottom center. */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-12 z-20 hidden justify-center min-[1100px]:flex">
             <p
               className={`rounded-full bg-abyss/80 px-3 py-1 text-[12px] text-muted backdrop-blur transition-opacity duration-500 ${
                 yoursCueGone ? "opacity-0" : "opacity-100"
@@ -1179,7 +1410,7 @@ export default function Demo({
               {COPY.cues.presets}
             </p>
           </div>
-          <div className="absolute inset-x-0 bottom-6 z-20 flex justify-center gap-2.5">
+          <div className="absolute inset-x-0 bottom-6 z-20 hidden justify-center gap-2.5 min-[1100px]:flex">
             {PRESETS.map((p, i) => (
               <button
                 key={p.id}
@@ -1243,19 +1474,65 @@ export default function Demo({
         </p>
       </section>
 
-      {/* ---- Progress dots: right edge, one per section (A3). ---- */}
-      <div className="fixed right-4 top-1/2 z-40 flex -translate-y-1/2 flex-col gap-3 min-[1100px]:right-6">
-        {SECTIONS.map((s, i) => (
-          <button
-            key={s.id}
-            type="button"
-            data-pager-dot
-            data-active={activeSection === i ? "true" : "false"}
-            aria-label={`${COPY.a11y.dot} ${i + 1}`}
-            onClick={() => goSection(i)}
-            className={pagerDot(activeSection === i)}
-          />
-        ))}
+      {/* ---- The rail (change 15, A3): Share, sound, dots, next-chevron —
+           persistent on the right edge in every section. ---- */}
+      <div className="fixed right-2 top-1/2 z-40 flex -translate-y-1/2 flex-col items-center gap-3 min-[1100px]:right-6 min-[1100px]:gap-4">
+        <button
+          data-share
+          data-rail-share
+          type="button"
+          onClick={onShare}
+          title={COPY.shareLabel}
+          aria-label={COPY.a11y.share}
+          className={`flex h-9 w-9 items-center justify-center rounded-full border border-teal outline-none transition-colors focus-visible:ring-2 focus-visible:ring-teal-bright focus-visible:ring-offset-2 focus-visible:ring-offset-abyss min-[1100px]:h-10 min-[1100px]:w-10 ${
+            share === "copied" ? "bg-teal text-abyss" : "bg-transparent text-teal-bright hover:bg-teal/10"
+          }`}
+        >
+          <ShareGlyph />
+        </button>
+
+        <button
+          data-sound-toggle
+          data-on={soundOn ? "true" : "false"}
+          type="button"
+          onClick={onSoundToggle}
+          title={soundOn ? COPY.a11y.soundOn : COPY.a11y.soundOff}
+          aria-label={soundOn ? COPY.a11y.soundOn : COPY.a11y.soundOff}
+          aria-pressed={soundOn}
+          className={`flex h-9 w-9 items-center justify-center rounded-full border border-teal outline-none transition-colors focus-visible:ring-2 focus-visible:ring-teal-bright focus-visible:ring-offset-2 focus-visible:ring-offset-abyss min-[1100px]:h-10 min-[1100px]:w-10 ${
+            soundOn ? "bg-teal text-abyss" : "bg-transparent text-teal-bright hover:bg-teal/10"
+          }`}
+        >
+          <SpeakerGlyph on={soundOn} />
+        </button>
+
+        <div className="my-1 flex flex-col gap-3">
+          {SECTIONS.map((s, i) => (
+            <button
+              key={s.id}
+              type="button"
+              data-pager-dot
+              data-active={activeSection === i ? "true" : "false"}
+              aria-label={`${COPY.a11y.dot} ${i + 1}`}
+              onClick={() => goSection(i)}
+              className={pagerDot(activeSection === i)}
+            />
+          ))}
+        </div>
+
+        <button
+          data-rail-next
+          type="button"
+          onClick={() => goSection(activeSection + 1)}
+          aria-label={COPY.a11y.next}
+          className={`flex h-8 w-8 items-center justify-center text-ink opacity-40 outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-teal-bright ${
+            activeSection >= SECTIONS.length - 1 ? "hidden" : ""
+          }`}
+        >
+          <span className="rail-bob">
+            <ChevronGlyph />
+          </span>
+        </button>
       </div>
     </main>
   );

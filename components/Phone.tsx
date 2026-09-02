@@ -272,6 +272,8 @@ export default function Phone({
   typingBefore = [],
   showNotification = false,
   variant = "live",
+  staticId,
+  skinThread = false,
 }: {
   preset: Preset;
   /* The effective business name (custom or preset default). Falls back to the
@@ -292,6 +294,12 @@ export default function Phone({
      it, and the gates' whole-page tallies (bubble count, single bizName)
      still see exactly one live phone. */
   variant?: "live" | "static";
+  /* change 15 (A4): a static instance that is the section-3 live-skin device
+     marks its contact header data-crop-biz=<id> (gate 78) ... */
+  staticId?: string;
+  /* ... and re-skins the thread's own bizName mentions to the effective name
+     — a pure substitution inside the approved strings, no new copy. */
+  skinThread?: boolean;
 }) {
   const thread = preset.thread;
   const typing = new Set(typingBefore);
@@ -302,10 +310,12 @@ export default function Phone({
   const live = variant === "live";
   /* Gate/engine attributes only exist on the live instance. A static
      instance carries its own "data-s-" namespace where a gate needs to
-     measure it (74/75) without polluting the live tallies. */
+     measure it (74/83/87) without polluting the live tallies. */
   const mark = (attrs: Record<string, string | number | boolean>) => (live ? attrs : {});
   const markEither = (liveName: string, staticName: string, value: string | boolean = true) =>
     live ? { [liveName]: value } : { [staticName]: value };
+  const skinText = (t: string) =>
+    skinThread && !live ? t.replace(preset.bizName, effectiveBizName) : t;
 
   const bezelShadow: CSSProperties = {
     boxShadow:
@@ -331,7 +341,10 @@ export default function Phone({
 
       {/* Contact header */}
       <div className="shrink-0 border-b border-line bg-surface-2 px-6 pb-3 pt-2 text-center">
-        <div {...mark({ "data-biz-name": true })} className="text-[15px] font-semibold leading-tight text-ink">
+        <div
+          {...(live ? { "data-biz-name": true } : staticId ? { "data-crop-biz": staticId } : {})}
+          className="text-[15px] font-semibold leading-tight text-ink"
+        >
           {effectiveBizName}
         </div>
         <div className="mt-0.5 text-[11px] text-muted">{COPY.chrome.phone.threadLabel}</div>
@@ -393,7 +406,7 @@ export default function Phone({
                             runEnd ? "rounded-br-[6px]" : ""
                           }`}
                         >
-                          {b.text}
+                          {skinText(b.text)}
                         </div>
                       </div>
                     ) : (
@@ -404,7 +417,7 @@ export default function Phone({
                             runEnd ? "rounded-bl-[6px]" : ""
                           }`}
                         >
-                          {b.text}
+                          {skinText(b.text)}
                         </div>
                       </div>
                     )}

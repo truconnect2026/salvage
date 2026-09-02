@@ -81,36 +81,19 @@ body {
 /* Section 2's wrapper is a track only below 1100px: on desktop the same two
    children lay out as the static two-up (B2). The section-3 track stays a
    track at every width — the horizontal gesture is the point (B3). */
+/* change 14/15: the static phones SCALE like screenshots — laid out at their
+   natural 390px and zoomed by the height their column leaves (container
+   units, divisor = natural 845px height + slack), capped at 1. Scaling the
+   whole device keeps the screen's content proportional at every size
+   (gates 30/34/74/83/87). The section-2 grid itself is Tailwind classes on
+   [data-save-grid] now (change 15 removed its mobile track). */
 @media (min-width: 1100px) {
-  [data-section="save"] [data-track] {
-    display: grid;
-    /* change 13 (S2a): 40/60 columns. change 14: one full-height row — both
-       columns span the track so the left column can budget the phone's
-       height (containment correction; the change-13 bleed is gone). */
-    grid-template-columns: 2fr 3fr;
-    grid-template-rows: 100%;
-    column-gap: 48px;
-    align-items: start;
-    overflow: visible;
-    scroll-snap-type: none;
-  }
-  [data-section="save"] [data-panel] {
-    flex: none;
-    height: 100%;
-  }
-  /* change 14: the static phone SCALES like a screenshot — laid out at its
-     natural 390px and zoomed by the height the headline leaves (availH in
-     container units, divisor = natural 845px height + slack), capped at 1.
-     Scaling the whole device is what keeps the thread's END (last bubble +
-     Delivered) visible at every size: a narrower device with fixed-size
-     screen text would clip it (gate 83). Below ~890px viewport heights the
-     rendered width dips under the 340px floor; containment wins there by
-     design — section 2 is a snap frame, nothing below the fold is
-     reachable. */
-  [data-save-phone-fit] {
+  [data-save-phone-fit],
+  [data-yours-phone-fit] {
     container-type: size;
   }
-  [data-section="save"] [data-phone-device] {
+  [data-section="save"] [data-phone-device],
+  [data-section="yours"] [data-phone-device] {
     width: 390px;
     max-width: none;
     zoom: min(calc(100cqh / 850px), 1);
@@ -133,8 +116,7 @@ body {
    old container-query sizing is gone with it (and with that, the iOS-15
    cqh-fallback concern). */
 @media (max-width: 1099.98px) {
-  [data-section="call"] [data-phone-device],
-  [data-section="save"] [data-phone-device] {
+  [data-section="call"] [data-phone-device] {
     max-width: min(390px, calc((100vh - 140px) * 9 / 19.5));
     max-width: min(390px, calc((100dvh - 140px) * 9 / 19.5));
   }
@@ -146,6 +128,11 @@ body {
    missing (review lens 1, finding 1: a flat 0.8 left the owner card
    unreachable on SE-class phones). Gate viewports (390x844, 1440x900)
    never engage these. */
+@media (max-width: 1099.98px) and (max-height: 880px) {
+  [data-save-stack] {
+    zoom: 0.92;
+  }
+}
 @media (max-width: 1099.98px) and (max-height: 820px) {
   [data-save-stack] {
     zoom: 0.8;
@@ -167,23 +154,41 @@ body {
   }
 }
 
-/* The down-cue's chevron: an ambient bob. CSS, not the playback rAF — the
-   loop parks after LOOP_UNTIL and wayfinding must not wake it. */
-@keyframes cue-bob {
+/* The rail chevron's ambient bob (change 15, A3): 6px on a 1.6s ease. CSS,
+   not the playback rAF — the loop parks after LOOP_UNTIL and wayfinding
+   must not wake it. */
+@keyframes rail-bob {
   0%,
   100% {
     transform: translateY(0);
   }
   50% {
-    transform: translateY(3px);
+    transform: translateY(6px);
   }
 }
-.cue-bob {
-  animation: cue-bob 1.6s ease-in-out infinite;
+.rail-bob {
+  display: inline-flex;
+  animation: rail-bob 1.6s ease infinite;
 }
 @media (prefers-reduced-motion: reduce) {
-  .cue-bob {
+  .rail-bob {
     animation: none;
+  }
+}
+
+/* Desktop section-1 ground (change 15, A2): one light source behind the
+   phone + scene-type group. Mobile keeps the change-13 default glow. */
+@media (min-width: 1100px) {
+  [data-section="call"] [data-glow] {
+    width: 1100px;
+    height: 1100px;
+    left: 42%;
+    top: 38%;
+    background: radial-gradient(
+      closest-side,
+      color-mix(in srgb, var(--color-surface-3) 45%, transparent),
+      transparent
+    );
   }
 }
 
