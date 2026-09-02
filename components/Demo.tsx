@@ -559,8 +559,12 @@ const buildQuery = (biz: string, name: string) =>
    28px it would sit on the section-1 phone's status row on a 390px screen. */
 function SectionMark({ kicker, title }: { kicker: string; title: string }) {
   return (
-    <div className="pointer-events-none absolute left-8 top-8 z-20">
-      <p className="text-[12px] uppercase tracking-[0.3em] text-muted">{kicker}</p>
+    <div data-section-mark className="pointer-events-none absolute left-8 top-8 z-20">
+      {/* change 16 (B2): 0.05em tracking — the 0.3em digits read as gapped
+          typography soup at 12px; the mark block is now RESERVED (sections
+          pad their content >= 32px below its baseline) instead of floating
+          over whatever the section put there. */}
+      <p className="text-[12px] uppercase tracking-[0.05em] text-muted">{kicker}</p>
       <p className="mt-1 font-display text-[20px] leading-tight text-muted min-[1100px]:text-[28px]">{title}</p>
     </div>
   );
@@ -682,6 +686,8 @@ export default function Demo({
   const rootRef = useRef<HTMLElement>(null);
   const ctxRef = useRef<Ctx | null>(null);
   const yoursTrackRef = useRef<HTMLDivElement>(null);
+  const yoursPanelRef = useRef<HTMLDivElement>(null);
+  const kbCleanup = useRef<(() => void) | null>(null);
   const copyTimer = useRef<number | null>(null);
   const nameTimer = useRef<number | null>(null);
   const activeSectionRef = useRef(0);
@@ -1024,6 +1030,7 @@ export default function Demo({
     () => () => {
       if (copyTimer.current != null) window.clearTimeout(copyTimer.current);
       if (nameTimer.current != null) window.clearTimeout(nameTimer.current);
+      kbCleanup.current?.();
     },
     [],
   );
@@ -1044,6 +1051,43 @@ export default function Demo({
       const ctx = ctxRef.current;
       syncUrl(ctx?.pendingPresetId ?? ctx?.transition?.to.id ?? ctx?.preset.id ?? presetId, clean);
     }, 150);
+  };
+
+  /* Keyboard accommodation (change 16, B5): when the software keyboard
+     shrinks the visual viewport, the section-3 panel pads its bottom by the
+     shortfall and scrolls ITSELF (never the pager) so the phone's contact
+     header — where the typed name lands — sits at the panel's visible
+     start. Event-driven UI plumbing, not an animation clock. */
+  const onNameFocus = () => {
+    const panel = yoursPanelRef.current;
+    if (!panel) return;
+    const apply = () => {
+      const vv = window.visualViewport;
+      const shortfall = vv ? Math.max(0, Math.round(window.innerHeight - vv.height)) : 0;
+      if (shortfall <= 0) return;
+      panel.style.paddingBottom = `${shortfall}px`;
+      panel.style.overflowY = "auto";
+      const header = panel.querySelector<HTMLElement>("[data-crop-biz]");
+      if (header) {
+        /* block "start", contained: scroll the panel alone — scrollIntoView
+           would also drag the pager off its snap point. */
+        panel.scrollTop += header.getBoundingClientRect().top - panel.getBoundingClientRect().top;
+      }
+    };
+    apply();
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", apply);
+    kbCleanup.current = () => {
+      vv?.removeEventListener("resize", apply);
+      panel.style.paddingBottom = "";
+      panel.style.overflowY = "";
+      panel.scrollTop = 0;
+    };
+  };
+
+  const onNameBlur = () => {
+    kbCleanup.current?.();
+    kbCleanup.current = null;
   };
 
   const onReplay = () => {
@@ -1174,7 +1218,11 @@ export default function Demo({
         <Glow />
         <SectionMark {...COPY.sections.call} />
 
-        <div className="relative z-10 flex h-full w-full items-center justify-center gap-16 p-6">
+        {/* change 16 (B1/B2): below 1100px the right padding clears the
+            40px rail column (56px total) and the top padding reserves the
+            section mark's block — content starts >= 32px below its
+            baseline, so the phone can never ride up into the mark. */}
+        <div className="relative z-10 flex h-full w-full items-center justify-center gap-16 pb-6 pl-6 pr-14 pt-[112px] min-[1100px]:p-6">
           <div data-scene className="hidden max-w-[30ch] shrink-0 min-[1100px]:block">
             <p className="font-display text-[96px] font-medium leading-none text-ink lining-nums">
               {preset.thread[0].time}
@@ -1229,7 +1277,7 @@ export default function Demo({
         <Glow />
         <SectionMark {...COPY.sections.save} />
 
-        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pb-8 pl-6 pr-12 pt-[76px] min-[1100px]:px-10 min-[1100px]:pb-6 min-[1100px]:pt-6">
+        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pb-8 pl-6 pr-14 pt-[112px] min-[1100px]:px-10 min-[1100px]:pb-6 min-[1100px]:pt-6">
           <div
             data-save-grid
             className="flex min-h-0 w-full flex-1 flex-col min-[1100px]:grid min-[1100px]:grid-cols-[2fr_3fr] min-[1100px]:grid-rows-[100%] min-[1100px]:items-start min-[1100px]:gap-x-12"
@@ -1239,7 +1287,11 @@ export default function Demo({
                 {/* change 14: 30px on desktop — at 44px the h1 runs four
                     lines in the 40% column and the >=340px phone cannot be
                     contained (availH = 852 - headline). */}
-                <h1 className="max-w-3xl font-display font-medium leading-[1.12] text-ink text-[32px] min-[1100px]:text-[30px]">
+                {/* change 16 (B6): 26px at 390 — 32px ran four lines in the
+                    rail-guttered column and pushed the ledger's last line
+                    under the fold (gate 98 holds it at <= 3 lines; 28px
+                    still wrapped to four in the 310px column). */}
+                <h1 className="max-w-3xl font-display font-medium leading-[1.12] text-ink text-[26px] min-[1100px]:text-[30px]">
                   {COPY.headline}
                 </h1>
                 {/* Mobile keeps the sub here; on desktop it lives in the
@@ -1263,8 +1315,12 @@ export default function Demo({
             {/* No justify-center: auto margins center the stack when it fits
                 and clamp to the reachable top edge when it doesn't (change 12
                 review, lens 1 finding 1). */}
-            <div className="mt-4 flex min-h-0 flex-1 flex-col min-[1100px]:mt-0 min-[1100px]:h-full">
-              <div data-save-stack className="relative my-auto w-full min-[1100px]:my-0">
+            {/* change 16 (B3): below 1100px this column is the query
+                container the stack zooms against — the ladder of fixed zoom
+                steps is gone; the stack fits whatever height the headline
+                leaves. */}
+            <div data-save-fit className="mt-4 flex min-h-0 flex-1 flex-col min-[1100px]:mt-0 min-[1100px]:h-full">
+              <div data-save-stack className="relative mx-auto my-auto w-full min-[1100px]:my-0">
                 {/* The sub-headline, desktop only (change 14): moved out of
                     the left column so the phone's height budget closes at a
                     >=340px width. Gate 33 accepts whichever [data-sub] is
@@ -1308,7 +1364,11 @@ export default function Demo({
         <Glow />
         <SectionMark {...COPY.sections.yours} />
 
-        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pl-6 pr-12 pt-[76px] min-[1100px]:px-10 min-[1100px]:pb-8 min-[1100px]:pt-14">
+        <div
+          ref={yoursPanelRef}
+          data-yours-panel
+          className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pl-6 pr-14 pt-[112px] min-[1100px]:px-10 min-[1100px]:pb-8 min-[1100px]:pt-[124px]"
+        >
           <div className="shrink-0 max-w-md min-[1100px]:max-w-[520px]">
             <label className="block">
               <span className="text-[12px] uppercase tracking-[0.18em] text-muted">{COPY.name.label}</span>
@@ -1317,6 +1377,8 @@ export default function Demo({
                 type="text"
                 value={nameInput}
                 onChange={(e) => onNameChange(e.target.value)}
+                onFocus={onNameFocus}
+                onBlur={onNameBlur}
                 placeholder={COPY.name.placeholder}
                 maxLength={MAX_NAME_LEN}
                 autoComplete="off"
@@ -1326,13 +1388,18 @@ export default function Demo({
             <p className="mt-1.5 text-[12px] text-muted">{COPY.name.hint}</p>
           </div>
 
-          <div className="mt-3 flex min-h-0 w-full flex-1 flex-col min-[1100px]:grid min-[1100px]:grid-cols-2 min-[1100px]:grid-rows-[100%] min-[1100px]:items-start min-[1100px]:gap-x-12">
+          <div className="mt-2 flex min-h-0 w-full flex-1 flex-col min-[1100px]:mt-3 min-[1100px]:grid min-[1100px]:grid-cols-2 min-[1100px]:grid-rows-[100%] min-[1100px]:items-start min-[1100px]:gap-x-12">
             {/* The live-skin phone: name lands on its contact header AND on
                 thread[0]'s own mention of the business (skinThread). Mobile:
                 bottom-anchored, ~55% visible, bleeding off the section. */}
+            {/* change 16 (B4): mobile order is name -> label -> tiles ->
+                cue band -> phone; the phone takes whatever height remains
+                below the 56px cue band, anchored there and bleeding off the
+                section bottom (~55% visible). Nothing may overlap the tiles
+                (gate 94). */}
             <div
               data-yours-phone-fit
-              className="order-3 mx-auto h-[380px] w-full max-w-[390px] shrink-0 min-[1100px]:order-none min-[1100px]:mx-0 min-[1100px]:h-full min-[1100px]:min-h-0"
+              className="order-3 mx-auto mt-2 min-h-0 w-full max-w-[390px] flex-1 min-[1100px]:order-none min-[1100px]:mx-0 min-[1100px]:mt-0 min-[1100px]:h-full min-[1100px]:flex-none"
             >
               <Phone preset={preset} bizName={bizName} variant="static" staticId={preset.id} skinThread />
             </div>
@@ -1345,12 +1412,12 @@ export default function Demo({
                     key={p.id}
                     data-panel
                     data-preset={p.id}
-                    className="flex min-h-0 flex-col justify-start px-1 min-[1100px]:px-2"
+                    className="flex min-h-0 flex-col justify-start min-[1100px]:px-2"
                   >
                     <p className="font-display text-[28px] font-medium leading-tight text-ink">{p.label}</p>
                     {/* Three money tiles: ticket gold, missed ink, lost muted
                         — exactly ONE gold element per panel (gates 79/82). */}
-                    <div className="mt-3 grid grid-cols-2 gap-2 min-[1100px]:mt-5 min-[1100px]:grid-cols-1 min-[1100px]:gap-3">
+                    <div className="mt-2 grid grid-cols-2 gap-2 min-[1100px]:mt-5 min-[1100px]:grid-cols-1 min-[1100px]:gap-3">
                       <div data-tile="ticket" className="rounded-xl border border-line bg-surface p-3 min-[1100px]:p-5">
                         <span data-ticket data-tile-value className="font-display text-[28px] font-semibold text-gold lining-nums min-[1100px]:text-[56px]">
                           ${p.ticket}
@@ -1375,8 +1442,12 @@ export default function Demo({
               </div>
             </div>
 
-            {/* Mobile: dots + cue ABOVE the phone (A4), in flow. */}
-            <div className="order-2 mt-3 flex shrink-0 flex-col items-center gap-2 min-[1100px]:hidden">
+            {/* Mobile: dots + cue ABOVE the phone (A4), in a fixed 56px band
+                (change 16, B4) so the phone's top edge is deterministic. */}
+            <div
+              data-yours-cueband
+              className="order-2 mt-2 flex h-14 shrink-0 flex-col items-center justify-center gap-1.5 min-[1100px]:hidden"
+            >
               <p
                 className={`rounded-full bg-abyss/80 px-3 py-1 text-[12px] text-muted backdrop-blur transition-opacity duration-500 ${
                   yoursCueGone ? "opacity-0" : "opacity-100"
@@ -1429,11 +1500,14 @@ export default function Demo({
       {/* ---- SECTION 4 — the math (change 13, S4): the line is the largest
            type on the page and owns the section. Numerals gold at the line's
            own size. ---- */}
-      <section data-section="math" data-bottom-band className="border-t border-line bg-surface">
+      {/* change 16 (B8): section 4 stands on the SAME ground as sections
+          1-3 — the surface band read as a different page bolted on. The
+          border-t stays: a rule is structure, not ground. */}
+      <section data-section="math" data-bottom-band className="border-t border-line">
         <Glow />
         <SectionMark {...COPY.sections.math} />
 
-        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col items-center justify-center gap-10 px-6 text-center min-[1100px]:gap-12">
+        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col items-center justify-center gap-10 pl-6 pr-14 text-center min-[1100px]:gap-12 min-[1100px]:px-6">
           <p data-math className="max-w-[20ch] font-display font-medium leading-[1.12] text-ink [font-size:clamp(40px,6vw,72px)]">
             {COPY.mathLead}{" "}
             <span data-math-numeral className="font-semibold text-gold lining-nums">
@@ -1476,7 +1550,13 @@ export default function Demo({
 
       {/* ---- The rail (change 15, A3): Share, sound, dots, next-chevron —
            persistent on the right edge in every section. ---- */}
-      <div className="fixed right-2 top-1/2 z-40 flex -translate-y-1/2 flex-col items-center gap-3 min-[1100px]:right-6 min-[1100px]:gap-4">
+      {/* change 16 (B1): below 1100px the rail lives inside a 40px right
+          column (36px controls at right: 2px) and every section pads 56px
+          right — nothing renders under it (gate 93). */}
+      <div
+        data-rail
+        className="fixed right-0.5 top-1/2 z-40 flex -translate-y-1/2 flex-col items-center gap-3 min-[1100px]:right-6 min-[1100px]:gap-4"
+      >
         <button
           data-share
           data-rail-share

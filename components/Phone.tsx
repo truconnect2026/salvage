@@ -37,9 +37,13 @@ function WifiGlyph() {
 
 export function StatusGlyphs() {
   return (
-    <span className="flex items-center gap-[6px] text-muted">
-      <SignalGlyph />
-      <WifiGlyph />
+    <span data-status-cluster className="flex items-center gap-[6px] text-muted">
+      <span data-glyph="signal" className="flex">
+        <SignalGlyph />
+      </span>
+      <span data-glyph="wifi" className="flex">
+        <WifiGlyph />
+      </span>
       <BatteryGlyph />
     </span>
   );
@@ -196,10 +200,8 @@ function CallScreen({ preset, bizName }: { preset: Preset; bizName: string }) {
       style={{ background: "linear-gradient(180deg, #071021 0%, #0B1830 100%)" }}
     >
       {/* Status glyphs persist — the hardware doesn't vanish during a call. */}
-      <div className="absolute right-6 top-2 z-10 flex items-center gap-[6px] text-muted">
-        <SignalGlyph />
-        <WifiGlyph />
-        <BatteryGlyph />
+      <div className="absolute right-6 top-2 z-10">
+        <StatusGlyphs />
       </div>
 
       {/* Upper third: who she's calling, and how it's going. */}
@@ -324,19 +326,20 @@ export default function Phone({
 
   const screenContent = (
     <>
-      {/* Notch */}
-      <div className="absolute left-1/2 top-0 z-40 h-[26px] w-[120px] -translate-x-1/2 rounded-b-[14px] bg-[#05090F]" />
+      {/* Notch (change 16, A2): 34% of the screen's design width, 30px tall
+          at design scale. Time and the status glyphs both live outside it at
+          every rendered width — the whole screen scales as one unit. */}
+      <div
+        data-notch
+        className="absolute left-1/2 top-0 z-40 h-[30px] w-[34%] -translate-x-1/2 rounded-b-[14px] bg-[#05090F]"
+      />
 
       {/* Status row */}
       <div className="relative z-10 flex h-[36px] shrink-0 items-center justify-between px-6 pt-1">
         <span className="text-[13px] font-semibold tabular-nums text-ink">
           {COPY.chrome.phone.statusTime}
         </span>
-        <span className="flex items-center gap-[6px] text-muted">
-          <SignalGlyph />
-          <WifiGlyph />
-          <BatteryGlyph />
-        </span>
+        <StatusGlyphs />
       </div>
 
       {/* Contact header */}
@@ -482,25 +485,39 @@ export default function Phone({
     </>
   );
 
+  /* change 16 (A1): the SCREEN lays out at a 390px design width — text,
+     bubbles, banner, status row, notch, home bar, call screen all in design
+     px — and the whole screen zooms to the rendered device width (change
+     14's screenshot method, moved onto the screen itself). Width and zoom
+     live in globals.css on [data-phone-screen]; only the design HEIGHT
+     differs per mode. 874 is the aspect box's screen height mapped back to
+     design scale: (390 × 19.5/9 − 24) ÷ ((390 − 24) / 390) ≈ 874.8, floored
+     so the zoomed screen never overflows the bezel. */
+  const DESIGN_ZOOM = (390 - 24) / 390;
+
   if (!aspect) {
-    /* OG crop mode: fixed screen height, device cropped by the canvas. */
+    /* OG crop mode: fixed rendered screen height, device cropped by the
+       canvas — the design height is that height mapped back to design px. */
     return (
       <div data-phone-device className="w-[390px] max-w-full shrink-0">
         <div className="relative rounded-[56px] bg-[#05090F] p-3 ring-1 ring-inset ring-line/60" style={bezelShadow}>
-          <div
-            data-phone-screen
-            className="relative flex flex-col overflow-hidden rounded-[44px] bg-surface font-phone"
-            style={{ minHeight: screenMinHeight }}
-          >
-            {screenContent}
+          <div data-screen-fit>
+            <div
+              data-phone-screen
+              className="relative flex flex-col overflow-hidden rounded-[44px] bg-surface font-phone"
+              style={{ height: Math.round(screenMinHeight / DESIGN_ZOOM) }}
+            >
+              {screenContent}
+            </div>
           </div>
         </div>
       </div>
     );
   }
 
-  /* The real device: 19.5:9 box (gate 46), 12px bezel, 44px screen radius
-     inside a 56px outer radius (C1d). Height always follows width. */
+  /* The real device: 19.5:9 box (gate 46), 12px bezel, 44px design-scale
+     screen radius inside a 56px outer radius (C1d). Height always follows
+     width; the screen zooms uniformly inside the bezel. */
   return (
     <div
       data-phone-device
@@ -511,11 +528,14 @@ export default function Phone({
         className="absolute inset-0 rounded-[56px] bg-[#05090F] p-3 ring-1 ring-inset ring-line/60"
         style={bezelShadow}
       >
-        <div
-          data-phone-screen
-          className="relative flex h-full flex-col overflow-hidden rounded-[44px] bg-surface font-phone"
-        >
-          {screenContent}
+        <div data-screen-fit className="flex h-full items-center justify-center">
+          <div
+            data-phone-screen
+            className="relative flex flex-col overflow-hidden rounded-[44px] bg-surface font-phone"
+            style={{ height: 874 }}
+          >
+            {screenContent}
+          </div>
         </div>
       </div>
     </div>

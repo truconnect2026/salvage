@@ -42,6 +42,7 @@ const shareOrigin = need(/export const SHARE_ORIGIN = "([^"]+)"/, "SHARE_ORIGIN"
 const sceneClosed = need(/closed:\s*"([^"]+)"/, "COPY.scene.closed");
 const sceneDialing = need(/dialing:\s*"([^"]+)"/, "COPY.scene.dialing");
 const sceneCaught = need(/caught:\s*"([^"]+)"/, "COPY.scene.caught");
+const sinceLabel = need(/sinceLabel:\s*"([^"]+)"/, "COPY.ledger.sinceLabel");
 
 /* Every preset, sliced out of the PRESETS array by its id marker. */
 const presets = (() => {
@@ -532,6 +533,7 @@ const BROWSER_GATES = [
   64, 65, 66, 67, 68, 69, 70, 71, 72,
   74, 76, 77, 78, 79, 80, 81, 82, 83,
   84, 85, 86, 87, 88, 89, 90,
+  91, 92, 93, 94, 95, 96, 97, 98, 99, 100,
 ];
 
 if (!chromium) {
@@ -1769,20 +1771,23 @@ if (!chromium) {
 
     /* Amended (change 12): section 1 CENTERS the phone at the largest size
        that fits with 24px margins — "top <= 32px" belonged to the scrolling
-       page. The claim kept: the device is fully inside the first frame. */
+       page. Amended again (change 16, B1): the right margin is the 56px
+       rail gutter now, and the device centers in the guttered content
+       column, not the viewport. The claim kept: fully inside the first
+       frame, nothing under the rail. */
     check(
       57,
-      "first load 390x844: phone device fully within the viewport, centered, margins >= 24px",
+      "first load 390x844: phone device fully within the viewport, left margin >= 24px, right margin >= 56px (rail gutter), centered in the content column",
       g != null &&
         g.top >= 23.5 &&
         g.bottom <= g.vh - 23.5 + 0.5 &&
         g.left >= 23.5 &&
-        g.right <= g.vw - 23.5 + 0.5 &&
-        Math.abs(g.left - (g.vw - g.right)) <= 2,
+        g.right <= g.vw - 55.5 &&
+        Math.abs((g.left - 24) - (g.vw - 56 - g.right)) <= 2,
       g == null
         ? "device not found"
         : `device top ${g.top.toFixed(1)}, bottom ${g.bottom.toFixed(1)}, left ${g.left.toFixed(1)}, ` +
-          `right ${g.right.toFixed(1)} (viewport ${g.vw}x${g.vh}; need >= 24px margins, horizontally centered)`,
+          `right ${g.right.toFixed(1)} (viewport ${g.vw}x${g.vh}; need left >= 24, right clear of the 56px gutter, centered in the column)`,
     );
     await ctx.close();
   });
@@ -3007,6 +3012,410 @@ if (!chromium) {
         `after gesture: state ${JSON.stringify(after.state)} (need "running"), starts ${after.oscStarts} (need > 0)`,
     );
     await ctx.close();
+  });
+
+  /* --- 91 + 92 + 96 + 98 + 99: change 16 — design-scale screen, notch,
+         mark reserve, headline, ground. One reduced-motion load per
+         viewport: all of these are static geometry, and reduced motion
+         renders the settled SSR state with the thread visible. --- */
+  await block("scale-16", async () => {
+    const reads = [];
+    for (const vp of [
+      { w: 390, h: 844 },
+      { w: 1440, h: 900 },
+    ]) {
+      const ctx = await browser.newContext({
+        viewport: { width: vp.w, height: vp.h },
+        reducedMotion: "reduce",
+      });
+      const page = await ctx.newPage();
+      await page.goto(base, { waitUntil: "domcontentloaded" });
+      await page.evaluate(() => document.fonts.ready);
+      const g = await page.evaluate(() => {
+        const sec1 = document.querySelector('[data-section="call"]');
+        const screen = sec1?.querySelector("[data-phone-screen]");
+        const bubble = sec1?.querySelector("[data-bubble]");
+        if (!sec1 || !screen || !bubble) return null;
+        const sr = screen.getBoundingClientRect();
+        const brect = bubble.getBoundingClientRect();
+        /* Rendered font size = computed (design px, zoom-local) × the
+           bubble's own rendered-to-layout ratio, so a probe that pins the
+           TEXT while the screen still zooms — or unpins the screen — reads
+           red either way. */
+        const zoom = bubble.offsetWidth > 0 ? brect.width / bubble.offsetWidth : NaN;
+        const renderedFS = parseFloat(getComputedStyle(bubble).fontSize) * zoom;
+
+        /* 92: notch vs signal/wifi in every rendered phone screen. */
+        const notchHits = [];
+        for (const scr of document.querySelectorAll("[data-phone-screen]")) {
+          const notch = scr.querySelector("[data-notch]");
+          if (!notch) continue;
+          const nr = notch.getBoundingClientRect();
+          if (nr.width === 0) continue;
+          for (const glyph of scr.querySelectorAll('[data-glyph="signal"], [data-glyph="wifi"]')) {
+            const gr = glyph.getBoundingClientRect();
+            if (gr.width === 0) continue;
+            const hit = gr.left < nr.right && gr.right > nr.left && gr.top < nr.bottom && gr.bottom > nr.top;
+            if (hit) notchHits.push(`${glyph.dataset.glyph}@${Math.round(gr.left)},${Math.round(gr.top)}`);
+          }
+        }
+        const notchCount = document.querySelectorAll("[data-notch]").length;
+
+        /* 96: kicker tracking + mark vs device/headline boxes, all sections.
+           Sections stack in one coordinate space — no scrolling needed. */
+        const markProblems = [];
+        let kickerBad = null;
+        for (const sec of document.querySelectorAll("[data-section]")) {
+          const mark = sec.querySelector("[data-section-mark]");
+          if (!mark) continue;
+          const kicker = mark.querySelector("p");
+          const kcs = getComputedStyle(kicker);
+          const ls = parseFloat(kcs.letterSpacing);
+          const fs = parseFloat(kcs.fontSize);
+          if (!(Number.isFinite(ls) ? ls / fs <= 0.08 : kcs.letterSpacing === "normal"))
+            kickerBad = `${sec.dataset.section}: ${kcs.letterSpacing} @ ${kcs.fontSize}`;
+          const mr = mark.getBoundingClientRect();
+          const targets = [
+            ...sec.querySelectorAll("[data-phone-device]"),
+            ...sec.querySelectorAll("h1"),
+          ];
+          for (const t of targets) {
+            const tr = t.getBoundingClientRect();
+            if (tr.width === 0) continue;
+            const hit = tr.left < mr.right && tr.right > mr.left && tr.top < mr.bottom && tr.bottom > mr.top;
+            if (hit)
+              markProblems.push(
+                `${sec.dataset.section}: mark(${Math.round(mr.bottom)}b) ∩ ${t.tagName}(${Math.round(tr.top)}t)`,
+              );
+          }
+        }
+
+        /* 98: headline line boxes. */
+        const h1 = document.querySelector("h1");
+        const h1cs = h1 ? getComputedStyle(h1) : null;
+        const h1lines = h1 ? Math.round(h1.getBoundingClientRect().height / parseFloat(h1cs.lineHeight)) : null;
+
+        /* 99: section 4 ground === section 1 ground. */
+        const sec4 = document.querySelector('[data-section="math"]');
+        return {
+          screenW: sr.width,
+          renderedFS,
+          ratio: renderedFS / sr.width,
+          notchHits,
+          notchCount,
+          kickerBad,
+          markProblems,
+          h1lines,
+          h1fs: h1cs?.fontSize ?? null,
+          bg1: getComputedStyle(sec1).backgroundColor,
+          bg4: sec4 ? getComputedStyle(sec4).backgroundColor : null,
+        };
+      });
+      reads.push({ vp: `${vp.w}x${vp.h}`, g });
+      await ctx.close();
+    }
+
+    const WANT = 17 / 390;
+    const ratioOk = (g) => g != null && Number.isFinite(g.ratio) && Math.abs(g.ratio - WANT) / WANT <= 0.02;
+    check(
+      91,
+      "first-bubble rendered font-size ÷ rendered screen width === 17/390 ±2%, both viewports",
+      reads.length === 2 && reads.every((r) => ratioOk(r.g)),
+      reads
+        .map(
+          (r) =>
+            `${r.vp} -> ${r.g ? `${r.g.renderedFS.toFixed(2)}px / ${r.g.screenW.toFixed(1)}px = ${r.g.ratio?.toFixed(5)}` : "nodes missing"} ` +
+            `(want ${WANT.toFixed(5)} ±2%)`,
+        )
+        .join(" | "),
+    );
+
+    check(
+      92,
+      "signal + wifi glyph boxes intersect no notch, every rendered phone, both viewports",
+      reads.every((r) => r.g != null && r.g.notchCount > 0 && r.g.notchHits.length === 0),
+      reads
+        .map((r) => `${r.vp} -> ${r.g?.notchCount ?? 0} notch(es), hits ${JSON.stringify(r.g?.notchHits ?? null)}`)
+        .join(" | "),
+    );
+
+    check(
+      96,
+      "kicker letter-spacing <= 0.08em; the mark box intersects no device or headline box — all sections, both viewports",
+      reads.every((r) => r.g != null && r.g.kickerBad == null && r.g.markProblems.length === 0),
+      reads
+        .map(
+          (r) =>
+            `${r.vp} -> kicker ${r.g?.kickerBad ?? "ok"}; intersections ${JSON.stringify(r.g?.markProblems ?? null)}`,
+        )
+        .join(" | "),
+    );
+
+    const m = reads[0].g;
+    check(
+      98,
+      "section 2 headline at 390 wraps to <= 3 line boxes",
+      m != null && m.h1lines != null && m.h1lines <= 3,
+      `${m?.h1lines ?? "?"} line box(es) at ${m?.h1fs ?? "?"} (need <= 3)`,
+    );
+
+    check(
+      99,
+      "section 4 computed background === section 1 background (one ground)",
+      reads.every((r) => r.g != null && r.g.bg4 != null && r.g.bg4 === r.g.bg1),
+      reads.map((r) => `${r.vp} -> s1 ${r.g?.bg1} vs s4 ${r.g?.bg4}`).join(" | "),
+    );
+  });
+
+  /* --- 93 + 94 + 95: change 16 — the rail gutter and the mobile sections.
+         One reduced-motion 390x844 load, walked section by section. --- */
+  await block("mobile-16", async () => {
+    const ctx = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      reducedMotion: "reduce",
+    });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+
+    /* 93: nothing renders under the rail, any section. */
+    const railHits = [];
+    for (let i = 0; i < 4; i++) {
+      await goSection(page, i);
+      const hits = await page.evaluate((EFF) => {
+        const vis = eval(EFF);
+        const rail = document.querySelector("[data-rail]");
+        if (!rail) return ["no [data-rail]"];
+        const rr = rail.getBoundingClientRect();
+        const sec = [...document.querySelectorAll("[data-section]")].find((s) => {
+          const r = s.getBoundingClientRect();
+          return r.top > -10 && r.top < 10;
+        });
+        if (!sec) return ["no snapped section"];
+        /* The RENDERED box: the element's rect clipped by every overflow
+           ancestor — a track panel resting off-screen inside its scrollport
+           is laid out past the rail but never painted there. */
+        const renderedRect = (el) => {
+          let r = el.getBoundingClientRect();
+          let n = el.parentElement;
+          while (n && n !== document.body) {
+            const cs = getComputedStyle(n);
+            if (cs.overflowX !== "visible" || cs.overflowY !== "visible") {
+              const cr = n.getBoundingClientRect();
+              r = {
+                left: Math.max(r.left, cr.left),
+                right: Math.min(r.right, cr.right),
+                top: Math.max(r.top, cr.top),
+                bottom: Math.min(r.bottom, cr.bottom),
+              };
+              if (r.left >= r.right || r.top >= r.bottom) return null;
+            }
+            n = n.parentElement;
+          }
+          return r;
+        };
+        const bad = [];
+        for (const el of sec.querySelectorAll("*")) {
+          if (rail.contains(el)) continue;
+          const hasText = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+          const isBox =
+            hasText || el.tagName === "svg" || el.tagName === "IMG" || el.hasAttribute("data-phone-device");
+          if (!isBox) continue;
+          if (vis(el) <= 0.1) continue;
+          const r = renderedRect(el);
+          if (!r || r.right - r.left === 0 || r.bottom - r.top === 0) continue;
+          if (r.left < rr.right && r.right > rr.left && r.top < rr.bottom && r.bottom > rr.top)
+            bad.push(`${sec.dataset.section}/${el.tagName}@${Math.round(r.right)}r (rail ${Math.round(rr.left)}..${Math.round(rr.right)})`);
+        }
+        return bad;
+      }, EFF);
+      railHits.push(...hits);
+    }
+    check(
+      93,
+      "390x844: no content box intersects the rail box, any section",
+      railHits.length === 0,
+      railHits.length === 0 ? "0 intersections across 4 sections" : railHits.slice(0, 6).join(" | "),
+    );
+
+    /* 95: section 2 — the ledger's last line clears the fold by 16px and
+       the since-install label survived the fit. */
+    await goSection(page, 1);
+    const g95 = await page.evaluate(
+      ({ EFF, sinceLabel }) => {
+        const vis = eval(EFF);
+        const strip = document.querySelector("[data-since-strip]");
+        const label = strip ? strip.previousElementSibling : null;
+        const panel = document.querySelector("[data-panel-content]");
+        if (!strip || !panel) return null;
+        return {
+          stripBottom: strip.getBoundingClientRect().bottom,
+          stripVisible: vis(strip) > 0.5,
+          labelText: label ? label.textContent.trim() : null,
+          labelVisible: label ? vis(label) > 0.5 : false,
+          wantLabel: sinceLabel,
+        };
+      },
+      { EFF, sinceLabel },
+    );
+    check(
+      95,
+      `section 2 mobile: last ledger line bottom <= viewport bottom - 16; ${JSON.stringify(sinceLabel)} label present`,
+      g95 != null &&
+        g95.stripVisible &&
+        g95.stripBottom <= 844 - 16 &&
+        g95.labelVisible &&
+        g95.labelText === sinceLabel,
+      g95 == null
+        ? "since strip or ledger panel not found"
+        : `strip bottom ${g95.stripBottom.toFixed(1)} (need <= 828); label ${JSON.stringify(g95.labelText)} ` +
+          `visible ${g95.labelVisible} (want ${JSON.stringify(sinceLabel)})`,
+    );
+
+    /* 94: section 3 — tiles whole, nothing over them, phone below the cue
+       band. */
+    await goSection(page, 2);
+    const g94 = await page.evaluate((EFF) => {
+      const vis = eval(EFF);
+      const yours = document.querySelector('[data-section="yours"]');
+      if (!yours) return null;
+      const yr = yours.getBoundingClientRect();
+      const activePanel = [...yours.querySelectorAll("[data-panel]")].find((p) => {
+        const r = p.getBoundingClientRect();
+        return r.left > -10 && r.left < yr.width;
+      });
+      const tiles = activePanel ? [...activePanel.querySelectorAll("[data-tile]")] : [];
+      const band = yours.querySelector("[data-yours-cueband]");
+      const dev = yours.querySelector("[data-phone-device]");
+      if (tiles.length !== 3 || !band || !dev) return { tiles: tiles.length, band: !!band, dev: !!dev };
+      const overlaps = [];
+      for (const tile of tiles) {
+        const tr = tile.getBoundingClientRect();
+        for (const el of yours.querySelectorAll("*")) {
+          if (tile.contains(el) || el.contains(tile)) continue;
+          const hasText = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+          if (!hasText && !el.hasAttribute("data-phone-device") && el.tagName !== "svg") continue;
+          if (vis(el) <= 0.1) continue;
+          const r = el.getBoundingClientRect();
+          if (r.width === 0) continue;
+          if (r.left < tr.right - 1 && r.right > tr.left + 1 && r.top < tr.bottom - 1 && r.bottom > tr.top + 1)
+            overlaps.push(`${el.tagName}@${Math.round(r.top)}t over tile@${Math.round(tr.top)}t`);
+        }
+      }
+      const tilesInside = tiles.every((t) => {
+        const r = t.getBoundingClientRect();
+        return r.top >= yr.top - 1 && r.bottom <= yr.bottom + 1 && r.left >= yr.left - 1 && r.right <= yr.right + 1;
+      });
+      return {
+        tiles: 3,
+        tilesInside,
+        overlaps,
+        bandBottom: band.getBoundingClientRect().bottom,
+        devTop: dev.getBoundingClientRect().top,
+      };
+    }, EFF);
+    check(
+      94,
+      "section 3 mobile: 3 tiles fully visible, nothing intersects them, phone top > cue band bottom",
+      g94 != null &&
+        g94.tiles === 3 &&
+        g94.tilesInside === true &&
+        g94.overlaps.length === 0 &&
+        typeof g94.devTop === "number" &&
+        g94.devTop > g94.bandBottom,
+      g94 == null
+        ? "yours section not found"
+        : `${g94.tiles} tile(s); inside ${g94.tilesInside}; overlaps ${JSON.stringify(g94.overlaps ?? null)}; ` +
+          `phone top ${g94.devTop?.toFixed?.(1)} vs cue band bottom ${g94.bandBottom?.toFixed?.(1)} (need >)`,
+    );
+    await ctx.close();
+  });
+
+  /* --- 97: the keyboard accommodation, visualViewport forced to 420. --- */
+  await block("keyboard-16", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const page = await ctx.newPage();
+    await page.addInitScript(() => {
+      Object.defineProperty(VisualViewport.prototype, "height", {
+        get() {
+          return 420;
+        },
+        configurable: true,
+      });
+    });
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+    await waitHydrated(page);
+    await goSection(page, 2);
+    await page.focus("[data-name-input]");
+    await page.waitForTimeout(250);
+    const g = await page.evaluate(() => {
+      const header = document.querySelector("[data-crop-biz]");
+      const panel = document.querySelector("[data-yours-panel]");
+      if (!header || !panel) return null;
+      const hr = header.getBoundingClientRect();
+      return {
+        top: hr.top,
+        bottom: hr.bottom,
+        pad: getComputedStyle(panel).paddingBottom,
+        vvh: window.visualViewport.height,
+      };
+    });
+    check(
+      97,
+      "visualViewport 420 + name input focused -> section-3 phone contact header inside the visual viewport",
+      g != null && g.vvh === 420 && g.top >= -1 && g.bottom <= 421,
+      g == null
+        ? "header or panel not found"
+        : `header ${g.top.toFixed(1)}..${g.bottom.toFixed(1)} (need within 0..420); panel padding-bottom ${g.pad}; vv height ${g.vvh}`,
+    );
+    await ctx.close();
+  });
+
+  /* --- 100: the design-scale thread reserve fits every preset's thread. --- */
+  await block("reserve-16", async () => {
+    const rows = [];
+    for (const p of presets) {
+      const ctx = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+        reducedMotion: "reduce",
+      });
+      const page = await ctx.newPage();
+      await page.goto(`${base}/?biz=${p.id}`, { waitUntil: "domcontentloaded" });
+      await page.evaluate(() => document.fonts.ready);
+      const g = await page.evaluate(() => {
+        const sec1 = document.querySelector('[data-section="call"]');
+        const screen = sec1?.querySelector("[data-phone-screen]");
+        const bubbles = sec1 ? [...sec1.querySelectorAll("[data-bubble]")] : [];
+        const delivered = sec1?.querySelector("[data-delivered]");
+        if (!screen || bubbles.length === 0 || !delivered) return null;
+        const sr = screen.getBoundingClientRect();
+        const inside = (r) => r.top >= sr.top - 0.5 && r.bottom <= sr.bottom + 0.5;
+        const clipped = bubbles.filter((b) => !inside(b.getBoundingClientRect())).length;
+        return {
+          total: bubbles.length,
+          clipped,
+          deliveredInside: inside(delivered.getBoundingClientRect()),
+          reserveDesign: sec1.querySelector("[data-thread-viewport]")?.clientHeight ?? null,
+        };
+      });
+      rows.push({ id: p.id, g });
+      await ctx.close();
+    }
+    check(
+      100,
+      "thread reserve at 390 fits the longest thread: 0 clipped bubbles + Delivered inside the screen, all presets",
+      rows.length === presets.length &&
+        rows.every(
+          (r) => r.g != null && r.g.total > 0 && r.g.clipped === 0 && r.g.deliveredInside === true,
+        ),
+      rows
+        .map(
+          (r) =>
+            `${r.id}: ${r.g ? `${r.g.clipped}/${r.g.total} clipped, delivered inside ${r.g.deliveredInside}, reserve ${r.g.reserveDesign}px design` : "nodes missing"}`,
+        )
+        .join(" | "),
+    );
   });
 
   await browser.close();

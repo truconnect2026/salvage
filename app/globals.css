@@ -122,35 +122,38 @@ body {
   }
 }
 
-/* Short-phone safety valve: below ~820px of height the save-section stack
-   (owner card + ledger) cannot fit a 100dvh section at full scale — scale
-   the stack, not the type ramp, in steps that track how much height is
-   missing (review lens 1, finding 1: a flat 0.8 left the owner card
-   unreachable on SE-class phones). Gate viewports (390x844, 1440x900)
-   never engage these. */
-@media (max-width: 1099.98px) and (max-height: 880px) {
-  [data-save-stack] {
-    zoom: 0.92;
-  }
+/* change 16 (A1): every phone SCREEN lays out at a 390px design width and
+   zooms to the rendered device width as one unit — change 14's screenshot
+   method, moved onto the screen itself. [data-screen-fit] is the query
+   container (the bezel's content box); the first zoom line is the iOS-15
+   no-container-query floor (exact at a full-width 390px device, slightly
+   large below it), the second is the real fit. The design HEIGHT is per
+   render mode and set inline in Phone.tsx. Nothing inside the screen may
+   use a viewport-relative size (A1) — everything is design px under this
+   one zoom. */
+[data-screen-fit] {
+  container-type: inline-size;
+  width: 100%;
 }
-@media (max-width: 1099.98px) and (max-height: 820px) {
-  [data-save-stack] {
-    zoom: 0.8;
-  }
+[data-phone-screen] {
+  width: 390px;
+  zoom: 0.9385;
+  zoom: calc(100cqw / 390px);
 }
-@media (max-width: 1099.98px) and (max-height: 750px) {
-  [data-save-stack] {
-    zoom: 0.72;
+
+/* change 16 (B3): the mobile save-section stack (owner card + ledger)
+   zooms to FIT its column instead of stepping through the change-12 zoom
+   ladder — laid out at a fixed 342px design width, scaled by whichever is
+   tighter: the column's height against the stack's ~612px natural height
+   (measured at 342px wide, plus slack), the column's width, or 1. The
+   ledger's last line stays >= 16px above the viewport bottom (gate 95). */
+@media (max-width: 1099.98px) {
+  [data-save-fit] {
+    container-type: size;
   }
-}
-@media (max-width: 1099.98px) and (max-height: 680px) {
   [data-save-stack] {
-    zoom: 0.64;
-  }
-}
-@media (max-width: 1099.98px) and (max-height: 600px) {
-  [data-save-stack] {
-    zoom: 0.55;
+    width: 342px;
+    zoom: min(calc(100cqh / 590px), calc(100cqw / 342px), 1);
   }
 }
 
