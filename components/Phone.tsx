@@ -413,7 +413,7 @@ export default function Phone({
               );
             })}
 
-            <div {...mark({ "data-delivered": true })} className="mt-0.5 pr-1 pt-1 text-right text-[11px] text-muted">
+            <div {...markEither("data-delivered", "data-s-delivered")} className="mt-0.5 pr-1 pt-1 text-right text-[11px] text-muted">
               {COPY.chrome.phone.deliveredLabel}
             </div>
           </div>

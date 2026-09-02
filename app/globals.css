@@ -84,10 +84,11 @@ body {
 @media (min-width: 1100px) {
   [data-section="save"] [data-track] {
     display: grid;
-    /* change 13 (S2a): 40/60 columns. Overflow stays visible so the left
-       column's full-scale phone can bleed to the SECTION's bottom edge
-       (the section's own overflow:hidden is the crop). */
+    /* change 13 (S2a): 40/60 columns. change 14: one full-height row — both
+       columns span the track so the left column can budget the phone's
+       height (containment correction; the change-13 bleed is gone). */
     grid-template-columns: 2fr 3fr;
+    grid-template-rows: 100%;
     column-gap: 48px;
     align-items: start;
     overflow: visible;
@@ -95,7 +96,24 @@ body {
   }
   [data-section="save"] [data-panel] {
     flex: none;
-    height: auto;
+    height: 100%;
+  }
+  /* change 14: the static phone SCALES like a screenshot — laid out at its
+     natural 390px and zoomed by the height the headline leaves (availH in
+     container units, divisor = natural 845px height + slack), capped at 1.
+     Scaling the whole device is what keeps the thread's END (last bubble +
+     Delivered) visible at every size: a narrower device with fixed-size
+     screen text would clip it (gate 83). Below ~890px viewport heights the
+     rendered width dips under the 340px floor; containment wins there by
+     design — section 2 is a snap frame, nothing below the fold is
+     reachable. */
+  [data-save-phone-fit] {
+    container-type: size;
+  }
+  [data-section="save"] [data-phone-device] {
+    width: 390px;
+    max-width: none;
+    zoom: min(calc(100cqh / 850px), 1);
   }
 }
 

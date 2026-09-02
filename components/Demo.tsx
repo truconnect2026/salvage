@@ -979,26 +979,42 @@ export default function Demo({
         <Glow />
         <SectionMark {...COPY.sections.save} />
 
-        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col px-6 pb-[84px] pt-[88px] min-[1100px]:px-10 min-[1100px]:pb-20 min-[1100px]:pt-24">
+        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col px-6 pb-[84px] pt-[88px] min-[1100px]:px-10 min-[1100px]:pb-6 min-[1100px]:pt-6">
           {/* Mobile: a two-panel horizontal track (headline + phone | ledger).
               Desktop >=1100: the same two children as a 40/60 two-up grid —
-              the overrides live in globals.css under [data-section="save"]. */}
+              the overrides live in globals.css under [data-section="save"].
+              change 14: the desktop frame starts at the 24px margin (beside
+              the section mark, not below it) — that headroom is what lets a
+              >=340px phone be FULLY CONTAINED (availH = section - headline -
+              48; the sub moved to the right column to buy the rest). */}
           <div ref={saveTrackRef} data-track className="min-h-0 w-full flex-1">
             <div data-panel className="flex min-h-0 flex-col px-1 min-[1100px]:px-0">
               <header data-headline className="shrink-0">
-                <h1 className="max-w-3xl font-display font-medium leading-[1.12] text-ink [font-size:clamp(32px,3vw,44px)]">
+                {/* change 14: 30px on desktop — at clamp's 44px the h1 runs
+                    four lines in the 40% column and the >=340px phone can no
+                    longer be contained (availH = 852 - headline). Below
+                    1100px this matches change 13's rendered size exactly
+                    (the old clamp bottomed out at 32px there). */}
+                <h1 className="max-w-3xl font-display font-medium leading-[1.12] text-ink text-[32px] min-[1100px]:text-[30px]">
                   {COPY.headline}
                 </h1>
-                <p data-sub className="mt-2 max-w-xl text-[14px] leading-relaxed text-muted min-[1100px]:text-[16px]">
+                {/* Mobile keeps the sub here; on desktop it lives in the
+                    right column (change 14 — see data-save-stack below). */}
+                <p data-sub className="mt-2 max-w-xl text-[14px] leading-relaxed text-muted min-[1100px]:hidden">
                   {COPY.sub}
                 </p>
               </header>
 
               {/* The settled phone: a second, STATIC instance — playback
                   disabled, top-anchored thread (see Phone variant="static").
-                  Same size as section 1's phone on mobile (gate 75); full
-                  390px in the desktop column (gate 74). */}
-              <div className="mx-auto mt-5 w-full max-w-[390px] min-[1100px]:mx-0 min-[1100px]:mt-6">
+                  Same size as section 1's phone on mobile (gate 75). Desktop
+                  (change 14): height-driven via container units so the whole
+                  device — last bubble, Delivered, home bar — stays inside
+                  the snap frame (gates 30/34/83). */}
+              <div
+                data-save-phone-fit
+                className="mx-auto mt-5 w-full max-w-[390px] min-[1100px]:mx-0 min-[1100px]:mt-0 min-[1100px]:min-h-0 min-[1100px]:flex-1"
+              >
                 <Phone preset={preset} bizName={bizName} variant="static" />
               </div>
             </div>
@@ -1009,6 +1025,13 @@ export default function Demo({
                 phones (change 12 review, lens 1 finding 1). */}
             <div data-panel className="flex min-h-0 flex-col px-1 min-[1100px]:px-0">
               <div data-save-stack className="relative my-auto w-full min-[1100px]:my-0">
+                {/* The sub-headline, desktop only (change 14): moved out of
+                    the left column so the phone's height budget closes at a
+                    >=340px width. Same element contract as the mobile copy —
+                    gate 33 accepts whichever [data-sub] is visible. */}
+                <p data-sub className="mb-3 hidden text-[16px] leading-relaxed text-muted min-[1100px]:block">
+                  {COPY.sub}
+                </p>
                 {/* The owner card: DOCKED statically in flow, 12px above the
                     panel at every width (change 13 flattens the old desktop
                     float — the right column owns its full height now). */}

@@ -526,7 +526,7 @@ const BROWSER_GATES = [
   12, 13, 14, 15, 17, 18, 19, 20, 24, 26, 28, 29, 30, 31, 32, 33, 34, 35, 37, 38, 39, 45,
   46, 47, 48, 49, 50, 51, 52, 53, 55, 56, 57, 58, 59, 60, 61, 62, 63,
   64, 65, 66, 67, 68, 69, 70, 71, 72, 73,
-  74, 75, 76, 77, 78, 79, 80, 81, 82,
+  74, 75, 76, 77, 78, 79, 80, 81, 82, 83,
 ];
 
 if (!chromium) {
@@ -928,7 +928,9 @@ if (!chromium) {
         phone: { top: pr.top, bottom: pr.bottom, left: pr.left, right: pr.right },
         ledger: { top: lr.top, bottom: lr.bottom, left: lr.left, right: lr.right },
         overlap,
-        phoneAnchored: pr.top >= 0 && pr.left >= -0.5 && pr.right <= vw + 0.5,
+        /* change 14 restores the bottom-containment clause: the change-13
+           bleed is corrected — the whole device sits inside the frame. */
+        phoneInViewport: pr.left >= -0.5 && pr.right <= vw + 0.5 && pr.top >= -0.5 && pr.bottom <= vh + 0.5,
         ledgerInViewport: lr.left >= -0.5 && lr.right <= vw + 0.5 && lr.top >= -0.5 && lr.bottom <= vh + 0.5,
         phoneIsLeft: pr.right <= lr.left,
       };
@@ -936,16 +938,16 @@ if (!chromium) {
 
     check(
       30,
-      "section 2 at 1440x900: phone column left of the ledger, no overlap, ledger fully visible; the phone bleeds off the bottom by design",
+      "section 2 at 1440x900: phone column left of the ledger, no overlap, phone AND ledger fully visible",
       g != null &&
         g.overlap === false &&
         g.phoneIsLeft === true &&
-        g.phoneAnchored === true &&
+        g.phoneInViewport === true &&
         g.ledgerInViewport === true,
       g == null
         ? "phone or ledger panel not found"
         : `overlap ${g.overlap}, phone left of ledger ${g.phoneIsLeft}, ` +
-          `phone anchored (top >= 0, horizontally inside) ${g.phoneAnchored} (${JSON.stringify(g.phone)}), ` +
+          `phone in viewport ${g.phoneInViewport} (${JSON.stringify(g.phone)}), ` +
           `ledger in viewport ${g.ledgerInViewport} (${JSON.stringify(g.ledger)})`,
     );
 
@@ -1065,18 +1067,28 @@ if (!chromium) {
          is sampled once the landing completes. */
       await waitT(page, 4.5);
       const r = await page.evaluate(() => {
-        const el = document.querySelector("[data-sub]");
-        if (!el) return null;
-        const cs = getComputedStyle(el);
-        const rect = el.getBoundingClientRect();
-        return {
-          display: cs.display,
-          visibility: cs.visibility,
-          opacity: parseFloat(cs.opacity || "1"),
-          width: rect.width,
-          height: rect.height,
-          hasText: (el.textContent || "").trim().length > 0,
-        };
+        /* change 14: the sub is one string, two mounts (mobile left column /
+           desktop right column) — the visible one carries the claim. */
+        const els = [...document.querySelectorAll("[data-sub]")];
+        if (els.length === 0) return null;
+        const states = els.map((el) => {
+          const cs = getComputedStyle(el);
+          const rect = el.getBoundingClientRect();
+          return {
+            display: cs.display,
+            visibility: cs.visibility,
+            opacity: parseFloat(cs.opacity || "1"),
+            width: rect.width,
+            height: rect.height,
+            hasText: (el.textContent || "").trim().length > 0,
+          };
+        });
+        return (
+          states.find(
+            (st) =>
+              st.display !== "none" && st.visibility !== "hidden" && st.opacity > 0 && st.width > 0 && st.height > 0,
+          ) ?? states[0]
+        );
       });
       rows.push({ vp: `${vp.w}x${vp.h}`, r });
       await ctx.close();
@@ -1122,26 +1134,30 @@ if (!chromium) {
       const lr = panel.getBoundingClientRect();
       const cr = card.getBoundingClientRect();
       const sr = share.getBoundingClientRect();
+      const phr = phone.getBoundingClientRect();
       return {
         headerBottom: hr.bottom,
         panelBottom: lr.bottom,
         shareBottom: sr.bottom,
         cardTop: cr.top,
-        phoneTop: phone.getBoundingClientRect().top,
-        frameBottom: Math.max(hr.bottom, lr.bottom, sr.bottom),
+        phoneTop: phr.top,
+        phoneBottom: phr.bottom,
+        /* change 14 restores the phone-inclusive fit: everything in the
+           frame — the device included — fits the viewport. */
+        frameBottom: Math.max(hr.bottom, lr.bottom, sr.bottom, phr.bottom),
         innerHeight: window.innerHeight,
       };
     });
 
     check(
       34,
-      "desktop hero section 2 (headline + ledger panel + docked card + share) fits 1440x900; the bleeding phone anchors its top inside the frame",
+      "desktop hero section 2 (headline + phone + ledger panel + docked card + share) fits 1440x900 with no scroll",
       g != null && g.frameBottom <= g.innerHeight && g.cardTop >= 0 && g.phoneTop >= 0,
       g == null
         ? "headline, phone, ledger panel, card, or share not found"
         : `frame bottom ${Math.round(g.frameBottom)}px (header ${Math.round(g.headerBottom)}px, ` +
-          `panel ${Math.round(g.panelBottom)}px, share ${Math.round(g.shareBottom)}px) vs viewport ${g.innerHeight}px; ` +
-          `card top ${Math.round(g.cardTop)}px, phone top ${Math.round(g.phoneTop)}px (both need >= 0)`,
+          `phone ${Math.round(g.phoneBottom)}px, panel ${Math.round(g.panelBottom)}px, share ${Math.round(g.shareBottom)}px) ` +
+          `vs viewport ${g.innerHeight}px; card top ${Math.round(g.cardTop)}px, phone top ${Math.round(g.phoneTop)}px (both >= 0)`,
     );
 
     await ctx.close();
@@ -2385,6 +2401,49 @@ if (!chromium) {
         ? "save device, first static bubble, or thread viewport not found"
         : `device width ${g.w.toFixed(1)}px (need >= 340); first bubble top ${g.bubbleTop.toFixed(1)} vs ` +
           `thread viewport top ${g.vpTop.toFixed(1)} (bubble must not start above it)`,
+    );
+
+    /* 83 (change 14): full containment — the device ends >= 24px above the
+       section's bottom edge, and the thread's END (last bubble + Delivered)
+       sits fully inside the screen. */
+    const contain = await page.evaluate(() => {
+      const section = document.querySelector('[data-section="save"]');
+      const device = section?.querySelector("[data-phone-device]");
+      const screen = section?.querySelector("[data-phone-screen]");
+      const bubbles = section ? [...section.querySelectorAll("[data-s-bubble]")] : [];
+      const delivered = section?.querySelector("[data-s-delivered]");
+      if (!section || !device || !screen || bubbles.length === 0 || !delivered) return null;
+      const secR = section.getBoundingClientRect();
+      const dr = device.getBoundingClientRect();
+      const scr = screen.getBoundingClientRect();
+      const lastR = bubbles[bubbles.length - 1].getBoundingClientRect();
+      const delR = delivered.getBoundingClientRect();
+      const inside = (a, b) =>
+        a.left >= b.left - 1 && a.right <= b.right + 1 && a.top >= b.top - 1 && a.bottom <= b.bottom + 1;
+      return {
+        deviceW: dr.width,
+        clearance: secR.bottom - dr.bottom,
+        lastBubbleInside: inside(lastR, scr),
+        deliveredInside: inside(delR, scr),
+        lastBubbleBottom: lastR.bottom,
+        deliveredBottom: delR.bottom,
+        screenBottom: scr.bottom,
+      };
+    });
+
+    check(
+      83,
+      "section 2 desktop: device bottom >= 24px above the section bottom; last bubble + Delivered fully inside the screen; width >= 340",
+      contain != null &&
+        contain.deviceW >= 340 &&
+        contain.clearance >= 24 &&
+        contain.lastBubbleInside === true &&
+        contain.deliveredInside === true,
+      contain == null
+        ? "section, device, screen, static bubbles, or Delivered not found"
+        : `device width ${contain.deviceW.toFixed(1)}px (need >= 340); bottom clearance ${contain.clearance.toFixed(1)}px ` +
+          `(need >= 24); last bubble inside screen ${contain.lastBubbleInside} (bottom ${contain.lastBubbleBottom.toFixed(1)}), ` +
+          `Delivered inside ${contain.deliveredInside} (bottom ${contain.deliveredBottom.toFixed(1)}) vs screen bottom ${contain.screenBottom.toFixed(1)}`,
     );
 
     const tiles = await page.evaluate(() => {
