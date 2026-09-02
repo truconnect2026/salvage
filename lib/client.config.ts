@@ -29,7 +29,8 @@ export const COPY = {
 
   ledger: {
     screenLabel: "Owner view",
-    monthLabel: "March 2026",
+    // monthLabel removed (change 17, D2): the month is computed at request
+    // time in America/New_York — see lib/dates.ts.
     statusLabel: "Active",
     recoveredLabel: "Recovered",
     lostLabel: "Still lost",
@@ -48,6 +49,9 @@ export const COPY = {
     ringingLabel: "ringing…",
     endedLabel: "Call Ended",
     endLabel: "End",
+    // change 17 (A1, APPROVED): the six-button iOS in-call grid, in iOS's
+    // own casing. Non-interactive scenery.
+    grid: ["mute", "keypad", "speaker", "add call", "FaceTime", "contacts"],
   },
 
   // The owner-side notification card (change 10). Approved copy. nowLabel is
@@ -110,9 +114,13 @@ export const COPY = {
 
   // Phone / OG chrome. Same human veto as everything else in this file.
   chrome: {
+    // change 17 (C3, APPROVED): prefixes thread[0].time only.
+    todayPrefix: "Today ",
     phone: {
       statusTime: "8:47",
-      lockDate: "Thursday, March 14",
+      // change 17 (D1, APPROVED): March 14, 2026 is a Saturday; the
+      // thread's weekday evening needs a weekday date.
+      lockDate: "Thursday, March 12",
       threadLabel: "Text message",
       deliveredLabel: "Delivered",
     },

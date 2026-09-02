@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Ledger from "@/components/Ledger";
 import Phone, { NotifyCard } from "@/components/Phone";
 import { COPY, MAX_NAME_LEN, PRESETS, SHARE_ORIGIN, resolveName, type Preset } from "@/lib/client.config";
+import { type LedgerDates } from "@/lib/dates";
 import { usd } from "@/lib/format";
 import {
   BANNER_AT,
@@ -655,9 +656,12 @@ function ChevronGlyph() {
 export default function Demo({
   initialPresetId,
   initialName = "",
+  dates,
 }: {
   initialPresetId: string;
   initialName?: string;
+  /* change 17 (D2): request-time ledger dates, computed server-side. */
+  dates?: LedgerDates;
 }) {
   const [presetId, setPresetId] = useState(initialPresetId);
   const [share, setShare] = useState<"idle" | "copied" | "manual">("idle");
@@ -780,6 +784,27 @@ export default function Demo({
       root.dataset.t = "settled";
       return;
     }
+
+    /* change 17 (E1): the phone screens and the section-1 scene caption
+       hold at opacity 0 until the fonts have settled, then fade in over
+       200ms — nothing pops mid-glyph-swap. Reduced motion never hides
+       (the branch above already returned); no-JS never hides (these
+       styles are set here, client-side, not in the SSR markup). */
+    const fontFade = [
+      ...root.querySelectorAll<HTMLElement>("[data-phone-screen]"),
+      ...root.querySelectorAll<HTMLElement>("[data-scene]"),
+    ];
+    /* Hide INSTANTLY (this layout effect runs before the hydration paint,
+       so the SSR frame never flashes), then transition only the fade-IN. */
+    fontFade.forEach((el) => {
+      el.style.opacity = "0";
+    });
+    void document.fonts.ready.then(() => {
+      fontFade.forEach((el) => {
+        el.style.transition = "opacity 200ms ease";
+        el.style.opacity = "1";
+      });
+    });
 
     park(ctx);
 
@@ -1334,7 +1359,7 @@ export default function Demo({
                   <NotifyCard bizName={bizName} entry={preset.caught[0]} />
                 </div>
                 <div data-ledger-panel className="w-full">
-                  <Ledger preset={preset} bizName={bizName} />
+                  <Ledger preset={preset} bizName={bizName} dates={dates} />
                 </div>
               </div>
             </div>

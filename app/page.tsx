@@ -1,5 +1,6 @@
 import Demo from "@/components/Demo";
 import { COPY, resolveName, resolvePreset } from "@/lib/client.config";
+import { ledgerDates } from "@/lib/dates";
 
 /*
  * Server component. The causal chain starts here:
@@ -22,6 +23,10 @@ export default async function Home({
   const sp = await searchParams;
   const preset = resolvePreset(sp.biz);
   const initialName = resolveName(sp.name);
+  /* change 17 (D2): request-time ledger dates, America/New_York. Computed
+     here — the one server component — and passed down so the client
+     hydrates the same strings. */
+  const dates = ledgerDates();
 
   return (
     <>
@@ -50,7 +55,7 @@ export default async function Home({
         <p className="text-[15px] text-ink">{COPY.rotatePrompt}</p>
       </div>
 
-      <Demo initialPresetId={preset.id} initialName={initialName} />
+      <Demo initialPresetId={preset.id} initialName={initialName} dates={dates} />
     </>
   );
 }

@@ -534,6 +534,7 @@ const BROWSER_GATES = [
   74, 76, 77, 78, 79, 80, 81, 82, 83,
   84, 85, 86, 87, 88, 89, 90,
   91, 92, 93, 94, 95, 96, 97, 98, 99, 100,
+  101, 102, 103, 104, 105, 106, 107, 108,
 ];
 
 if (!chromium) {
@@ -3416,6 +3417,259 @@ if (!chromium) {
         )
         .join(" | "),
     );
+  });
+
+  /* --- 101 + 102 + 103 + 105 + 106: change 17 — glass and aluminum. --- */
+  await block("device-17", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+
+    /* Call-screen pass: sample while the call is still ringing. */
+    await waitT(page, 0.8);
+    const g101 = await page.evaluate(() => {
+      const sec1 = document.querySelector('[data-section="call"]');
+      const screen = sec1?.querySelector("[data-phone-screen]");
+      /* RENDERED buttons only — a display:none grid is not a grid. */
+      const buttons = sec1
+        ? [...sec1.querySelectorAll("[data-call-grid-btn]")].filter(
+            (b) => b.getBoundingClientRect().width > 0,
+          )
+        : [];
+      const end = sec1?.querySelector("[data-call-end-btn]");
+      const name = sec1?.querySelector("[data-call-biz]");
+      const status = sec1?.querySelector("[data-call-status]");
+      if (!screen || !end || !name || !status) return null;
+      const sr = screen.getBoundingClientRect();
+      const zoom = sr.width / 390;
+      const er = end.getBoundingClientRect();
+      const nr = name.getBoundingClientRect();
+      const str = status.getBoundingClientRect();
+      return {
+        buttons: buttons.length,
+        endGapDesign: (sr.bottom - er.bottom) / zoom,
+        centerDeltaDesign: Math.abs((nr.left + nr.right) / 2 - (str.left + str.right) / 2) / zoom,
+      };
+    });
+    check(
+      101,
+      "call screen: exactly 6 grid buttons; End circle bottom 64±8px above the screen bottom (design scale); name and status centers within 2px",
+      g101 != null &&
+        g101.buttons === 6 &&
+        Math.abs(g101.endGapDesign - 64) <= 8 &&
+        g101.centerDeltaDesign <= 2,
+      g101 == null
+        ? "call screen nodes not found"
+        : `${g101.buttons} grid button(s) (need 6); End gap ${g101.endGapDesign.toFixed(1)}px design (need 64±8); ` +
+          `name/status center delta ${g101.centerDeltaDesign.toFixed(2)}px (need <= 2)`,
+    );
+
+    const g102 = await page.evaluate(() => {
+      const dev = document.querySelector('[data-section="call"] [data-phone-device]');
+      const screen = dev?.querySelector("[data-phone-screen]");
+      if (!dev || !screen) return null;
+      const sr = screen.getBoundingClientRect();
+      const nubs = [...dev.querySelectorAll("[data-nub]")];
+      const outside = nubs.every((n) => {
+        const r = n.getBoundingClientRect();
+        return r.right <= sr.left + 0.5 || r.left >= sr.right - 0.5;
+      });
+      const spec = dev.querySelector("[data-specular]");
+      const streak = dev.querySelector("[data-screen-streak]");
+      return {
+        nubs: nubs.length,
+        outside,
+        specular: spec ? getComputedStyle(spec).pointerEvents : null,
+        streak: streak ? getComputedStyle(streak).pointerEvents : null,
+      };
+    });
+    check(
+      102,
+      "3 nub elements with boxes outside the screen area; bezel specular + screen streak present with pointer-events none",
+      g102 != null &&
+        g102.nubs === 3 &&
+        g102.outside === true &&
+        g102.specular === "none" &&
+        g102.streak === "none",
+      g102 == null
+        ? "device nodes not found"
+        : `${g102.nubs} nub(s) (need 3), outside screen ${g102.outside}; specular pointer-events ${JSON.stringify(g102.specular)}, ` +
+          `streak ${JSON.stringify(g102.streak)} (both need "none")`,
+    );
+
+    /* Banner pass: t=4.8, the banner is landed and clamped. */
+    await waitT(page, 4.8);
+    const g103 = await page.evaluate(() => {
+      const sec1 = document.querySelector('[data-section="call"]');
+      const body = sec1?.querySelector("[data-banner-body]");
+      const banner = sec1?.querySelector("[data-banner]");
+      const notch = sec1?.querySelector("[data-notch]");
+      if (!body || !banner || !notch) return null;
+      const lh = parseFloat(getComputedStyle(body).lineHeight);
+      const lines = Math.round(body.getBoundingClientRect().height / (lh * (body.getBoundingClientRect().width / body.offsetWidth)));
+      const br = banner.getBoundingClientRect();
+      const nr = notch.getBoundingClientRect();
+      const hit = br.left < nr.right && br.right > nr.left && br.top < nr.bottom && br.bottom > nr.top;
+      return { lines, hit, bannerTop: br.top, notchBottom: nr.bottom };
+    });
+    check(
+      103,
+      "banner body renders exactly 2 line boxes at t=4.8; banner box intersects no notch",
+      g103 != null && g103.lines === 2 && g103.hit === false,
+      g103 == null
+        ? "banner nodes not found"
+        : `${g103.lines} line box(es) (need 2); banner top ${g103.bannerTop.toFixed(1)} vs notch bottom ${g103.notchBottom.toFixed(1)}, ` +
+          `intersects ${g103.hit} (need false)`,
+    );
+
+    /* Settled pass: bubbles + mask. */
+    await waitT(page, 6.0);
+    const g105 = await page.evaluate(() => {
+      const sec1 = document.querySelector('[data-section="call"]');
+      const bubble = sec1?.querySelector('[data-bubble="business"]');
+      const screen = sec1?.querySelector("[data-phone-screen]");
+      const vp = sec1?.querySelector("[data-thread-viewport]");
+      if (!bubble || !screen || !vp) return null;
+      const lum = (c) => {
+        const m = c.match(/\d+(\.\d+)?/g).map(Number);
+        const f = (v) => {
+          const s = v / 255;
+          return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+        };
+        return 0.2126 * f(m[0]) + 0.7152 * f(m[1]) + 0.0722 * f(m[2]);
+      };
+      const bb = getComputedStyle(bubble).backgroundColor;
+      const sb = getComputedStyle(screen).backgroundColor;
+      const l1 = lum(bb);
+      const l2 = lum(sb);
+      const ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+      const cs = getComputedStyle(vp);
+      const mask = cs.maskImage !== "none" ? cs.maskImage : cs.webkitMaskImage;
+      return { bb, sb, ratio, mask };
+    });
+    check(
+      105,
+      "business bubble computed bg sits >= 2 luminance steps over the screen ground (contrast ratio >= 1.4)",
+      g105 != null && g105.ratio >= 1.4,
+      g105 == null
+        ? "bubble/screen not found"
+        : `bubble ${g105.bb} vs screen ${g105.sb} -> contrast ${g105.ratio.toFixed(3)} (need >= 1.4)`,
+    );
+    check(
+      106,
+      "thread container has a mask-image",
+      g105 != null && g105.mask != null && g105.mask !== "none",
+      g105 == null ? "thread viewport not found" : `mask-image ${String(g105.mask).slice(0, 80)}`,
+    );
+    await ctx.close();
+  });
+
+  /* --- 104: the dates are real — config weekday, request-time month/rows. --- */
+  await block("dates-17", async () => {
+    const lockDate = need(/lockDate:\s*"([^"]+)"/, "COPY.chrome.phone.lockDate");
+    const NY = "America/New_York";
+    const now = new Date();
+    const wantMonth = new Intl.DateTimeFormat("en-US", { timeZone: NY, month: "long", year: "numeric" }).format(now);
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: NY, year: "numeric", month: "numeric", day: "numeric" }).formatToParts(now);
+    const num = (t) => Number(parts.find((p) => p.type === t).value);
+    const wantRow0 = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(
+      new Date(num("year"), num("month") - 1, num("day")),
+    );
+    const page = await getPage("");
+    const month = elementsIn(page.html, "data-ledger-month");
+    const row0Date = elementsIn(page.html, 'data-caught-date="0"');
+    check(
+      104,
+      `lockDate === "Thursday, March 12"; ledger month === gate-computed ${wantMonth}; row[0] date === today (${wantRow0})`,
+      lockDate === "Thursday, March 12" &&
+        month.length === 1 &&
+        month[0] === wantMonth &&
+        row0Date.length === 1 &&
+        row0Date[0] === wantRow0,
+      `config lockDate ${JSON.stringify(lockDate)}; rendered month ${JSON.stringify(month[0] ?? null)} (want ${JSON.stringify(wantMonth)}); ` +
+        `row[0] date ${JSON.stringify(row0Date[0] ?? null)} (want ${JSON.stringify(wantRow0)})`,
+    );
+  });
+
+  /* --- 107: nothing pops — screens hold at 0 until fonts.ready. --- */
+  await block("fonts-17", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await ctx.newPage();
+    await page.addInitScript(() => {
+      let release;
+      const held = new Promise((r) => {
+        release = r;
+      });
+      window.__releaseFonts = release;
+      Object.defineProperty(FontFaceSet.prototype, "ready", {
+        get() {
+          return held;
+        },
+        configurable: true,
+      });
+    });
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await waitHydrated(page);
+    const before = await page.evaluate(
+      () => getComputedStyle(document.querySelector('[data-section="call"] [data-phone-screen]')).opacity,
+    );
+    await page.evaluate(() => window.__releaseFonts());
+    await page.waitForTimeout(500);
+    const after = await page.evaluate(
+      () => getComputedStyle(document.querySelector('[data-section="call"] [data-phone-screen]')).opacity,
+    );
+    check(
+      107,
+      "phone screen opacity 0 before fonts.ready (held stub) and 1 after it resolves",
+      before === "0" && after === "1",
+      `before ${JSON.stringify(before)} (need "0"), after ${JSON.stringify(after)} (need "1")`,
+    );
+    await ctx.close();
+  });
+
+  /* --- 108: the Lighthouse budget, live URL only. Local runs cannot stand
+         in for the deployed CDN path, so the gate asserts only against
+         https bases; the deploy step's live re-gate is where it bites. --- */
+  await block("perf-17", async () => {
+    if (!base.startsWith("https://")) {
+      check(
+        108,
+        "Lighthouse mobile LCP <= 2.5s, CLS <= 0.05",
+        true,
+        "live-only gate: asserted on the deployed URL re-gate, not localhost",
+      );
+      return;
+    }
+    let lighthouse, launcher;
+    try {
+      const req = createRequire(import.meta.url);
+      lighthouse = (await import(req.resolve("lighthouse"))).default;
+      launcher = req("chrome-launcher");
+    } catch (err) {
+      check(108, "Lighthouse mobile LCP <= 2.5s, CLS <= 0.05", false, `lighthouse unavailable: ${err.message}`);
+      return;
+    }
+    const chrome = await launcher.launch({ chromeFlags: ["--headless=new", "--no-sandbox"] });
+    try {
+      const result = await lighthouse(base + "/", {
+        port: chrome.port,
+        onlyCategories: ["performance"],
+        output: "json",
+      });
+      const a = result.lhr.audits;
+      const lcp = a["largest-contentful-paint"].numericValue;
+      const cls = a["cumulative-layout-shift"].numericValue;
+      check(
+        108,
+        "Lighthouse mobile (Moto G Power, slow 4G): LCP <= 2.5s, CLS <= 0.05",
+        lcp <= 2500 && cls <= 0.05,
+        `LCP ${(lcp / 1000).toFixed(2)}s (need <= 2.5s), CLS ${cls.toFixed(3)} (need <= 0.05), ` +
+          `perf score ${Math.round((result.lhr.categories.performance?.score ?? 0) * 100)}`,
+      );
+    } finally {
+      await chrome.kill();
+    }
   });
 
   await browser.close();

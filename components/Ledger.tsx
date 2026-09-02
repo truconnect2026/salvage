@@ -1,5 +1,6 @@
 import { MissedCallGlyph } from "@/components/Phone";
 import { COPY, type Preset } from "@/lib/client.config";
+import { type LedgerDates } from "@/lib/dates";
 import { usd } from "@/lib/format";
 
 /**
@@ -16,6 +17,7 @@ export default function Ledger({
   preset,
   bizName,
   compact = false,
+  dates,
 }: {
   preset: Preset;
   /* The effective business name (custom or preset default) — change 10's
@@ -24,6 +26,9 @@ export default function Ledger({
   /* Tighter, larger-type rendering for the OG thumbnail: legible at 500px
      wide beats "looks right at full size", and the frame is short on height. */
   compact?: boolean;
+  /* change 17 (D2): request-time month + row dates (America/New_York),
+     computed server-side. The compact OG variant renders neither. */
+  dates?: LedgerDates;
 }) {
   const [row0, ...rest] = preset.caught;
   const headerName = bizName ?? preset.bizName;
@@ -56,7 +61,11 @@ export default function Ledger({
               the docked owner card, so the caption layer (month, tile
               captions, review note) yields — same policy the OG compact
               variant has always used. Nothing data-bearing is hidden. */}
-          {!compact && <div className="mt-0.5 hidden text-[12px] text-muted min-[500px]:block">{L.monthLabel}</div>}
+          {!compact && dates && (
+            <div data-ledger-month className="mt-0.5 hidden text-[12px] text-muted min-[500px]:block">
+              {dates.month}
+            </div>
+          )}
         </div>
         <span className="shrink-0 whitespace-nowrap rounded-full border border-teal/50 bg-teal/10 px-3 py-1 text-[11px] font-medium text-teal-bright">
           {L.statusLabel}
@@ -157,9 +166,9 @@ export default function Ledger({
         className={`overflow-hidden rounded-tl-none rounded-tr-xl rounded-br-xl rounded-bl-xl border border-line ${compact ? "mt-1.5" : "mt-2 min-[500px]:mt-3"}`}
       >
         <div className="divide-y divide-line">
-          <CaughtRow index={0} entry={row0} compact={compact} />
+          <CaughtRow index={0} entry={row0} compact={compact} date={dates?.rows[0]} />
           {rest.map((entry, i) => (
-            <CaughtRow key={i + 1} index={i + 1} entry={entry} compact={compact} />
+            <CaughtRow key={i + 1} index={i + 1} entry={entry} compact={compact} date={dates?.rows[i + 1]} />
           ))}
         </div>
       </div>
@@ -190,10 +199,14 @@ function CaughtRow({
   index,
   entry,
   compact,
+  date,
 }: {
   index: number;
   entry: Preset["caught"][number];
   compact: boolean;
+  /* change 17 (D2): the request-time date; the preset's stored date string
+     is the no-dates fallback (OG compact never shows either). */
+  date?: string;
 }) {
   /* Row [0] is the call the phone just closed — SSR carries its highlight
      from the first paint, not only once the playback engine slides it in. */
@@ -236,7 +249,7 @@ function CaughtRow({
         >
           {usd(entry.amount)}
         </div>
-        {!compact && <div className="mt-0.5 text-[11px] text-muted">{entry.date}</div>}
+        {!compact && <div data-caught-date={index} className="mt-0.5 text-[11px] text-muted">{date ?? entry.date}</div>}
       </div>
     </div>
   );

@@ -4,7 +4,10 @@
   --color-abyss: #060B14;
   --color-surface: #0F1E33;
   --color-surface-2: #162A44;
-  --color-surface-3: #1D3655;
+  /* change 17 (C4): one step lighter than change 13's #1D3655 — the
+     business bubble reads as glass over the screen ground only past a
+     1.4:1 contrast ratio (gate 105 measured the old value at 1.365). */
+  --color-surface-3: #1E3A5C;
   --color-line: #22384F;
   --color-teal: #2CC7B6;
   --color-teal-bright: #74E9DC;
@@ -121,6 +124,15 @@ body {
     max-width: min(390px, calc((100dvh - 140px) * 9 / 19.5));
   }
 }
+/* change 17 review (WebKit 375x667): on short phones the 140px reserve
+   left the Replay pill sitting ON the bezel's bottom-left corner — the
+   reserve grows to clear the control band too. */
+@media (max-width: 1099.98px) and (max-height: 720px) {
+  [data-section="call"] [data-phone-device] {
+    max-width: min(390px, calc((100vh - 220px) * 9 / 19.5));
+    max-width: min(390px, calc((100dvh - 220px) * 9 / 19.5));
+  }
+}
 
 /* change 16 (A1): every phone SCREEN lays out at a 390px design width and
    zooms to the rendered device width as one unit — change 14's screenshot
@@ -141,19 +153,39 @@ body {
   zoom: calc(100cqw / 390px);
 }
 
+/* change 17 (C2): the live thread fades out under the contact header the
+   way a scrolled Messages thread does — a 40px mask ramp at the top of the
+   thread container. */
+[data-thread-viewport] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 40px);
+  mask-image: linear-gradient(to bottom, transparent, #000 40px);
+}
+
 /* change 16 (B3): the mobile save-section stack (owner card + ledger)
-   zooms to FIT its column instead of stepping through the change-12 zoom
-   ladder — laid out at a fixed 342px design width, scaled by whichever is
-   tighter: the column's height against the stack's ~612px natural height
-   (measured at 342px wide, plus slack), the column's width, or 1. The
-   ledger's last line stays >= 16px above the viewport bottom (gate 95). */
+   scales to FIT its column instead of stepping through the change-12 zoom
+   ladder — laid out at a fixed 342px design width and 578px natural
+   height, then transform-scaled by whichever is tighter: column height,
+   column width, or 1. transform, NOT zoom: WebKit's legacy zoom rounds
+   small font sizes up and inflates the zoomed subtree (measured 2x its
+   expected height at SE-class factors) — a geometric scale renders
+   exactly height x factor in every engine, so the ledger's last line
+   holds >= 16px above the viewport bottom (gate 95). The first transform
+   line is the no-container-query floor (iOS 15); plain two-length
+   divisions only — WebKit drops the declaration when the numerator is a
+   calc() sum. */
 @media (max-width: 1099.98px) {
   [data-save-fit] {
     container-type: size;
+    position: relative;
   }
   [data-save-stack] {
+    position: absolute;
+    top: 50%;
+    left: 50%;
     width: 342px;
-    zoom: min(calc(100cqh / 590px), calc(100cqw / 342px), 1);
+    transform: translate(-50%, -50%) scale(0.82);
+    transform: translate(-50%, -50%)
+      scale(min(calc(100cqh / 590px), calc(100cqw / 342px), 1));
   }
 }
 

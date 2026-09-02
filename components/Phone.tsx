@@ -89,6 +89,72 @@ export function MissedCallGlyph() {
   );
 }
 
+/* change 17 (A1): hand-written glyphs for the six-button in-call grid.
+   28px, currentColor, no icon library. Scenery, not controls. */
+function CallGridGlyph({ kind }: { kind: string }) {
+  const common = {
+    width: 28,
+    height: 28,
+    viewBox: "0 0 28 28",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+  };
+  switch (kind) {
+    case "mute":
+      return (
+        <svg {...common}>
+          <rect x="11" y="4" width="6" height="12" rx="3" fill="currentColor" stroke="none" />
+          <path d="M7 13a7 7 0 0 0 14 0" />
+          <path d="M14 20v4M10 24h8" />
+          <path d="M5 3l18 22" />
+        </svg>
+      );
+    case "keypad":
+      return (
+        <svg {...common} fill="currentColor" stroke="none">
+          {[6, 12, 18, 24].map((y) =>
+            [8, 14, 20].map((x) => <circle key={`${x}${y}`} cx={x} cy={y - 2} r="2" />),
+          )}
+        </svg>
+      );
+    case "speaker":
+      return (
+        <svg {...common}>
+          <path d="M5 11v6h4l6 5V6l-6 5H5z" fill="currentColor" stroke="none" />
+          <path d="M18.5 10.5a5 5 0 0 1 0 7" />
+          <path d="M21.5 8a9 9 0 0 1 0 12" />
+        </svg>
+      );
+    case "add call":
+      return (
+        <svg {...common}>
+          <circle cx="11" cy="9.5" r="4" fill="currentColor" stroke="none" />
+          <path d="M4 23c0-4 3.2-6 7-6s7 2 7 6" fill="currentColor" stroke="none" />
+          <path d="M22 8v8M18 12h8" />
+        </svg>
+      );
+    case "FaceTime":
+      return (
+        <svg {...common}>
+          <rect x="3" y="8" width="14" height="12" rx="3" fill="currentColor" stroke="none" />
+          <path d="M17 12.5l8-4.5v12l-8-4.5z" fill="currentColor" stroke="none" />
+        </svg>
+      );
+    default:
+      /* contacts */
+      return (
+        <svg {...common}>
+          <circle cx="14" cy="10" r="4.5" fill="currentColor" stroke="none" />
+          <path d="M5 24c0-5 4-7.5 9-7.5s9 2.5 9 7.5" fill="currentColor" stroke="none" />
+        </svg>
+      );
+  }
+}
+
 /* Filled hang-up handset for the call screen's End button. */
 function HandsetGlyph() {
   return (
@@ -157,7 +223,7 @@ function TypingRow({ index, right }: { index: number; right: boolean }) {
     <div data-typing={index} className={`mt-2 hidden ${right ? "justify-end" : "justify-start"}`}>
       <div
         className={`flex items-center gap-[5px] rounded-[20px] px-3.5 py-3 ${
-          right ? "bg-teal" : "bg-surface-2"
+          right ? "bg-teal" : "bg-surface-3"
         }`}
       >
         {[0, 1, 2].map((d) => (
@@ -204,10 +270,11 @@ function CallScreen({ preset, bizName }: { preset: Preset; bizName: string }) {
         <StatusGlyphs />
       </div>
 
-      {/* Upper third: who she's calling, and how it's going. */}
+      {/* Upper third: who she's calling, and how it's going. change 17
+          (A2): flat avatar, system-stack semibold initials, no gradient. */}
       <div className="flex w-full flex-col items-center pt-20">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-surface-2">
-          <span className="text-[22px] font-medium text-muted">{initialsOf(bizName)}</span>
+          <span className="text-[22px] font-semibold text-muted">{initialsOf(bizName)}</span>
         </div>
         <div data-call-biz className="mt-4 text-[26px] font-medium leading-tight text-ink">
           {bizName}
@@ -215,6 +282,20 @@ function CallScreen({ preset, bizName }: { preset: Preset; bizName: string }) {
         <div data-call-status className="mt-1.5 text-[14px] text-muted">
           <span data-call-status-stem>{COPY.call.callingLabel.replace(/…$/, "")}</span>
           <span data-call-dots>…</span>
+        </div>
+
+        {/* change 17 (A1): the six-button iOS in-call grid. Scenery — it
+            never takes a tap; the demo's one live control on this screen
+            stays the (equally decorative) End button. */}
+        <div data-call-grid className="pointer-events-none mt-14 grid grid-cols-3 gap-x-9 gap-y-5">
+          {COPY.call.grid.map((label) => (
+            <div key={label} data-call-grid-btn className="flex w-[72px] flex-col items-center gap-1.5">
+              <span className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-white/20 text-white">
+                <CallGridGlyph kind={label} />
+              </span>
+              <span className="whitespace-nowrap text-[12px] text-white/85">{label}</span>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -225,20 +306,25 @@ function CallScreen({ preset, bizName }: { preset: Preset; bizName: string }) {
         style={{ opacity: 0 }}
       />
 
-      {/* One red End button. It never gets the chance to matter. */}
-      <div data-call-end className="absolute inset-x-0 bottom-14 flex flex-col items-center gap-2">
-        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#FF3B30] text-white">
+      {/* One red End button. It never gets the chance to matter. change 17
+          (A1): the circle's bottom edge sits 64px above the screen bottom
+          at design scale (gate 101). */}
+      <div data-call-end className="absolute inset-x-0 bottom-[38px] flex flex-col items-center gap-2">
+        <span data-call-end-btn className="flex h-14 w-14 items-center justify-center rounded-full bg-[#FF3B30] text-white">
           <HandsetGlyph />
         </span>
         <span className="text-[12px] text-white/90">{COPY.call.endLabel}</span>
       </div>
 
       {/* The banner beat (step 2): the business's text arrives as an iOS
-          notification banner sliding down over the dead call screen. 12px
-          inset; blurred-dark card; first ~80 chars of the auto-text. */}
+          notification banner sliding down over the dead call screen.
+          change 17 (C1): top edge 8px below the 36px status row — clear of
+          the notch at every width — title one line, body clamped to TWO
+          lines with the ellipsis on line two (the full approved text stays
+          in the DOM; the clamp is visual). */}
       <div
         data-banner
-        className="absolute inset-x-3 top-3 z-40"
+        className="absolute inset-x-3 top-[44px] z-40"
         style={{ transform: "translateY(-140%)", opacity: 0 }}
       >
         <div
@@ -256,8 +342,17 @@ function CallScreen({ preset, bizName }: { preset: Preset; bizName: string }) {
                 <span className="truncate text-[14px] font-semibold text-ink">{bizName}</span>
                 <span className="ml-auto shrink-0 text-[11px] text-muted">{COPY.notify.nowLabel}</span>
               </div>
-              <div className="truncate text-[13px] leading-snug text-muted">
-                {preset.thread[0].text.slice(0, 80)}…
+              <div
+                data-banner-body
+                className="text-[13px] leading-snug text-muted"
+                style={{
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                }}
+              >
+                {preset.thread[0].text}
               </div>
             </div>
           </div>
@@ -393,6 +488,9 @@ export default function Phone({
                   >
                     {senderChange && (
                       <div className="pb-1.5 pt-2 text-center text-[11px] tabular-nums text-muted">
+                        {/* change 17 (C3): "Today " before the thread's
+                            opening timestamp only — iOS's day marker. */}
+                        {i === 0 && <span className="font-semibold">{COPY.chrome.todayPrefix}</span>}
                         {b.time}
                       </div>
                     )}
@@ -416,7 +514,7 @@ export default function Phone({
                       <div className="flex justify-start">
                         <div
                           {...markEither("data-bubble", "data-s-bubble", "business")}
-                          className={`max-w-[72%] rounded-[20px] bg-surface-2 px-[14px] py-2 text-[17px] leading-[1.29] text-ink ${
+                          className={`max-w-[72%] rounded-[20px] bg-surface-3 px-[14px] py-2 text-[17px] leading-[1.29] text-ink ${
                             runEnd ? "rounded-bl-[6px]" : ""
                           }`}
                         >
@@ -482,6 +580,15 @@ export default function Phone({
 
       {/* Home indicator. Muted, low-alpha: chrome, not content. */}
       <div className="absolute bottom-2 left-1/2 z-50 h-1.25 w-35 -translate-x-1/2 rounded-full bg-muted/30" />
+
+      {/* change 17 (B2): one diagonal specular streak over the glass —
+          above everything, catching no pointer. Subtle by construction. */}
+      <div
+        aria-hidden="true"
+        data-screen-streak
+        className="pointer-events-none absolute inset-0 z-[60]"
+        style={{ background: "linear-gradient(115deg, rgba(255,255,255,0.03) 0%, transparent 22%)" }}
+      />
     </>
   );
 
@@ -524,10 +631,32 @@ export default function Phone({
       {...(live ? {} : { "data-phone-static": true })}
       className="relative mx-auto aspect-[9/19.5] w-full max-w-[390px] shrink-0"
     >
+      {/* change 17 (B1): hardware nubs — two volume (44px, 14px gap) left,
+          one power (64px) right, 6px proud of the frame, one step lighter
+          than the bezel. Aluminum, not UI. */}
+      <div aria-hidden="true" data-nub className="absolute -left-1.5 top-[168px] h-11 w-1.5 rounded-l-[3px] bg-[#0D1626]" />
+      <div aria-hidden="true" data-nub className="absolute -left-1.5 top-[226px] h-11 w-1.5 rounded-l-[3px] bg-[#0D1626]" />
+      <div aria-hidden="true" data-nub className="absolute -right-1.5 top-[186px] h-16 w-1.5 rounded-r-[3px] bg-[#0D1626]" />
+
       <div
         className="absolute inset-0 rounded-[56px] bg-[#05090F] p-3 ring-1 ring-inset ring-line/60"
         style={bezelShadow}
       >
+        {/* change 17 (B1): 1px inner specular — white 8% fading out along
+            the top and left edges only, drawn as a masked gradient border. */}
+        <div
+          aria-hidden="true"
+          data-specular
+          className="pointer-events-none absolute inset-0 z-10 rounded-[56px]"
+          style={{
+            padding: 1,
+            background: "linear-gradient(135deg, rgba(255,255,255,0.08), transparent 55%)",
+            WebkitMask: "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
+            WebkitMaskComposite: "xor",
+            mask: "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
+            maskComposite: "exclude",
+          }}
+        />
         <div data-screen-fit className="flex h-full items-center justify-center">
           <div
             data-phone-screen
