@@ -43,3 +43,21 @@ Traced clean: the 150ms name debounce and 2000ms share reset drive React
 state only (no frames scheduled); the swap transition is stamped from the rAF
 timestamp (same time base); the IntersectionObserver is event-driven, not a
 clock; the shimmer overlay has a single writer and cannot stick mid-sweep.
+
+## Change 11 — adversarial review (1 lens)
+
+Lens: from t=0 to settled, is every element on the phone screen something the
+CUSTOMER would see on HER phone?
+
+| # | Finding | Verdict |
+|---|---------|---------|
+| 1 | The in-phone notification card was the OWNER's alert verbatim — Salvage app identity, ledger row content, owner framing — on the customer's screen. | **Fixed.** The phone instance is now the business's booking confirmation: Messages identity, sender = bizName, body `Booked · {detail} · ${amount}` (existing approved strings recomposed — no new copy). The owner's Salvage card is unchanged and lives only on the ledger side, where it belongs. Gate 51's retained assertions (bizName + amount inside the screen) still hold. |
+| 2 | The card slid up from the bottom edge — no iOS push does that; it read as the owner's dashboard toast overlaid on her phone. | **Fixed.** It now slides down from the top inset, like the Messages banner before it. Gate 51 asserts in-screen containment, not edge, so no gate was weakened. |
+| 3 | A typing indicator preceded bubble 0 — the same message the banner had already delivered. On her phone a banner means delivered. | **Fixed.** BEATS[0] = 0 (the auto-text is already in the thread when the crossfade lands), typing entry for bubble 0 removed, gate 12's expectation table updated (1 bubble visible at the first sample). |
+| 4 | A latent TYPING entry for bubble 1 (her own message) could render a self-typing indicator if ever enabled. | **Fixed.** Deleted; TYPING now carries only the business's second message. |
+
+Verified clean by the reviewer: bubble orientation (hers right/teal outgoing,
+business left/gray incoming), typing indicator side, Delivered under her final
+outgoing bubble, contact header identity, the call screen (nothing
+owner-flavored), the banner's sender and content, and no owner-addressed copy
+anywhere inside the phone.

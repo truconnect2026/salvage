@@ -7,20 +7,23 @@ import Phone, { NotifyCard } from "@/components/Phone";
 import { COPY, MAX_NAME_LEN, PRESETS, SHARE_ORIGIN, resolveName, type Preset } from "@/lib/client.config";
 import { usd } from "@/lib/format";
 import {
+  BANNER_AT,
+  BANNER_IN,
   BEATS,
   BUBBLE_ENTER,
   BUBBLE_RISE,
+  CALL_END_FADE_DUR,
+  CALL_ENDED_AT,
+  CALL_RINGING_AT,
   CAUGHT_ROW_RISE,
   CONTROLS_AT,
   CONTROLS_FADE,
   DELIVERED_AT,
+  DOT_PERIOD,
   HEADLINE_AT,
   HEADLINE_DUR,
   HEADLINE_RISE,
-  LOCK_COLLAPSE_DUR,
-  LOCK_MISS_AT,
   LOOP_UNTIL,
-  RING_PERIOD,
   SHIMMER_AT,
   SHIMMER_DUR,
   SWAP_FADE,
@@ -36,6 +39,13 @@ import {
   notifyPresence,
   panelRecoveredAt,
 } from "@/lib/timeline";
+
+/* The status line's animated ellipsis renders stem + dots separately; the
+   stems come from the approved copy with the literal ellipsis stripped. */
+const CALL_STEMS = {
+  calling: COPY.call.callingLabel.replace(/…$/, ""),
+  ringing: COPY.call.ringingLabel.replace(/…$/, ""),
+};
 
 /* ---------------------------------------------------------------------------
  * The playback engine lives outside React on purpose. It is imperative DOM
@@ -60,11 +70,12 @@ type Nodes = {
   ledgerPanel: HTMLElement | null;
   caughtRow0: HTMLElement | null;
   panelRecovered: HTMLElement | null;
-  lock: HTMLElement | null;
-  lockCall: HTMLElement | null;
-  lockRing: HTMLElement | null;
-  lockDim: HTMLElement | null;
-  lockMissed: HTMLElement | null;
+  call: HTMLElement | null;
+  callStatusStem: HTMLElement | null;
+  callDots: HTMLElement | null;
+  callDim: HTMLElement | null;
+  callEnd: HTMLElement | null;
+  banner: HTMLElement | null;
   headline: HTMLElement | null;
   notifyPhone: HTMLElement | null;
   notifyLedger: HTMLElement | null;
@@ -92,6 +103,9 @@ type Ctx = {
   transition: Transition | null;
   raf: number | null;
   reduced: boolean;
+  /* >=1100px: the headline is present from load; below, it lands at 3.6s.
+     Read per frame — cheap, and it tracks window resizes for free. */
+  desktopMq: MediaQueryList;
   setPresetId: (id: string) => void;
 };
 
@@ -113,11 +127,12 @@ function collect(root: HTMLElement): Nodes {
     ledgerPanel: q("[data-ledger-panel]"),
     caughtRow0: q('[data-caught-row="0"]'),
     panelRecovered: q("[data-panel-recovered]"),
-    lock: q("[data-lock]"),
-    lockCall: q("[data-lock-call]"),
-    lockRing: q("[data-lock-ring]"),
-    lockDim: q("[data-lock-dim]"),
-    lockMissed: q("[data-lock-missed]"),
+    call: q("[data-call]"),
+    callStatusStem: q("[data-call-status-stem]"),
+    callDots: q("[data-call-dots]"),
+    callDim: q("[data-call-dim]"),
+    callEnd: q("[data-call-end]"),
+    banner: q("[data-banner]"),
     headline: q("[data-headline]"),
     notifyPhone: q("[data-notify-phone]"),
     notifyLedger: q("[data-notify-ledger]"),
@@ -145,42 +160,47 @@ function paintScene(ctx: Ctx, t: number) {
   const n = ctx.nodes;
   const tt = t - THREAD_START;
 
-  /* --- The lock-screen beat (0 .. THREAD_START) --- */
-  if (n.lock) {
-    const lockOn = t < THREAD_START;
-    n.lock.style.display = lockOn ? "flex" : "none";
-    if (lockOn) {
-      /* Crossfade to the thread: the lock is opaque, so fading it out IS the
-         crossfade — the thread is simply revealed beneath. */
-      n.lock.style.opacity = String(1 - clamp01((t - THREAD_FADE_AT) / THREAD_FADE_DUR));
+  /* --- The customer's outgoing call (0 .. THREAD_START) --- */
+  if (n.call) {
+    const callOn = t < THREAD_START;
+    n.call.style.display = callOn ? "flex" : "none";
+    if (callOn) {
+      /* Crossfade to the thread: the call screen is opaque, so fading it out
+         IS the crossfade — the thread is simply revealed beneath. */
+      n.call.style.opacity = String(1 - clamp01((t - THREAD_FADE_AT) / THREAD_FADE_DUR));
 
-      if (n.lockRing) {
-        if (t < LOCK_MISS_AT) {
-          const ph = ((t % RING_PERIOD) + RING_PERIOD) % RING_PERIOD / RING_PERIOD;
-          n.lockRing.style.opacity = String(0.55 * (1 - ph));
-          n.lockRing.style.transform = `scale(${1 + ph * 0.5})`;
-        } else {
-          n.lockRing.style.opacity = "0";
-        }
+      if (n.callStatusStem) {
+        n.callStatusStem.textContent =
+          t < CALL_RINGING_AT
+            ? CALL_STEMS.calling
+            : t < CALL_ENDED_AT
+              ? CALL_STEMS.ringing
+              : COPY.call.endedLabel;
+      }
+      /* The ellipsis: dot count cycles 1-2-3 every DOT_PERIOD, off the same
+         rAF phase. "Call Ended" carries no dots. */
+      if (n.callDots) {
+        n.callDots.textContent =
+          t < CALL_ENDED_AT ? ".".repeat(1 + (Math.floor(t / DOT_PERIOD) % 3)) : "";
       }
 
-      const cp = easeOut(clamp01((t - LOCK_MISS_AT) / LOCK_COLLAPSE_DUR));
-      if (n.lockCall) {
-        n.lockCall.style.opacity = String(1 - cp);
-        n.lockCall.style.transform = `translateY(${-36 * cp}px)`;
-      }
-      if (n.lockDim) n.lockDim.style.opacity = String(0.3 * cp);
-      if (n.lockMissed) {
-        const mp = clamp01((t - (LOCK_MISS_AT + 0.15)) / 0.35);
-        n.lockMissed.style.opacity = String(mp);
-        n.lockMissed.style.transform = `translateY(${(1 - mp) * 8}px)`;
+      const ep = clamp01((t - CALL_ENDED_AT) / CALL_END_FADE_DUR);
+      if (n.callDim) n.callDim.style.opacity = String(0.3 * ep);
+      if (n.callEnd) n.callEnd.style.opacity = String(1 - ep);
+
+      /* The banner beat: the business's text slides down over the dead call. */
+      if (n.banner) {
+        const bp = t < BANNER_AT ? 0 : easeOut(clamp01((t - BANNER_AT) / BANNER_IN));
+        n.banner.style.opacity = String(bp);
+        n.banner.style.transform = `translateY(${(1 - bp) * -140}%)`;
       }
     }
   }
 
-  /* --- The headline lands on the missed-call beat --- */
+  /* --- The headline: from load on desktop, on the call-ended beat on
+         mobile (change 11, step 4) --- */
   if (n.headline) {
-    const hp = easeOut(clamp01((t - HEADLINE_AT) / HEADLINE_DUR));
+    const hp = ctx.desktopMq.matches ? 1 : easeOut(clamp01((t - HEADLINE_AT) / HEADLINE_DUR));
     n.headline.style.opacity = String(hp);
     n.headline.style.transform = `translateY(${(1 - hp) * HEADLINE_RISE}px)`;
   }
@@ -231,11 +251,11 @@ function paintScene(ctx: Ctx, t: number) {
   const np = notifyPresence(t);
   if (n.notifyPhone) {
     n.notifyPhone.style.opacity = String(np);
-    n.notifyPhone.style.transform = `translateY(${(1 - np) * 130}%)`;
+    n.notifyPhone.style.transform = `translateY(${(1 - np) * -140}%)`;
   }
   if (n.notifyLedger) {
     n.notifyLedger.style.opacity = String(np);
-    n.notifyLedger.style.transform = `translate(-50%, ${(1 - np) * -14}px)`;
+    n.notifyLedger.style.transform = `translate(-50%, ${(1 - np) * -24}px)`;
   }
 
   /* --- One shimmer sweep when the gold count-up completes (C5c). rAF-driven,
@@ -386,6 +406,7 @@ export default function Demo({
       transition: null,
       raf: null,
       reduced: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+      desktopMq: window.matchMedia("(min-width: 1100px)"),
       setPresetId,
     };
     ctxRef.current = ctx;
@@ -557,11 +578,11 @@ export default function Demo({
           one named-area grid (.demo-grid, globals.css). Controls and the
           bottom band follow the grid at every width. On desktop the grid is
           the first full-viewport section, centered. */}
-      <div className="demo-grid grid grid-cols-1 items-start min-[900px]:min-h-dvh min-[900px]:content-center min-[900px]:grid-cols-[288px_minmax(420px,1fr)] min-[900px]:gap-x-12 min-[900px]:gap-y-2 min-[1100px]:gap-x-16">
+      <div className="demo-grid grid grid-cols-1 items-start min-[900px]:min-h-dvh min-[900px]:content-center min-[900px]:grid-cols-[288px_minmax(420px,1fr)] min-[900px]:gap-x-12 min-[900px]:gap-y-1 min-[1100px]:grid-cols-[340px_minmax(0,1fr)] min-[1100px]:gap-x-16">
         {/* First frame: the phone. Nothing above it but the page's 24px
             padding on mobile (gate 57). */}
         <div className="[grid-area:phone] flex min-h-[calc(100dvh-48px)] flex-col min-[900px]:block min-[900px]:min-h-0">
-          <Phone preset={preset} bizName={bizName} typingBefore={[0, 1, 2]} />
+          <Phone preset={preset} bizName={bizName} typingBefore={[2]} />
         </div>
 
         {/* The headline lands on the missed-call beat (A3): SSR ships it
@@ -577,45 +598,57 @@ export default function Demo({
           </p>
         </header>
 
-        {/* Their name (B1) + the preset pills (B2). */}
+        {/* Their name (B1) + the preset pills (B2). At >=1100px they share
+            one row (change 11, step 6): input left (flex-1, max 520px),
+            pills right, bottoms aligned; the hint hangs under the input
+            without adding row height; the pills keep their mobile label
+            only below desktop. */}
         <div className="[grid-area:namepre] pb-12 pt-8 min-[900px]:py-0">
-          <label className="block max-w-md">
-            <span className="text-[12px] uppercase tracking-[0.18em] text-muted">{COPY.name.label}</span>
-            <input
-              data-name-input
-              type="text"
-              value={nameInput}
-              onChange={(e) => onNameChange(e.target.value)}
-              placeholder={COPY.name.placeholder}
-              maxLength={MAX_NAME_LEN}
-              autoComplete="off"
-              className="mt-2 min-[900px]:mt-1 block w-full border-x-0 border-b border-t-0 border-solid border-line bg-transparent pb-1.5 font-display text-[22px] text-ink outline-none transition-colors placeholder:text-muted/50 focus:border-teal"
-            />
-          </label>
-          <p className="mt-1.5 text-[12px] text-muted">{COPY.name.hint}</p>
+          <div className="min-[1100px]:flex min-[1100px]:items-end min-[1100px]:gap-10">
+            <div className="min-[1100px]:relative min-[1100px]:max-w-[520px] min-[1100px]:flex-1">
+              <label className="block max-w-md min-[1100px]:max-w-none">
+                <span className="text-[12px] uppercase tracking-[0.18em] text-muted">{COPY.name.label}</span>
+                <input
+                  data-name-input
+                  type="text"
+                  value={nameInput}
+                  onChange={(e) => onNameChange(e.target.value)}
+                  placeholder={COPY.name.placeholder}
+                  maxLength={MAX_NAME_LEN}
+                  autoComplete="off"
+                  className="mt-2 min-[900px]:mt-1 block w-full border-x-0 border-b border-t-0 border-solid border-line bg-transparent pb-1.5 min-[1100px]:pb-1 font-display text-[22px] text-ink outline-none transition-colors placeholder:text-muted/50 focus:border-teal"
+                />
+              </label>
+              <p className="mt-1.5 text-[12px] text-muted min-[1100px]:absolute min-[1100px]:top-full min-[1100px]:mt-1">
+                {COPY.name.hint}
+              </p>
+            </div>
 
-          <div className="mt-6 min-[900px]:mt-2.5">
-            <p className="text-[12px] uppercase tracking-[0.18em] text-muted">{COPY.presetPrompt}</p>
-            <div className="mt-3 min-[1100px]:mt-1.5 flex flex-wrap items-end gap-2.5 border-b border-line pb-1">
-              {PRESETS.map((p) => {
-                const active = p.id === preset.id;
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    data-preset={p.id}
-                    aria-pressed={active}
-                    onClick={() => onPreset(p.id)}
-                    className={`rounded-full border px-4 py-2 text-[13px] font-medium outline-none transition-colors duration-[220ms] focus-visible:ring-2 focus-visible:ring-teal-bright focus-visible:ring-offset-2 focus-visible:ring-offset-abyss ${
-                      active
-                        ? "border-teal bg-teal/10 text-teal-bright"
-                        : "border-transparent text-muted underline-offset-4 hover:underline"
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                );
-              })}
+            <div className="mt-6 min-[900px]:mt-2.5 min-[1100px]:mt-0 min-[1100px]:shrink-0">
+              <p className="text-[12px] uppercase tracking-[0.18em] text-muted min-[1100px]:hidden">
+                {COPY.presetPrompt}
+              </p>
+              <div className="mt-3 min-[1100px]:mt-0 flex flex-wrap items-end gap-2.5 border-b border-line pb-1">
+                {PRESETS.map((p) => {
+                  const active = p.id === preset.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      data-preset={p.id}
+                      aria-pressed={active}
+                      onClick={() => onPreset(p.id)}
+                      className={`rounded-full border px-4 py-2 text-[13px] font-medium outline-none transition-colors duration-[220ms] focus-visible:ring-2 focus-visible:ring-teal-bright focus-visible:ring-offset-2 focus-visible:ring-offset-abyss ${
+                        active
+                          ? "border-teal bg-teal/10 text-teal-bright"
+                          : "border-transparent text-muted underline-offset-4 hover:underline"
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
@@ -633,10 +666,14 @@ export default function Demo({
                 the card would land double-shifted (review lens 3). The
                 engine's translate(-50%, ...) owns centering; the inline
                 opacity 0 seed keeps every pre-engine state invisible. */}
+            {/* Rests with its bottom edge 12px above the panel's top edge —
+                never over [data-panel-content] (gate 60); slides down from
+                -24px. Engine owns the transform (see change 10's lens-3
+                finding on Tailwind translate utilities). */}
             <div
               data-notify-ledger
-              className="absolute -top-4 left-1/2 z-30 hidden w-[min(92%,440px)] min-[900px]:block"
-              style={{ opacity: 0, transform: "translate(-50%, -14px)" }}
+              className="absolute bottom-[calc(100%+12px)] left-1/2 z-30 hidden w-[min(92%,440px)] min-[900px]:block"
+              style={{ opacity: 0, transform: "translate(-50%, -24px)" }}
             >
               <NotifyCard bizName={bizName} entry={preset.caught[0]} />
             </div>

@@ -58,9 +58,9 @@ const presets = (() => {
     return {
       id: mark.id,
       bizName: pick(/bizName:\s*"([^"]+)"/, "bizName"),
-      callerName: pick(/callerName:\s*"([^"]+)"/, "callerName"),
-      callerNumber: pick(/callerNumber:\s*"([^"]+)"/, "callerNumber"),
-      callReason: pick(/callReason:\s*"([^"]+)"/, "callReason"),
+      // First text: in the block is thread[0].text (caught entries carry
+      // detail:, not text:). Gate 58 asserts the banner quotes it.
+      firstText: pick(/text:\s*"([^"]+)"/, "thread[0].text"),
       ticket: Number(pick(/ticket:\s*(\d+)/, "ticket")),
       missedPerMonth: Number(pick(/missedPerMonth:\s*(\d+)/, "missedPerMonth")),
       callsCaught: Number(pick(/callsCaught:\s*(\d+)/, "callsCaught")),
@@ -88,16 +88,17 @@ const expected = { ...byId(defaultId), ctaHref };
 
 /*
  * Playback expectations, held here rather than imported from the timeline.
- * Beats are 0.9 / 2.2 / 3.3 / 4.0 THREAD-RELATIVE, so at these sample times
- * the visible bubble count is fully determined. Change 10 prepends a 4.8s
+ * Beats are 0 / 2.2 / 3.3 / 4.0 THREAD-RELATIVE (bubble 0 is pre-delivered —
+ * the banner already announced it), so at these sample times the visible
+ * bubble count is fully determined. Change 10 prepends a 4.8s
  * lock-screen opening to the global clock: every browser gate that samples
  * the thread timeline waits at (thread time + INTRO) but keeps its
  * thread-relative labels and assertions untouched. Held independently of
  * lib/timeline.ts on purpose: a gate that imported the timeline would move
  * with it and could never catch a rebeat.
  */
-const INTRO = 4.8;
-const VISIBLE_AT = { 0.3: 0, 2.5: 2, 6.0: expected.bubbles };
+const INTRO = 5.6;
+const VISIBLE_AT = { 0.3: 1, 2.5: 2, 6.0: expected.bubbles };
 
 if (expected.caught.length !== 4) {
   throw new Error(`gate setup: preset "${expected.id}" has ${expected.caught.length} caught entries, need 4`);
@@ -153,6 +154,9 @@ async function getPage(path) {
 
 const results = [];
 const check = (n, name, pass, detail) => results.push({ n, name, pass, detail });
+/* A retired gate keeps its number and prints RETIRED with the reason; it can
+   never fail and never counts as coverage. */
+const retired = (n, reason) => results.push({ n, name: "retired", pass: true, retired: true, detail: reason });
 
 /* ---------- 1-7: change-1 floor, raw HTML from / ------------------------- */
 
@@ -286,39 +290,12 @@ check(
   `HTTP ${ssrJunk.status}, ${ssrJunk.bubbles} bubbles (need ${expected.bubbles}), header ${JSON.stringify(ssrJunk.biz[0] ?? null)}, expected ${JSON.stringify(expected.bizName)}`,
 );
 
-/* 21: the call card's identity fields are server-rendered for every preset,
-   including the fallback. */
-const callCardRows = [];
-for (const { path, want } of [
-  { path: "/?biz=salon", want: byId("salon") },
-  { path: "/?biz=home", want: homePreset },
-  { path: "/?biz=dental", want: dentalPreset },
-]) {
-  const page = await getPage(path);
-  const caller = elementsIn(page.html, "data-caller");
-  const reason = elementsIn(page.html, "data-call-reason");
-  callCardRows.push({
-    path,
-    ok:
-      page.status === 200 &&
-      caller.length === 1 &&
-      reason.length === 1 &&
-      caller[0] === want.callerNumber &&
-      reason[0].startsWith(want.callReason),
-    caller: caller[0] ?? null,
-    reason: reason[0] ?? null,
-    wantCaller: want.callerNumber,
-    wantReason: want.callReason,
-  });
-}
-check(
-  21,
-  "SSR call card carries callerNumber + callReason",
-  callCardRows.length === 3 && callCardRows.every((r) => r.ok),
-  callCardRows
-    .map((r) => `${r.path} -> ${JSON.stringify(r.caller)} / ${JSON.stringify(r.reason)} (want ${JSON.stringify(r.wantCaller)} / ${JSON.stringify(r.wantReason)})`)
-    .join(" | "),
-);
+/* Change 11 retired four call-card gates: the missed-call card carried the
+   owner's POV and was deleted from the thread. */
+retired(16, "change 11 removed the call card; the thread box geometry it anchored no longer exists");
+retired(21, "change 11 removed the call card and its callerNumber/callReason copy");
+retired(22, "change 11 removed the call card; there is no node whose identity could persist");
+retired(23, "change 11 removed the call card and its muted left rule");
 
 /* 25 + 27: the owner ledger panel is server-rendered — the no-JS floor covers
    the owner side too, not just the phone. Pure fetch, no browser needed: SSR
@@ -510,9 +487,24 @@ async function waitT(page, target) {
 
 const numeric = (s) => (s == null ? NaN : Number(String(s).replace(/[^0-9.-]/g, "")));
 
+/* Interaction gates must not race hydration: the SSR shell carries
+   data-t="settled", and a click landing before React attaches handlers is
+   swallowed (or half-replayed). A numeric data-t is the engine's mount
+   signal — after it, handlers are live. */
+async function waitHydrated(page) {
+  await page.waitForFunction(
+    () => {
+      const v = document.querySelector("[data-demo]")?.getAttribute("data-t");
+      return v != null && v !== "settled";
+    },
+    undefined,
+    { timeout: 30000 },
+  );
+}
+
 const BROWSER_GATES = [
-  12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 23, 24, 26, 28, 29, 30, 31, 32, 33, 34, 35, 37, 38, 39, 45,
-  46, 47, 48, 49, 50, 51, 52, 53, 55, 56, 57,
+  12, 13, 14, 15, 17, 18, 19, 20, 24, 26, 28, 29, 30, 31, 32, 33, 34, 35, 37, 38, 39, 45,
+  46, 47, 48, 49, 50, 51, 52, 53, 55, 56, 57, 58, 59, 60, 61, 62, 63,
 ];
 
 if (!chromium) {
@@ -601,31 +593,6 @@ if (!chromium) {
       `clientHeight at t=0.3/2.5/6.0 -> ${heights.join(" / ")}`,
     );
 
-    const s = snaps[0.3];
-    const e = snaps[6.0];
-    check(
-      16,
-      "call card tops a reserved box, thread anchored to its bottom",
-      s.total === expected.bubbles &&
-        s.total > 0 &&
-        s.cardVisible === true &&
-        s.cardTopGap != null &&
-        Math.abs(s.cardTopGap) <= 24 &&
-        s.cardToStackGap != null &&
-        s.cardToStackGap > 24 &&
-        s.stackBottomGap != null &&
-        Math.abs(s.stackBottomGap) <= 24 &&
-        e.stackBottomGap != null &&
-        Math.abs(e.stackBottomGap) <= 24 &&
-        // Sanity only, not an anchor claim: the Delivered line sits below the
-        // last bubble inside the stack, so this gap is ~25px by construction.
-        e.lastBubbleGap != null,
-      `t=0.3: card top ${s.cardTopGap}px below the box top (need <= 24), ` +
-        `gap card->stack ${s.cardToStackGap}px (need > 24), ` +
-        `stack bottom ${s.stackBottomGap}px above the box bottom (need <= 24); ` +
-        `t=6.0: stack bottom ${e.stackBottomGap}px, last bubble ${e.lastBubbleGap}px above stack bottom`,
-    );
-
     const settled = snaps[5.5];
     check(
       26,
@@ -679,14 +646,13 @@ if (!chromium) {
       "reduced motion settles immediately",
       r.visible === expected.bubbles &&
         r.visible > 0 &&
-        r.cardVisible === true &&
         r.ledger === usd(expected.recovered) &&
         r.leak === usd(expected.lost) &&
         r.panelRecovered === usd(expected.recovered) &&
         r.caughtVisible === 4 &&
         r.replay === false &&
         r.share === true,
-      `visible ${r.visible}/${expected.bubbles}, call card ${r.cardVisible}, ledger ${JSON.stringify(r.ledger)}, ` +
+      `visible ${r.visible}/${expected.bubbles}, ledger ${JSON.stringify(r.ledger)}, ` +
         `leak ${JSON.stringify(r.leak)}, panel recovered ${JSON.stringify(r.panelRecovered)}, ` +
         `caught rows visible ${r.caughtVisible}/4, replay visible ${r.replay} (need false), ` +
         `share visible ${r.share} (need true)`,
@@ -701,6 +667,7 @@ if (!chromium) {
     const page = await ctx.newPage();
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
+    await waitHydrated(page);
     await page.click("[data-preset='home']");
     let ok = true;
     try {
@@ -850,18 +817,6 @@ if (!chromium) {
     );
 
     check(
-      23,
-      "call card rule is muted, not teal, not gold",
-      tokens.ruleColor != null &&
-        tokens.muted != null &&
-        tokens.ruleColor === tokens.muted &&
-        tokens.ruleColor !== tokens.gold &&
-        tokens.ruleColor !== tokens.teal &&
-        parseFloat(tokens.ruleWidth) >= 2,
-      `rule ${tokens.ruleColor} @ ${tokens.ruleWidth}; muted ${tokens.muted}, gold ${tokens.gold}, teal ${tokens.teal}`,
-    );
-
-    check(
       31,
       "gold across the whole page is exactly 1: the panel recovered figure",
       tokens.moneyRegionCount >= 1 &&
@@ -936,51 +891,6 @@ if (!chromium) {
         : `overlap ${g.overlap}, phone left of ledger ${g.phoneIsLeft}, ` +
           `phone in viewport ${g.phoneInViewport} (${JSON.stringify(g.phone)}), ` +
           `ledger in viewport ${g.ledgerInViewport} (${JSON.stringify(g.ledger)}), topDiff ${g.topDiff}px (need <= 8)`,
-    );
-
-    await ctx.close();
-  });
-
-  /* --- 22: the call card is present at the first frame and never re-mounted --- */
-  await block("call-card-identity", async () => {
-    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-    const page = await ctx.newPage();
-    await page.goto(base, { waitUntil: "domcontentloaded" });
-    await page.evaluate(() => document.fonts.ready);
-
-    await waitT(page, 0.1 + INTRO);
-    const early = await page.evaluate((EFF) => {
-      const vis = eval(EFF);
-      const el = document.querySelector("[data-call-card]");
-      if (!el) return null;
-      el.__gateStamp = "change-3";
-      return { id: el.getAttribute("data-call-card"), visible: vis(el) > 0.5 };
-    }, EFF);
-
-    await waitT(page, 6.0 + INTRO);
-    const late = await page.evaluate((EFF) => {
-      const vis = eval(EFF);
-      const el = document.querySelector("[data-call-card]");
-      if (!el) return null;
-      return {
-        id: el.getAttribute("data-call-card"),
-        visible: vis(el) > 0.5,
-        sameNode: el.__gateStamp === "change-3",
-      };
-    }, EFF);
-
-    check(
-      22,
-      "call card is present at t=0.1 and still the same node at t=6.0",
-      early != null &&
-        late != null &&
-        early.visible === true &&
-        late.visible === true &&
-        typeof early.id === "string" &&
-        early.id.length > 0 &&
-        early.id === late.id &&
-        late.sameNode === true,
-      `t=0.1 ${JSON.stringify(early)}; t=6.0 ${JSON.stringify(late)} (id must match and be non-empty, sameNode must be true)`,
     );
 
     await ctx.close();
@@ -1487,66 +1397,105 @@ if (!chromium) {
   /* --- 49 + 50: the lock-screen choreography. Global-clock samples: at 0.5
    * the call is ringing (thread and headline must not exist visually); at
    * 4.0 the miss has landed and the headline has landed with it. --- */
-  await block("lock-choreography", async () => {
-    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
-    const page = await ctx.newPage();
-    await page.goto(base, { waitUntil: "domcontentloaded" });
-    await page.evaluate(() => document.fonts.ready);
+  await block("call-choreography", async () => {
+    /* 49 runs at BOTH widths: the call-screen assertions are identical, the
+       headline expectation flips — hidden on mobile, present from load on
+       desktop (change 11, step 4). */
+    const rows = [];
+    for (const vp of [
+      { w: 390, h: 844, headlineAtStart: false },
+      { w: 1440, h: 900, headlineAtStart: true },
+    ]) {
+      const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h } });
+      const page = await ctx.newPage();
+      await page.goto(base, { waitUntil: "domcontentloaded" });
+      await page.evaluate(() => document.fonts.ready);
 
-    await waitT(page, 0.5);
-    const early = await page.evaluate((EFF) => {
-      const vis = eval(EFF);
-      const lock = document.querySelector("[data-lock]");
-      const bubbles = [...document.querySelectorAll("[data-bubble]")];
-      const headline = document.querySelector("[data-headline]");
-      return {
-        t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
-        lockVisible: lock ? vis(lock) > 0.5 : false,
-        visibleBubbles: bubbles.filter((b) => vis(b) > 0.5).length,
-        bubbleCount: bubbles.length,
-        headlineOpacity: headline ? vis(headline) : null,
-      };
-    }, EFF);
+      await waitT(page, 0.5);
+      const early = await page.evaluate((EFF) => {
+        const vis = eval(EFF);
+        const call = document.querySelector("[data-call]");
+        const status = document.querySelector("[data-call-status]");
+        const callBiz = document.querySelector("[data-call-biz]");
+        const endBtn = document.querySelector("[data-call-end]");
+        const bubbles = [...document.querySelectorAll("[data-bubble]")];
+        const headline = document.querySelector("[data-headline]");
+        const callText = call ? call.textContent : "";
+        return {
+          t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
+          callVisible: call ? vis(call) > 0.5 : false,
+          statusText: status ? status.textContent.trim() : null,
+          callBizText: callBiz ? callBiz.textContent.trim() : null,
+          endVisible: endBtn ? vis(endBtn) > 0.5 : false,
+          hasDecline: callText.includes("Decline"),
+          hasAccept: callText.includes("Accept"),
+          visibleBubbles: bubbles.filter((b) => vis(b) > 0.5).length,
+          bubbleCount: bubbles.length,
+          headlineOpacity: headline ? vis(headline) : null,
+        };
+      }, EFF);
+      rows.push({ vp: `${vp.w}x${vp.h}`, expectHeadline: vp.headlineAtStart, ...early });
+      await ctx.close();
+    }
 
     check(
       49,
-      "at t=0.5: lock screen visible, thread not rendered, headline not visible",
-      early.lockVisible === true &&
-        early.bubbleCount > 0 &&
-        early.visibleBubbles === 0 &&
-        early.headlineOpacity != null &&
-        early.headlineOpacity < 0.1,
-      `t=${early.t}: lock visible ${early.lockVisible} (need true); visible bubbles ` +
-        `${early.visibleBubbles}/${early.bubbleCount} in DOM (need 0 visible, > 0 in DOM); ` +
-        `headline effective opacity ${early.headlineOpacity} (need < 0.1)`,
+      "at t=0.5: callingLabel + bizName on the call screen, End present, no Decline/Accept, thread not rendered; headline hidden at 390, visible at 1440",
+      rows.length === 2 &&
+        rows.every(
+          (r) =>
+            r.callVisible === true &&
+            r.statusText != null &&
+            r.statusText.startsWith("calling") &&
+            r.callBizText === expected.bizName &&
+            r.endVisible === true &&
+            r.hasDecline === false &&
+            r.hasAccept === false &&
+            r.bubbleCount > 0 &&
+            r.visibleBubbles === 0 &&
+            r.headlineOpacity != null &&
+            (r.expectHeadline ? r.headlineOpacity > 0.5 : r.headlineOpacity < 0.1),
+        ),
+      rows
+        .map(
+          (r) =>
+            `${r.vp} t=${r.t}: call visible ${r.callVisible}, status ${JSON.stringify(r.statusText)} (must start "calling"), ` +
+            `bizName ${JSON.stringify(r.callBizText)} (want ${JSON.stringify(expected.bizName)}), End ${r.endVisible}, ` +
+            `Decline ${r.hasDecline}/Accept ${r.hasAccept} (need false), bubbles ${r.visibleBubbles}/${r.bubbleCount} visible (need 0 of > 0), ` +
+            `headline opacity ${r.headlineOpacity} (need ${r.expectHeadline ? "> 0.5" : "< 0.1"})`,
+        )
+        .join(" | "),
     );
 
-    await waitT(page, 4.0);
-    const missed = await page.evaluate((EFF) => {
+    /* 50 at 390: the call has died, and the headline has landed with it. */
+    const ctx50 = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const page50 = await ctx50.newPage();
+    await page50.goto(base, { waitUntil: "domcontentloaded" });
+    await page50.evaluate(() => document.fonts.ready);
+    await waitT(page50, 4.0);
+    const ended = await page50.evaluate((EFF) => {
       const vis = eval(EFF);
-      const missedEl = document.querySelector("[data-lock-missed]");
+      const status = document.querySelector("[data-call-status]");
       const headline = document.querySelector("[data-headline]");
       return {
         t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
-        missedVisible: missedEl ? vis(missedEl) > 0.5 : false,
-        missedText: missedEl ? missedEl.textContent.trim() : null,
+        statusVisible: status ? vis(status) > 0.5 : false,
+        statusText: status ? status.textContent.trim() : null,
         headlineVisible: headline ? vis(headline) > 0.5 : false,
       };
     }, EFF);
 
     check(
       50,
-      "at t=4.0: missedLabel visible with callerName beneath it, headline visible",
-      missed.missedVisible === true &&
-        missed.missedText != null &&
-        missed.missedText.includes("Missed Call") &&
-        missed.missedText.includes(expected.callerName) &&
-        missed.headlineVisible === true,
-      `t=${missed.t}: missed state visible ${missed.missedVisible}, text ${JSON.stringify(missed.missedText)} ` +
-        `(must contain "Missed Call" and ${JSON.stringify(expected.callerName)}); headline visible ${missed.headlineVisible}`,
+      "at t=4.0: endedLabel visible; at 390 the headline is now visible",
+      ended.statusVisible === true &&
+        ended.statusText === "Call Ended" &&
+        ended.headlineVisible === true,
+      `t=${ended.t}: status visible ${ended.statusVisible}, text ${JSON.stringify(ended.statusText)} ` +
+        `(must be "Call Ended"); headline visible ${ended.headlineVisible}`,
     );
 
-    await ctx.close();
+    await ctx50.close();
   });
 
   /* --- 51 + 52: the two-sided moment — the owner notification. --- */
@@ -1556,7 +1505,7 @@ if (!chromium) {
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
 
-    await waitT(page, 9.5);
+    await waitT(page, 10.3);
     const at95 = await page.evaluate((EFF) => {
       const vis = eval(EFF);
       const screen = document.querySelector("[data-phone-screen]");
@@ -1569,19 +1518,22 @@ if (!chromium) {
       const nr = panel ? panel.getBoundingClientRect() : null;
       const inside = (a, b) =>
         a && b && a.left >= b.left - 1 && a.right <= b.right + 1 && a.top >= b.top - 1 && a.bottom <= b.bottom + 1;
-      const intersects = (a, b) =>
-        a && b && !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top);
+      /* Change 11 (step 5): the ledger card rests fully ABOVE the panel,
+         docked at its top edge — horizontally within the panel's span,
+         bottom at/above the panel top, and close to it. */
+      const dockedAbove = (a, b) =>
+        a && b && a.left >= b.left - 1 && a.right <= b.right + 1 && a.bottom <= b.top + 1 && b.top - a.bottom <= 32;
       return {
         t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
         phoneCardVisible: phoneCard ? vis(phoneCard) > 0.5 : false,
         phoneCardInsideScreen: inside(pr, sr),
         phoneCardText: phoneCard ? phoneCard.textContent.trim() : null,
         ledgerCardVisible: ledgerCard ? vis(ledgerCard) > 0.5 : false,
-        ledgerCardOnPanel: intersects(lr, nr),
+        ledgerCardOnPanel: dockedAbove(lr, nr),
       };
     }, EFF);
 
-    await waitT(page, 12.5);
+    await waitT(page, 13.3);
     const at125 = await page.evaluate((EFF) => {
       const vis = eval(EFF);
       const phoneCard = document.querySelector("[data-notify-phone]");
@@ -1593,7 +1545,7 @@ if (!chromium) {
 
     check(
       51,
-      "at t=9.5: notification card visible inside the phone screen with bizName and caught[0].amount; gone by t=12.5",
+      "at t=10.3: notification card visible inside the phone screen with bizName and caught[0].amount; gone by t=13.3",
       at95.phoneCardVisible === true &&
         at95.phoneCardInsideScreen === true &&
         at95.phoneCardText != null &&
@@ -1607,9 +1559,9 @@ if (!chromium) {
 
     check(
       52,
-      "desktop 1440x900 at t=9.5: a notification card is ALSO visible on the ledger panel",
+      "desktop 1440x900 at t=10.3: a notification card is ALSO visible, docked at the ledger panel's top edge",
       at95.ledgerCardVisible === true && at95.ledgerCardOnPanel === true,
-      `ledger card visible ${at95.ledgerCardVisible}, overlaps panel ${at95.ledgerCardOnPanel}`,
+      `ledger card visible ${at95.ledgerCardVisible}, docked above the panel ${at95.ledgerCardOnPanel}`,
     );
 
     await ctx.close();
@@ -1621,11 +1573,13 @@ if (!chromium) {
     const page = await ctx.newPage();
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
+    await waitHydrated(page);
 
     await page.fill("[data-name-input]", "Test Salon");
     await page.waitForTimeout(300);
     const named = await page.evaluate(() => ({
       phoneHeader: document.querySelector("[data-biz-name]")?.textContent?.trim() ?? null,
+      callScreen: document.querySelector("[data-call-biz]")?.textContent?.trim() ?? null,
       notifyText: document.querySelector("[data-notify-phone]")?.textContent?.trim() ?? null,
       ledgerHeader: document.querySelector("[data-ledger-biz]")?.textContent?.trim() ?? null,
       url: location.href,
@@ -1633,13 +1587,14 @@ if (!chromium) {
 
     check(
       53,
-      'typing "Test Salon" re-skins the phone header, notification template, and ledger header within 300ms; URL carries name=Test%20Salon',
+      'typing "Test Salon" re-skins the phone header, call screen, notification template, and ledger header within 300ms; URL carries name=Test%20Salon',
       named.phoneHeader === "Test Salon" &&
+        named.callScreen === "Test Salon" &&
         named.notifyText != null &&
         named.notifyText.includes("Test Salon") &&
         named.ledgerHeader === "Test Salon" &&
         named.url.includes("name=Test%20Salon"),
-      `phone header ${JSON.stringify(named.phoneHeader)}, notify contains "Test Salon": ` +
+      `phone header ${JSON.stringify(named.phoneHeader)}, call screen ${JSON.stringify(named.callScreen)}, notify contains "Test Salon": ` +
         `${named.notifyText != null && named.notifyText.includes("Test Salon")}, ledger header ` +
         `${JSON.stringify(named.ledgerHeader)}, url ${named.url}`,
     );
@@ -1676,10 +1631,10 @@ if (!chromium) {
     const afterClick = await page.evaluate((EFF) => {
       const vis = eval(EFF);
       const input = document.querySelector("[data-name-input]");
-      const lock = document.querySelector("[data-lock]");
+      const call = document.querySelector("[data-call]");
       return {
         inputValue: input ? input.value : null,
-        lockVisible: lock ? vis(lock) > 0.5 : false,
+        lockVisible: call ? vis(call) > 0.5 : false,
         t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
       };
     }, EFF);
@@ -1688,9 +1643,9 @@ if (!chromium) {
       afterClick.t === "swap" || (Number.isFinite(parseFloat(afterClick.t)) && parseFloat(afterClick.t) < 2);
     check(
       56,
-      "preset click after typing clears the field and restarts at the lock screen within 200ms",
+      "preset click after typing clears the field and restarts at the call screen within 200ms",
       afterClick.inputValue === "" && afterClick.lockVisible === true && tOk,
-      `input value ${JSON.stringify(afterClick.inputValue)} (need ""), lock visible ${afterClick.lockVisible}, ` +
+      `input value ${JSON.stringify(afterClick.inputValue)} (need ""), call screen visible ${afterClick.lockVisible}, ` +
         `data-t ${JSON.stringify(afterClick.t)} (need "swap" or < 2)`,
     );
 
@@ -1735,6 +1690,176 @@ if (!chromium) {
     await ctx.close();
   });
 
+  /* --- 58 + 59: the banner beat, and the thread it hands off to. --- */
+  await block("banner-beat", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+
+    await waitT(page, 4.8);
+    const atBanner = await page.evaluate((EFF) => {
+      const vis = eval(EFF);
+      const banner = document.querySelector("[data-banner]");
+      const call = document.querySelector("[data-call]");
+      return {
+        t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
+        bannerVisible: banner ? vis(banner) > 0.5 : false,
+        bannerText: banner ? banner.textContent.trim() : null,
+        callVisible: call ? vis(call) > 0.5 : false,
+      };
+    }, EFF);
+
+    check(
+      58,
+      "at t=4.8: banner visible over the call screen with bizName + the first 40 chars of thread[0].text; call screen still rendered beneath",
+      atBanner.bannerVisible === true &&
+        atBanner.bannerText != null &&
+        atBanner.bannerText.includes(expected.bizName) &&
+        atBanner.bannerText.includes(expected.firstText.slice(0, 40)) &&
+        atBanner.callVisible === true,
+      `t=${atBanner.t}: banner visible ${atBanner.bannerVisible}, text ${JSON.stringify(atBanner.bannerText)} ` +
+        `(must contain ${JSON.stringify(expected.bizName)} and ${JSON.stringify(expected.firstText.slice(0, 40))}); ` +
+        `call screen visible ${atBanner.callVisible} (need true)`,
+    );
+
+    await waitT(page, 6.5);
+    const atThread = await page.evaluate((EFF) => {
+      const vis = eval(EFF);
+      const banner = document.querySelector("[data-banner]");
+      const call = document.querySelector("[data-call]");
+      const threadArea = document.querySelector("[data-thread-area]");
+      return {
+        t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
+        bannerVisible: banner ? vis(banner) > 0.5 : false,
+        callVisible: call ? vis(call) > 0 : false,
+        threadVisible: threadArea ? vis(threadArea) > 0.5 : false,
+        callCardInDom: document.querySelector("[data-call-card]") != null,
+      };
+    }, EFF);
+
+    check(
+      59,
+      "at t=6.5: banner gone, thread rendered, no call-card element in the DOM",
+      atThread.bannerVisible === false &&
+        atThread.callVisible === false &&
+        atThread.threadVisible === true &&
+        atThread.callCardInDom === false,
+      `t=${atThread.t}: banner visible ${atThread.bannerVisible} (need false), call screen visible ${atThread.callVisible} ` +
+        `(need false), thread area visible ${atThread.threadVisible} (need true), ` +
+        `call-card element in DOM ${atThread.callCardInDom} (need false)`,
+    );
+
+    await ctx.close();
+  });
+
+  /* --- 60-63: desktop composition + production DOM hygiene. One context. --- */
+  await block("desktop-composition", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+
+    await waitT(page, 10.3);
+    const notif = await page.evaluate((EFF) => {
+      const vis = eval(EFF);
+      const card = document.querySelector("[data-notify-ledger]");
+      const contents = [...document.querySelectorAll("[data-panel-content]")];
+      const panel = document.querySelector("[data-ledger-panel]");
+      if (!card || !panel || contents.length === 0) return null;
+      const cr = card.getBoundingClientRect();
+      const intersects = (a, b) =>
+        !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top);
+      const overlaps = contents.some((el) => intersects(cr, el.getBoundingClientRect()));
+      const panelTop = panel.getBoundingClientRect().top;
+      return {
+        t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
+        visible: vis(card) > 0.5,
+        overlaps,
+        gap: panelTop - cr.bottom,
+        contentCount: contents.length,
+      };
+    }, EFF);
+
+    check(
+      60,
+      "desktop t=10.3: ledger notification never intersects [data-panel-content]; bottom edge within 16px above the panel top",
+      notif != null &&
+        notif.visible === true &&
+        notif.overlaps === false &&
+        notif.gap >= 0 &&
+        notif.gap <= 16,
+      notif == null
+        ? "notification card, panel, or panel content not found"
+        : `t=${notif.t}: visible ${notif.visible}, overlaps any of ${notif.contentCount} [data-panel-content] ${notif.overlaps} ` +
+          `(need false), gap panelTop - cardBottom ${notif.gap.toFixed(1)}px (need 0..16)`,
+    );
+
+    const layout = await page.evaluate(() => {
+      const device = document.querySelector("[data-phone-device]");
+      const input = document.querySelector("[data-name-input]");
+      const pill = document.querySelector("[data-preset]");
+      if (!device || !input || !pill) return null;
+      const dr = device.getBoundingClientRect();
+      const ir = input.getBoundingClientRect();
+      const pr = pill.getBoundingClientRect();
+      return {
+        deviceW: dr.width,
+        inputCenter: ir.top + ir.height / 2,
+        pillCenter: pr.top + pr.height / 2,
+      };
+    });
+
+    check(
+      61,
+      "desktop: phone device width >= 340",
+      layout != null && layout.deviceW >= 340,
+      layout == null ? "device/input/pill not found" : `device width ${layout.deviceW.toFixed(1)}px (need >= 340)`,
+    );
+
+    check(
+      62,
+      "desktop: name input and first preset pill vertical centers within 8px",
+      layout != null && Math.abs(layout.inputCenter - layout.pillCenter) <= 8,
+      layout == null
+        ? "device/input/pill not found"
+        : `input center ${layout.inputCenter.toFixed(1)}, pill center ${layout.pillCenter.toFixed(1)}, ` +
+          `diff ${Math.abs(layout.inputCenter - layout.pillCenter).toFixed(1)}px (need <= 8)`,
+    );
+
+    await waitT(page, 11.0);
+    const devtools = await page.evaluate(() => {
+      const hits = [
+        "nextjs-portal",
+        "[data-next-badge-root]",
+        "[data-nextjs-toast]",
+        "[data-nextjs-dev-tools-button]",
+        "#__next-build-watcher",
+      ].filter((sel) => document.querySelector(sel) != null);
+      return { hits };
+    });
+
+    /* The assertion targets the PRODUCTION DOM: `next dev` always mounts the
+       nextjs-portal overlay host (even with devIndicators:false, which only
+       hides the badge), and it is compiled out of production builds. On a
+       localhost run the production precondition doesn't hold, so a
+       portal-only match is reported, not failed. */
+    const isDevServer = /^https?:\/\/(localhost|127\.0\.0\.1)/.test(base);
+    const devOnlyPortal = isDevServer && devtools.hits.length === 1 && devtools.hits[0] === "nextjs-portal";
+    check(
+      63,
+      "settled DOM at 1440x900: no element matching the Next devtools indicator (asserted on production hosts)",
+      devtools.hits.length === 0 || devOnlyPortal,
+      devtools.hits.length === 0
+        ? "no devtools indicator selectors matched"
+        : devOnlyPortal
+          ? "dev server: nextjs-portal is the dev-only overlay host, compiled out of production builds"
+          : `matched: ${devtools.hits.join(", ")}`,
+    );
+
+    await ctx.close();
+  });
+
   await browser.close();
 
   for (const n of BROWSER_GATES) {
@@ -1749,7 +1874,7 @@ if (!chromium) {
 results.sort((a, b) => a.n - b.n);
 console.log(`gate: ${base}  (preset "${defaultId}")`);
 for (const r of results) {
-  console.log(`  ${r.pass ? "PASS" : "FAIL"}  ${r.n}. ${r.name} — ${r.detail}`);
+  console.log(`  ${r.retired ? "RETIRED" : r.pass ? "PASS" : "FAIL"}  ${r.n}. ${r.name} — ${r.detail}`);
 }
 
 const failed = results.filter((r) => !r.pass);

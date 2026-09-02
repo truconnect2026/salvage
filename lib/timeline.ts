@@ -3,41 +3,48 @@
  * (seconds since playback start) produced by the single rAF loop in Demo.tsx.
  * Nothing here schedules anything; these are pure coordinates.
  *
- * Change 10 prepends the first-touch opening: an iOS-style incoming call that
- * nobody answers. The pre-existing thread timeline is untouched — its beats
- * below stay THREAD-RELATIVE, and the engine offsets them by THREAD_START.
+ * Change 11 rewires the opening to the CUSTOMER's point of view: she places
+ * the call, nobody picks up, and the save arrives as a Messages banner. The
+ * pre-existing thread timeline is untouched — its beats below stay
+ * THREAD-RELATIVE, and the engine offsets them by THREAD_START.
  * Global clock:
- *   0.0        lock screen, ring pulse begins
- *   0.0-3.6    three ring pulses (RING_PERIOD each). Nobody answers.
- *   3.6        screen dims 30%, call UI collapses upward, "Missed Call" state;
- *              the page headline fades + rises in on the same beat
- *   4.4        400ms crossfade to the Messages thread
- *   4.8        the thread timeline's own t=0
- *   9.2        customer's closing bubble beat: the owner notification slides up
- *   10.2       everything settled
+ *   0.0-1.0    outgoing call screen, "calling…"
+ *   1.0-3.6    "ringing…" — the ellipsis cycles at DOT_PERIOD. Nobody answers.
+ *   3.6        "Call Ended", screen dims 30%, the End button fades; on
+ *              mobile the page headline fades + rises in on the same beat
+ *   4.4        a Messages banner slides down over the dead call screen
+ *   5.2        400ms crossfade to the Messages thread
+ *   5.6        the thread timeline's own t=0
+ *   10.0       customer's closing bubble beat: the owner notification
+ *   11.0       everything settled
  */
 
-export const RING_PERIOD = 1.2;
-export const LOCK_MISS_AT = 3.6;
-export const LOCK_COLLAPSE_DUR = 0.4;
-export const THREAD_FADE_AT = 4.4;
+export const CALL_RINGING_AT = 1.0;
+export const CALL_ENDED_AT = 3.6;
+export const CALL_END_FADE_DUR = 0.4;
+export const DOT_PERIOD = 0.4;
+export const BANNER_AT = 4.4;
+export const BANNER_IN = 0.3;
+export const THREAD_FADE_AT = 5.2;
 export const THREAD_FADE_DUR = 0.4;
-export const THREAD_START = 4.8;
+export const THREAD_START = 5.6;
 
+/** Mobile only — at >=1100px the headline is present from load (change 11):
+ *  watch-then-read sequencing needs the phone alone on screen. */
 export const HEADLINE_AT = 3.6;
 export const HEADLINE_DUR = 0.5;
 export const HEADLINE_RISE = 16;
 
-/** Bubble index -> reveal time (seconds, THREAD-RELATIVE). Four bubbles; the
- *  missed call itself is the call card, on screen from the crossfade. */
-export const BEATS = [0.9, 2.2, 3.3, 4.0];
+/** Bubble index -> reveal time (seconds, THREAD-RELATIVE). Bubble 0 is the
+ *  auto-text the banner already delivered at t=4.4 global — on her phone it
+ *  is ALREADY in the thread when the crossfade lands, so its beat is 0
+ *  (change 11 review: a banner means delivered; nothing re-types it). */
+export const BEATS = [0, 2.2, 3.3, 4.0];
 
-/** Typing indicators, keyed by the bubble index they precede. Thread-relative. */
-export const TYPING = [
-  { before: 0, at: 0.2 },
-  { before: 1, at: 1.8 },
-  { before: 2, at: 2.9 },
-];
+/** Typing indicators, keyed by the bubble index they precede. Only the
+ *  business's SECOND message gets one — bubble 0 is pre-delivered, and you
+ *  never see your own typing indicator (bubbles 1/3 are hers). */
+export const TYPING = [{ before: 2, at: 2.9 }];
 
 export const BUBBLE_ENTER = 0.24;
 export const BUBBLE_RISE = 12;
@@ -58,24 +65,24 @@ export const LEAK_DUR = 5.4;
 export const CONTROLS_AT = 5.4;
 export const CONTROLS_FADE = 0.3;
 
-/** Thread settles at 5.4 thread-relative = 10.2 global. */
+/** Thread settles at 5.4 thread-relative = 11.0 global. */
 export const SETTLED_AT = LEDGER_AT + LEDGER_DUR;
 
 /** The owner notification: same beat as the caught-row insert (the two-sided
- *  moment), global clock. Slides up, holds, slides back down. */
-export const NOTIFY_AT = THREAD_START + CAUGHT_ROW_AT; // 9.2
+ *  moment), global clock. Slides in, holds, slides back out. */
+export const NOTIFY_AT = THREAD_START + CAUGHT_ROW_AT; // 10.0
 export const NOTIFY_IN = 0.3;
 export const NOTIFY_HOLD = 2.4;
 export const NOTIFY_OUT = 0.3;
 
 /** One shimmer sweep across the gold recovered figure when its count-up
  *  completes. Driven by the rAF phase like everything else — not a CSS loop. */
-export const SHIMMER_AT = THREAD_START + SETTLED_AT; // 10.2
+export const SHIMMER_AT = THREAD_START + SETTLED_AT; // 11.0
 export const SHIMMER_DUR = 0.6;
 
-/** Loop far enough past the notification's exit (12.2) that gates can sample
- *  a fully settled t=12.5. */
-export const LOOP_UNTIL = 13.0;
+/** Loop far enough past the notification's exit (13.0) that gates can sample
+ *  a fully settled t=13.3. */
+export const LOOP_UNTIL = 13.8;
 
 /** Preset crossfade: text dissolves through zero, numbers roll old -> beat 0. */
 export const SWAP_FADE = 0.22;

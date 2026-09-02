@@ -32,7 +32,7 @@ export default function OgFrame() {
       {/* Devices row. The notification card over the phone's thread is the
           thumbnail's focal point (change 10): the two-sided moment, frozen. */}
       <div className="absolute left-16 top-[102px] flex items-start gap-8">
-        <Phone preset={settledTail} screenMinHeight={452} hideCallCard showNotification />
+        <Phone preset={settledTail} screenMinHeight={452} showNotification />
         <div className="w-[660px]">
           <Ledger preset={base} compact />
         </div>

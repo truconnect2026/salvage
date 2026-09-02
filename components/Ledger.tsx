@@ -38,7 +38,7 @@ export default function Ledger({
   }`;
 
   return (
-    <div className={`w-full rounded-2xl border border-line bg-surface ${pad}`}>
+    <div data-panel-content className={`w-full rounded-2xl border border-line bg-surface ${pad}`}>
       {/* Header: screen label, bizName + month, status pill right-aligned.
           screenLabel sits INSIDE the card's own padding, not above it, so the
           card's outer top edge lines up with the phone's — an external eyebrow

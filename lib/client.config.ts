@@ -2,7 +2,6 @@ export type Bubble = { from: "business" | "customer"; text: string; time: string
 export type CaughtEntry = { number: string; detail: string; amount: number; date: string };
 export type Preset = {
   id: string; label: string; bizName: string;
-  callerName: string; callerNumber: string; callReason: string;
   ticket: number; missedPerMonth: number; callsCaught: number; recovered: number; lost: number;
   sinceCalls: number; sinceRecovered: number;
   caught: CaughtEntry[];
@@ -30,11 +29,6 @@ export const COPY = {
   ctaHref: "https://calendly.com/andy-davyjoneslocker/30min",
   footNote: "Demo. Numbers are illustrative.",
 
-  callCard: {
-    label: "Missed call",
-    meta: "No voicemail",
-  },
-
   ledger: {
     screenLabel: "Owner view",
     monthLabel: "March 2026",
@@ -50,12 +44,12 @@ export const COPY = {
     justNow: "Just now",
   },
 
-  // The lock-screen beat (change 10). Approved copy; do not reword.
-  lock: {
-    incomingLabel: "Incoming call",
-    declineLabel: "Decline",
-    acceptLabel: "Accept",
-    missedLabel: "Missed Call",
+  // The customer's outgoing call (change 11). Approved copy; do not reword.
+  call: {
+    callingLabel: "calling…",
+    ringingLabel: "ringing…",
+    endedLabel: "Call Ended",
+    endLabel: "End",
   },
 
   // The owner-side notification card (change 10). Approved copy. nowLabel is
@@ -93,8 +87,6 @@ export const COPY = {
 export const PRESETS: Preset[] = [
   {
     id: "salon", label: "Salon & Spa", bizName: "Harbor Row Aesthetics",
-    callerName: "Danielle R.",
-    callerNumber: "(804) 555-0142", callReason: "Front desk closed at 6",
     ticket: 340, missedPerMonth: 12, callsCaught: 4, recovered: 1360, lost: 4080,
     sinceCalls: 31, sinceRecovered: 9240,
     // Entry [0] is this thread's own booking. Sum of all 4 amounts === recovered.
@@ -113,8 +105,6 @@ export const PRESETS: Preset[] = [
   },
   {
     id: "home", label: "Home Services", bizName: "Ridgeline Plumbing",
-    callerName: "Mark T.",
-    callerNumber: "(804) 555-0197", callReason: "Line was busy",
     ticket: 850, missedPerMonth: 15, callsCaught: 5, recovered: 4250, lost: 12750,
     sinceCalls: 24, sinceRecovered: 18700,
     caught: [
@@ -132,8 +122,6 @@ export const PRESETS: Preset[] = [
   },
   {
     id: "dental", label: "Dental", bizName: "Fairfield Dental",
-    callerName: "Priya S.",
-    callerNumber: "(804) 555-0168", callReason: "After hours",
     ticket: 600, missedPerMonth: 9, callsCaught: 3, recovered: 1800, lost: 5400,
     sinceCalls: 19, sinceRecovered: 9800,
     caught: [
@@ -152,14 +140,6 @@ export const PRESETS: Preset[] = [
 ];
 
 export const DEFAULT_PRESET = "salon";
-
-/**
- * The call card's timestamp. It is the moment of the missed call, which is the
- * time the removed system bubble carried and which the business reply still
- * carries verbatim — so it is read from the thread rather than duplicated as
- * new copy.
- */
-export const callTime = (p: Preset) => p.thread[0].time;
 
 /** Resolves ?biz=. Unknown or missing falls back to DEFAULT_PRESET; never throws. */
 export function resolvePreset(biz: string | string[] | undefined): Preset {
