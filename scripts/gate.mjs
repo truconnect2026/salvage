@@ -39,6 +39,7 @@ const need = (re, label) => {
 const defaultId = need(/export const DEFAULT_PRESET = "([^"]+)"/, "DEFAULT_PRESET");
 const ctaHref = need(/ctaHref:\s*"([^"]+)"/, "COPY.ctaHref");
 const shareOrigin = need(/export const SHARE_ORIGIN = "([^"]+)"/, "SHARE_ORIGIN");
+const cueDown = need(/down:\s*"([^"]+)"/, "COPY.cues.down");
 
 /* Every preset, sliced out of the PRESETS array by its id marker. */
 const presets = (() => {
@@ -502,9 +503,29 @@ async function waitHydrated(page) {
   );
 }
 
+/* Change 12: gesture-equivalents for the pager. Sections are addressed by
+   index (pager scrollTop is a snap point at every section boundary), and the
+   preset switcher is section 3's track — "click preset N" is now "snap the
+   track to panel N". */
+async function goSection(page, idx) {
+  await page.evaluate((i) => {
+    const pager = document.querySelector("[data-pager]");
+    pager.scrollTop = i * pager.clientHeight;
+  }, idx);
+  await page.waitForTimeout(150);
+}
+
+async function snapTrack(page, idx) {
+  await page.evaluate((i) => {
+    const track = document.querySelector('[data-section="yours"] [data-track]');
+    track.scrollTo({ left: i * track.clientWidth, behavior: "instant" });
+  }, idx);
+}
+
 const BROWSER_GATES = [
   12, 13, 14, 15, 17, 18, 19, 20, 24, 26, 28, 29, 30, 31, 32, 33, 34, 35, 37, 38, 39, 45,
   46, 47, 48, 49, 50, 51, 52, 53, 55, 56, 57, 58, 59, 60, 61, 62, 63,
+  64, 65, 66, 67, 68, 69, 70, 71, 72, 73,
 ];
 
 if (!chromium) {
@@ -661,14 +682,17 @@ if (!chromium) {
     await ctx.close();
   });
 
-  /* --- 18: preset switching --- */
+  /* --- 18: preset switching (change 12: the switcher is section 3's track;
+   * a snap landing mid-swap is QUEUED, so the page always lands wherever the
+   * track rests — the URL/rendered agreement assertion is unchanged). --- */
   await block("preset-switch", async () => {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const page = await ctx.newPage();
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
     await waitHydrated(page);
-    await page.click("[data-preset='home']");
+    await goSection(page, 2);
+    await snapTrack(page, 1);
     let ok = true;
     try {
       await page.waitForFunction(
@@ -681,11 +705,11 @@ if (!chromium) {
     }
     const after = await page.evaluate(sampleFn, EFF);
 
-    /* A second click inside the swap window is discarded for playback. The URL
-       must agree with whatever actually ended up on screen — never advertise a
-       preset the page never rendered. */
-    await page.click("[data-preset='dental']");
-    await page.waitForTimeout(1200);
+    /* A second snap inside the swap window retargets after the roll (queued,
+       change 12). The URL must agree with whatever actually ended up on
+       screen — never advertise a preset the page never rendered. */
+    await snapTrack(page, 2);
+    await page.waitForTimeout(1600);
     const raced = await page.evaluate(sampleFn, EFF);
     const rendered = presets.find((p) => p.bizName === raced.biz?.trim());
     const urlBiz = new URL(raced.url).searchParams.get("biz");
@@ -693,13 +717,13 @@ if (!chromium) {
 
     check(
       18,
-      "preset click re-skins, and the URL never names a preset that is not rendered",
+      "preset snap re-skins, and the URL never names a preset that is not rendered",
       ok &&
         after.biz?.trim() === homePreset.bizName &&
         after.url.includes("biz=home") &&
         agree,
-      `first click -> header ${JSON.stringify(after.biz?.trim() ?? null)}, url ${after.url}; ` +
-        `after a second click inside the swap window -> header ${JSON.stringify(raced.biz?.trim() ?? null)} ` +
+      `first snap -> header ${JSON.stringify(after.biz?.trim() ?? null)}, url ${after.url}; ` +
+        `after a second snap inside the swap window -> header ${JSON.stringify(raced.biz?.trim() ?? null)} ` +
         `(preset ${rendered?.id ?? "unknown"}), ?biz=${urlBiz} — must agree`,
     );
     await ctx.close();
@@ -774,6 +798,12 @@ if (!chromium) {
       const bandGold = bandContainer ? [...bandContainer.querySelectorAll("*")].filter(isGold) : [];
       const pageGold = [...document.querySelectorAll("*")].filter(isGold);
       const numerals = [...document.querySelectorAll("[data-math-numeral]")];
+      /* Change 12 (B3): section 3's preset panels carry their ticket in gold
+         — a third sanctioned region. Everything gold there must be a
+         data-ticket element. */
+      const yoursContainer = document.querySelector('[data-section="yours"]');
+      const yoursGold = yoursContainer ? [...yoursContainer.querySelectorAll("*")].filter(isGold) : [];
+      const tickets = [...document.querySelectorAll("[data-ticket]")];
 
       return {
         gold,
@@ -800,6 +830,12 @@ if (!chromium) {
           numerals.length > 0 &&
           bandGold.every((el) => el.hasAttribute("data-math-numeral")),
         numeralCount: numerals.length,
+        yoursGoldCount: yoursGold.length,
+        yoursGoldIsTickets:
+          yoursGold.length === tickets.length &&
+          tickets.length > 0 &&
+          yoursGold.every((el) => el.hasAttribute("data-ticket")),
+        ticketCount: tickets.length,
         pageGoldCount: pageGold.length,
       };
     });
@@ -826,35 +862,45 @@ if (!chromium) {
         `panel recovered ${tokens.panelRecoveredColor} (must equal gold ${tokens.gold})`,
     );
 
+    /* Amended (change 12): a THIRD gold region — the section-3 preset track,
+       whose per-panel ticket figures the spec sets in gold. The rule's shape
+       is unchanged: every region carries exactly its own money figures, and
+       nothing gold exists outside the sanctioned regions. */
     check(
       38,
-      "gold is region-scoped: exactly the recovered figure in the hero panel, exactly the math numerals in the bottom band, nothing gold outside either",
+      "gold is region-scoped: the recovered figure in the hero panel, the math numerals in the band, the ticket figures in the preset track, nothing gold elsewhere",
       tokens.heroGoldCount === 1 &&
         tokens.heroGoldIsRecovered &&
         tokens.bandGoldCount === tokens.numeralCount &&
         tokens.numeralCount > 0 &&
         tokens.bandGoldIsNumerals &&
-        tokens.pageGoldCount === tokens.heroGoldCount + tokens.bandGoldCount,
+        tokens.yoursGoldCount === tokens.ticketCount &&
+        tokens.ticketCount > 0 &&
+        tokens.yoursGoldIsTickets &&
+        tokens.pageGoldCount === tokens.heroGoldCount + tokens.bandGoldCount + tokens.yoursGoldCount,
       `hero panel: ${tokens.heroGoldCount} gold (need 1, on data-panel-recovered: ${tokens.heroGoldIsRecovered}); ` +
-        `bottom band: ${tokens.bandGoldCount} gold vs ${tokens.numeralCount} data-math-numeral element(s) (must match, all gold: ${tokens.bandGoldIsNumerals}); ` +
-        `page-wide: ${tokens.pageGoldCount} gold total (must equal hero + band, i.e. nothing gold outside either region)`,
+        `band: ${tokens.bandGoldCount} gold vs ${tokens.numeralCount} data-math-numeral (all gold: ${tokens.bandGoldIsNumerals}); ` +
+        `preset track: ${tokens.yoursGoldCount} gold vs ${tokens.ticketCount} data-ticket (all gold: ${tokens.yoursGoldIsTickets}); ` +
+        `page-wide: ${tokens.pageGoldCount} gold total (must equal hero + band + track)`,
     );
 
     await ctx.close();
   });
 
-  /* --- 30: at 1440x900, phone LEFT, ledger panel RIGHT, tops aligned, no overlap --- */
+  /* --- 30 (amended, change 12): the two-up lives in section 2 now — its
+   * phone is the static settled instance. Scroll the section into view, then
+   * the assertions are unchanged: phone left, panel right, tops aligned,
+   * both fully visible, no overlap. --- */
   await block("desktop-pair-geometry", async () => {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const page = await ctx.newPage();
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
     await waitT(page, 5.5 + INTRO);
+    await goSection(page, 1);
 
     const g = await page.evaluate(() => {
-      const screen = document.querySelector("[data-phone-screen]");
-      let phone = screen;
-      for (let i = 0; i < 2 && phone.parentElement; i++) phone = phone.parentElement;
+      const phone = document.querySelector('[data-section="save"] [data-phone-device]');
       const panel = document.querySelector("[data-ledger-panel]");
       if (!phone || !panel) return null;
       const pr = phone.getBoundingClientRect();
@@ -879,7 +925,7 @@ if (!chromium) {
 
     check(
       30,
-      "at 1440x900: phone left, ledger panel right, fully visible, tops aligned",
+      "section 2 at 1440x900: phone left, ledger panel right, fully visible, tops aligned",
       g != null &&
         g.overlap === false &&
         g.phoneIsLeft === true &&
@@ -904,13 +950,14 @@ if (!chromium) {
     await page.evaluate(() => document.fonts.ready);
     await waitT(page, 5.6 + INTRO); // settled: leak (LEAK_DUR=5.4) shows the OLD preset's full total
 
-    const sampled = await page.evaluate(async (presetId) => {
+    await goSection(page, 2);
+    const sampled = await page.evaluate(async (panelIdx) => {
       const num = (s) => Number(String(s ?? "").replace(/[^0-9.-]/g, ""));
       const leakEl = document.querySelector("[data-leak-lost]");
-      const btn = document.querySelector(`[data-preset="${presetId}"]`);
-      if (!leakEl || !btn) return null;
+      const track = document.querySelector('[data-section="yours"] [data-track]');
+      if (!leakEl || !track) return null;
       const before = num(leakEl.textContent);
-      btn.click();
+      track.scrollTo({ left: panelIdx * track.clientWidth, behavior: "instant" });
       const series = [];
       const t0 = performance.now();
       while (performance.now() - t0 < 700) {
@@ -918,14 +965,14 @@ if (!chromium) {
         await new Promise((r) => setTimeout(r, 100));
       }
       return { before, series };
-    }, "home");
+    }, 1); // panel 1 = "home"
 
     const series = sampled?.series ?? [];
     const finite = series.filter((n) => Number.isFinite(n));
     const peak = finite.length ? Math.max(...finite) : NaN;
     check(
       24,
-      "preset switch never climbs before it drops",
+      "preset switch (track snap) never climbs before it drops",
       sampled != null &&
         Number.isFinite(sampled.before) &&
         sampled.before > 0 &&
@@ -953,13 +1000,14 @@ if (!chromium) {
     await page.evaluate(() => document.fonts.ready);
     await waitT(page, 5.6 + INTRO); // settled: panel recovered shows the OLD preset's full total
 
-    const sampled = await page.evaluate(async (presetId) => {
+    await goSection(page, 2);
+    const sampled = await page.evaluate(async (panelIdx) => {
       const num = (s) => Number(String(s ?? "").replace(/[^0-9.-]/g, ""));
       const el = document.querySelector("[data-panel-recovered]");
-      const btn = document.querySelector(`[data-preset="${presetId}"]`);
-      if (!el || !btn) return null;
+      const track = document.querySelector('[data-section="yours"] [data-track]');
+      if (!el || !track) return null;
       const before = num(el.textContent);
-      btn.click();
+      track.scrollTo({ left: panelIdx * track.clientWidth, behavior: "instant" });
       const series = [];
       const t0 = performance.now();
       while (performance.now() - t0 < 700) {
@@ -967,14 +1015,15 @@ if (!chromium) {
         await new Promise((r) => setTimeout(r, 100));
       }
       return { before, series };
-    }, "dental");
+    }, 2); // panel 2 = "dental"
+
 
     const series = sampled?.series ?? [];
     const finite = series.filter((n) => Number.isFinite(n));
     const peak = finite.length ? Math.max(...finite) : NaN;
     check(
       32,
-      "panel recovered never climbs before it drops on preset switch",
+      "panel recovered never climbs before it drops on preset switch (track snap)",
       sampled != null &&
         Number.isFinite(sampled.before) &&
         sampled.before > 0 &&
@@ -1040,54 +1089,51 @@ if (!chromium) {
     );
   });
 
-  /* --- 34 (amended, change 10): the desktop HERO section — header + name
-   * field block + both device boxes — fits 1440x900 with no scroll.
-   *
-   * Change 6-9 included Controls in this frame because they stacked under
-   * the phone. Change 10's section layout (C3) deliberately moves Controls
-   * into the second full-viewport section on desktop, so they are no longer
-   * part of the first frame; the assertion on what IS in the first frame is
-   * unchanged: everything the first screenful claims to show must actually
-   * fit it.
-   */
+  /* --- 34 (amended, change 12): the desktop HERO frame is SECTION 2 —
+   * headline block + static phone + ledger panel + the docked owner card +
+   * the share button, all inside one 100dvh section at 1440x900. The name
+   * field moved to section 3 and is no longer a member. The claim is
+   * unchanged: everything the hero frame shows must actually fit it. --- */
   await block("marketing-frame-fit", async () => {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const page = await ctx.newPage();
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
     await waitT(page, 6.0 + INTRO);
+    await goSection(page, 1);
 
     const g = await page.evaluate(() => {
-      const header = document.querySelector("header");
-      const screen = document.querySelector("[data-phone-screen]");
-      let phone = screen;
-      for (let i = 0; i < 2 && phone && phone.parentElement; i++) phone = phone.parentElement;
-      const nameField = document.querySelector("[data-name-input]");
+      const header = document.querySelector('[data-section="save"] [data-headline]');
+      const phone = document.querySelector('[data-section="save"] [data-phone-device]');
       const panel = document.querySelector("[data-ledger-panel]");
-      if (!header || !phone || !nameField || !panel) return null;
+      const card = document.querySelector("[data-notify-ledger]");
+      const share = document.querySelector("[data-share]");
+      if (!header || !phone || !panel || !card || !share) return null;
       const hr = header.getBoundingClientRect();
       const pr = phone.getBoundingClientRect();
-      const nr = nameField.getBoundingClientRect();
       const lr = panel.getBoundingClientRect();
+      const cr = card.getBoundingClientRect();
+      const sr = share.getBoundingClientRect();
       return {
         headerBottom: hr.bottom,
         phoneBottom: pr.bottom,
-        nameBottom: nr.bottom,
         panelBottom: lr.bottom,
-        frameBottom: Math.max(hr.bottom, pr.bottom, nr.bottom, lr.bottom),
+        shareBottom: sr.bottom,
+        cardTop: cr.top,
+        frameBottom: Math.max(hr.bottom, pr.bottom, lr.bottom, sr.bottom),
         innerHeight: window.innerHeight,
       };
     });
 
     check(
       34,
-      "desktop hero section (header + name field + both device boxes) fits 1440x900 with no scroll",
-      g != null && g.frameBottom <= g.innerHeight,
+      "desktop hero section 2 (headline + static phone + ledger panel + docked card + share) fits 1440x900 with no scroll",
+      g != null && g.frameBottom <= g.innerHeight && g.cardTop >= 0,
       g == null
-        ? "header, phone, name field, or ledger panel not found"
+        ? "headline, phone, ledger panel, card, or share not found"
         : `frame bottom ${Math.round(g.frameBottom)}px (header ${Math.round(g.headerBottom)}px, ` +
-          `name ${Math.round(g.nameBottom)}px, phone ${Math.round(g.phoneBottom)}px, ` +
-          `panel ${Math.round(g.panelBottom)}px) vs viewport ${g.innerHeight}px (need frame bottom <= viewport)`,
+          `phone ${Math.round(g.phoneBottom)}px, panel ${Math.round(g.panelBottom)}px, share ${Math.round(g.shareBottom)}px) ` +
+          `vs viewport ${g.innerHeight}px; card top ${Math.round(g.cardTop)}px (need >= 0)`,
     );
 
     await ctx.close();
@@ -1398,13 +1444,13 @@ if (!chromium) {
    * the call is ringing (thread and headline must not exist visually); at
    * 4.0 the miss has landed and the headline has landed with it. --- */
   await block("call-choreography", async () => {
-    /* 49 runs at BOTH widths: the call-screen assertions are identical, the
-       headline expectation flips — hidden on mobile, present from load on
-       desktop (change 11, step 4). */
+    /* 49 runs at BOTH widths: the call-screen assertions are identical. The
+       headline is static content in section 2 (change 12): it must exist,
+       must NOT live inside section 1, and is visible from load. */
     const rows = [];
     for (const vp of [
-      { w: 390, h: 844, headlineAtStart: false },
-      { w: 1440, h: 900, headlineAtStart: true },
+      { w: 390, h: 844 },
+      { w: 1440, h: 900 },
     ]) {
       const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h } });
       const page = await ctx.newPage();
@@ -1420,6 +1466,7 @@ if (!chromium) {
         const endBtn = document.querySelector("[data-call-end]");
         const bubbles = [...document.querySelectorAll("[data-bubble]")];
         const headline = document.querySelector("[data-headline]");
+        const callSection = document.querySelector('[data-section="call"]');
         const callText = call ? call.textContent : "";
         return {
           t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
@@ -1431,16 +1478,18 @@ if (!chromium) {
           hasAccept: callText.includes("Accept"),
           visibleBubbles: bubbles.filter((b) => vis(b) > 0.5).length,
           bubbleCount: bubbles.length,
+          headlinePresent: headline != null,
+          headlineInCallSection: headline != null && callSection != null && callSection.contains(headline),
           headlineOpacity: headline ? vis(headline) : null,
         };
       }, EFF);
-      rows.push({ vp: `${vp.w}x${vp.h}`, expectHeadline: vp.headlineAtStart, ...early });
+      rows.push({ vp: `${vp.w}x${vp.h}`, ...early });
       await ctx.close();
     }
 
     check(
       49,
-      "at t=0.5: callingLabel + bizName on the call screen, End present, no Decline/Accept, thread not rendered; headline hidden at 390, visible at 1440",
+      "at t=0.5: callingLabel + bizName on the call screen, End present, no Decline/Accept, thread not rendered; headline exists outside section 1 (both viewports)",
       rows.length === 2 &&
         rows.every(
           (r) =>
@@ -1453,8 +1502,10 @@ if (!chromium) {
             r.hasAccept === false &&
             r.bubbleCount > 0 &&
             r.visibleBubbles === 0 &&
+            r.headlinePresent === true &&
+            r.headlineInCallSection === false &&
             r.headlineOpacity != null &&
-            (r.expectHeadline ? r.headlineOpacity > 0.5 : r.headlineOpacity < 0.1),
+            r.headlineOpacity > 0.5,
         ),
       rows
         .map(
@@ -1462,12 +1513,13 @@ if (!chromium) {
             `${r.vp} t=${r.t}: call visible ${r.callVisible}, status ${JSON.stringify(r.statusText)} (must start "calling"), ` +
             `bizName ${JSON.stringify(r.callBizText)} (want ${JSON.stringify(expected.bizName)}), End ${r.endVisible}, ` +
             `Decline ${r.hasDecline}/Accept ${r.hasAccept} (need false), bubbles ${r.visibleBubbles}/${r.bubbleCount} visible (need 0 of > 0), ` +
-            `headline opacity ${r.headlineOpacity} (need ${r.expectHeadline ? "> 0.5" : "< 0.1"})`,
+            `headline present ${r.headlinePresent}, inside section 1 ${r.headlineInCallSection} (need false), opacity ${r.headlineOpacity}`,
         )
         .join(" | "),
     );
 
-    /* 50 at 390: the call has died, and the headline has landed with it. */
+    /* 50 at 390: the call has died. (The headline is static section-2
+       content now — gate 49 covers where it lives.) */
     const ctx50 = await browser.newContext({ viewport: { width: 390, height: 844 } });
     const page50 = await ctx50.newPage();
     await page50.goto(base, { waitUntil: "domcontentloaded" });
@@ -1487,12 +1539,10 @@ if (!chromium) {
 
     check(
       50,
-      "at t=4.0: endedLabel visible; at 390 the headline is now visible",
-      ended.statusVisible === true &&
-        ended.statusText === "Call Ended" &&
-        ended.headlineVisible === true,
+      "at t=4.0: endedLabel visible on the dimmed call screen",
+      ended.statusVisible === true && ended.statusText === "Call Ended",
       `t=${ended.t}: status visible ${ended.statusVisible}, text ${JSON.stringify(ended.statusText)} ` +
-        `(must be "Call Ended"); headline visible ${ended.headlineVisible}`,
+        `(must be "Call Ended")`,
     );
 
     await ctx50.close();
@@ -1623,10 +1673,12 @@ if (!chromium) {
         `ledger text ${JSON.stringify(escaped.ledgerText)} (injected <b>: ${escaped.ledgerInjected})`,
     );
 
-    /* 56: preset click clears the field and restarts at the lock screen. */
+    /* 56: a preset snap clears the field and resets to the call screen
+       (change 12: the clock re-arms parked at t=0 — it runs again when the
+       user returns to section 1). */
     await page.fill("[data-name-input]", "Test Salon");
     await page.waitForTimeout(300);
-    await page.click("[data-preset='home']");
+    await snapTrack(page, 1);
     await page.waitForTimeout(200);
     const afterClick = await page.evaluate((EFF) => {
       const vis = eval(EFF);
@@ -1643,7 +1695,7 @@ if (!chromium) {
       afterClick.t === "swap" || (Number.isFinite(parseFloat(afterClick.t)) && parseFloat(afterClick.t) < 2);
     check(
       56,
-      "preset click after typing clears the field and restarts at the call screen within 200ms",
+      "preset snap after typing clears the field and resets to the call screen within 200ms",
       afterClick.inputValue === "" && afterClick.lockVisible === true && tOk,
       `input value ${JSON.stringify(afterClick.inputValue)} (need ""), call screen visible ${afterClick.lockVisible}, ` +
         `data-t ${JSON.stringify(afterClick.t)} (need "swap" or < 2)`,
@@ -1673,19 +1725,22 @@ if (!chromium) {
       };
     });
 
+    /* Amended (change 12): section 1 CENTERS the phone at the largest size
+       that fits with 24px margins — "top <= 32px" belonged to the scrolling
+       page. The claim kept: the device is fully inside the first frame. */
     check(
       57,
-      "first load 390x844: phone device box fully within viewport, top edge <= 32px",
+      "first load 390x844: phone device fully within the viewport, centered, margins >= 24px",
       g != null &&
-        g.top >= 0 &&
-        g.top <= 32 &&
-        g.bottom <= g.vh + 0.5 &&
-        g.left >= -0.5 &&
-        g.right <= g.vw + 0.5,
+        g.top >= 23.5 &&
+        g.bottom <= g.vh - 23.5 + 0.5 &&
+        g.left >= 23.5 &&
+        g.right <= g.vw - 23.5 + 0.5 &&
+        Math.abs(g.left - (g.vw - g.right)) <= 2,
       g == null
         ? "device not found"
-        : `device top ${g.top.toFixed(1)} (need 0..32), bottom ${g.bottom.toFixed(1)} (need <= ${g.vh}), ` +
-          `left ${g.left.toFixed(1)}, right ${g.right.toFixed(1)} (viewport ${g.vw}x${g.vh})`,
+        : `device top ${g.top.toFixed(1)}, bottom ${g.bottom.toFixed(1)}, left ${g.left.toFixed(1)}, ` +
+          `right ${g.right.toFixed(1)} (viewport ${g.vw}x${g.vh}; need >= 24px margins, horizontally centered)`,
     );
     await ctx.close();
   });
@@ -1798,15 +1853,19 @@ if (!chromium) {
     const layout = await page.evaluate(() => {
       const device = document.querySelector("[data-phone-device]");
       const input = document.querySelector("[data-name-input]");
-      const pill = document.querySelector("[data-preset]");
-      if (!device || !input || !pill) return null;
+      const track = document.querySelector('[data-section="yours"] [data-track]');
+      if (!device || !input || !track) return null;
       const dr = device.getBoundingClientRect();
       const ir = input.getBoundingClientRect();
-      const pr = pill.getBoundingClientRect();
+      const tr = track.getBoundingClientRect();
+      const panels = [...track.querySelectorAll("[data-panel]")];
       return {
         deviceW: dr.width,
-        inputCenter: ir.top + ir.height / 2,
-        pillCenter: pr.top + pr.height / 2,
+        inputBottom: ir.bottom,
+        trackTop: tr.top,
+        trackW: track.clientWidth,
+        panelCount: panels.length,
+        panelWs: panels.map((p) => +p.getBoundingClientRect().width.toFixed(1)),
       };
     });
 
@@ -1814,17 +1873,25 @@ if (!chromium) {
       61,
       "desktop: phone device width >= 340",
       layout != null && layout.deviceW >= 340,
-      layout == null ? "device/input/pill not found" : `device width ${layout.deviceW.toFixed(1)}px (need >= 340)`,
+      layout == null ? "device/input/track not found" : `device width ${layout.deviceW.toFixed(1)}px (need >= 340)`,
     );
 
+    /* Amended (change 12): the pills are retired — the section-3 track is the
+       switcher. The desktop composition claim becomes: the name input sits
+       ABOVE the track, and the track holds one full-width panel per preset
+       (the row-of-cards collapse the spec forbids would fail the width
+       equality). */
     check(
       62,
-      "desktop: name input and first preset pill vertical centers within 8px",
-      layout != null && Math.abs(layout.inputCenter - layout.pillCenter) <= 8,
+      "desktop section 3: name input above the preset track; one full-track-width panel per preset",
+      layout != null &&
+        layout.inputBottom <= layout.trackTop + 1 &&
+        layout.panelCount === presets.length &&
+        layout.panelWs.every((w) => Math.abs(w - layout.trackW) <= 2),
       layout == null
-        ? "device/input/pill not found"
-        : `input center ${layout.inputCenter.toFixed(1)}, pill center ${layout.pillCenter.toFixed(1)}, ` +
-          `diff ${Math.abs(layout.inputCenter - layout.pillCenter).toFixed(1)}px (need <= 8)`,
+        ? "device/input/track not found"
+        : `input bottom ${layout.inputBottom.toFixed(1)} vs track top ${layout.trackTop.toFixed(1)} (input must be above); ` +
+          `${layout.panelCount} panel(s) (need ${presets.length}), widths [${layout.panelWs.join(", ")}] vs track ${layout.trackW}`,
     );
 
     await waitT(page, 11.0);
@@ -1857,6 +1924,395 @@ if (!chromium) {
           : `matched: ${devtools.hits.join(", ")}`,
     );
 
+    await ctx.close();
+  });
+
+  /* --- 64 + 71: pager anatomy + progress dots. --- */
+  await block("pager-anatomy", async () => {
+    const rows = [];
+    for (const vp of [
+      { w: 390, h: 844 },
+      { w: 1440, h: 900 },
+    ]) {
+      const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h } });
+      const page = await ctx.newPage();
+      await page.goto(base, { waitUntil: "domcontentloaded" });
+      const g = await page.evaluate(() => {
+        const pager = document.querySelector("[data-pager]");
+        const sections = [...document.querySelectorAll("[data-section]")];
+        return {
+          snapType: pager ? getComputedStyle(pager).scrollSnapType : null,
+          sectionCount: sections.length,
+          heights: sections.map((el) => el.clientHeight),
+          innerHeight: window.innerHeight,
+        };
+      });
+      rows.push({ vp: `${vp.w}x${vp.h}`, ...g });
+      await ctx.close();
+    }
+
+    check(
+      64,
+      'pager computed scroll-snap-type is "y mandatory"; exactly four [data-section], each clientHeight === innerHeight within 2px, at 390x844 and 1440x900',
+      rows.length === 2 &&
+        rows.every(
+          (r) =>
+            r.snapType === "y mandatory" &&
+            r.sectionCount === 4 &&
+            r.heights.every((h) => Math.abs(h - r.innerHeight) <= 2),
+        ),
+      rows
+        .map(
+          (r) =>
+            `${r.vp} -> snap ${JSON.stringify(r.snapType)} (need "y mandatory"), ${r.sectionCount} section(s) (need 4), ` +
+            `heights [${r.heights.join(", ")}] vs viewport ${r.innerHeight} (need within 2px)`,
+        )
+        .join(" | "),
+    );
+
+    /* 71 needs hydration: the dots' active state is client wiring. */
+    const ctx71 = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page71 = await ctx71.newPage();
+    await page71.goto(base, { waitUntil: "domcontentloaded" });
+    await waitHydrated(page71);
+    await page71.waitForTimeout(300);
+    const dots = await page71.evaluate(() => {
+      const root = getComputedStyle(document.documentElement);
+      const toRgb = (name) => {
+        const h = root.getPropertyValue(name).trim().replace("#", "");
+        if (h.length < 6) return null;
+        return `rgb(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)})`;
+      };
+      const all = [...document.querySelectorAll("[data-pager-dot]")];
+      const active = all.filter((d) => d.getAttribute("data-active") === "true");
+      return {
+        teal: toRgb("--color-teal"),
+        count: all.length,
+        activeCount: active.length,
+        activeBg: active[0] ? getComputedStyle(active[0]).backgroundColor : null,
+        inactiveBgs: all
+          .filter((d) => d.getAttribute("data-active") !== "true")
+          .map((d) => getComputedStyle(d).backgroundColor),
+      };
+    });
+
+    check(
+      71,
+      "exactly four progress dots; the active dot's computed background is teal; only one active at a time",
+      dots.count === 4 &&
+        dots.activeCount === 1 &&
+        dots.activeBg === dots.teal &&
+        dots.inactiveBgs.every((c) => c !== dots.teal),
+      `${dots.count} dot(s) (need 4), ${dots.activeCount} active (need 1); active bg ${dots.activeBg} ` +
+        `(need teal ${dots.teal}); inactive bgs ${JSON.stringify(dots.inactiveBgs)} (must not be teal)`,
+    );
+    await ctx71.close();
+  });
+
+  /* --- 65: no hijack-capable wheel/touch listeners. addEventListener is
+   * wrapped BEFORE any page script runs; every wheel/mousewheel/touchmove
+   * registration on window/document/html/body/pager is recorded with its
+   * passive flag. React's own delegated listeners are passive by design —
+   * a passive listener physically cannot preventDefault, so the assertion
+   * targets non-passive (hijack-capable) registrations. --- */
+  await block("no-hijack-listeners", async () => {
+    const ctx = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      hasTouch: true,
+      isMobile: true,
+    });
+    const page = await ctx.newPage();
+    await page.addInitScript(() => {
+      const rec = [];
+      window.__wheelTouchListeners = rec;
+      const orig = EventTarget.prototype.addEventListener;
+      EventTarget.prototype.addEventListener = function (type, fn, opts) {
+        if (type === "wheel" || type === "mousewheel" || type === "touchmove") {
+          let target = "element";
+          try {
+            if (this === window) target = "window";
+            else if (this === document) target = "document";
+            else if (this === document.documentElement) target = "html";
+            else if (this === document.body) target = "body";
+            else if (this instanceof Element && this.hasAttribute("data-pager")) target = "pager";
+          } catch {}
+          const passive = typeof opts === "object" && opts !== null ? opts.passive === true : false;
+          rec.push({ type, target, passive });
+        }
+        return orig.call(this, type, fn, opts);
+      };
+    });
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await waitHydrated(page);
+    await page.waitForTimeout(400);
+    const log = await page.evaluate(() => window.__wheelTouchListeners);
+    const offenders = log.filter(
+      (l) => ["window", "document", "html", "body", "pager"].includes(l.target) && !l.passive,
+    );
+
+    check(
+      65,
+      "no non-passive (hijack-capable) wheel/mousewheel/touchmove listener on window, document, or the pager",
+      offenders.length === 0,
+      `${log.length} wheel/touch registration(s) recorded: ${JSON.stringify(log)}; ` +
+        `non-passive on window/document/pager: ${offenders.length} (need 0)`,
+    );
+    await ctx.close();
+  });
+
+  /* --- 66 + 67: gesture axes never fight — iOS emulation, real touch
+   * sequences via CDP. --- */
+  await block("gesture-axes", async () => {
+    const ctx = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      hasTouch: true,
+      isMobile: true,
+    });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+    await waitHydrated(page);
+    const cdp = await ctx.newCDPSession(page);
+    /* The gesture is sampled at its END (last touchMove still down): synthetic
+       CDP touches carry no fling velocity, so Chromium's post-release snap
+       settle is nondeterministic in emulation — a sub-half drag may snap back
+       exactly as it would for a slow-fingered user. WHICH AXIS OWNED THE
+       GESTURE is what this gate asserts; landing on snap points is gate
+       64's (declarative) and 70's (keyboard) job. */
+    const drag = async (x, y, dx, dy, endState) => {
+      const steps = 8;
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
+      for (let i = 1; i <= steps; i++) {
+        await cdp.send("Input.dispatchTouchEvent", {
+          type: "touchMove",
+          touchPoints: [{ x: x + (dx * i) / steps, y: y + (dy * i) / steps }],
+        });
+        await page.waitForTimeout(12);
+      }
+      const atEnd = await endState();
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      return atEnd;
+    };
+    const state = () =>
+      page.evaluate(() => ({
+        pagerTop: document.querySelector("[data-pager]").scrollTop,
+        trackLeft: document.querySelector('[data-section="save"] [data-track]').scrollLeft,
+      }));
+
+    await page.evaluate(() => {
+      document.querySelector("[data-pager]").scrollTop = window.innerHeight;
+    });
+    await page.waitForTimeout(400);
+    const before66 = await state();
+    const end66 = await drag(195, 560, 0, -300, state);
+
+    check(
+      66,
+      "vertical 300px touch drag over a section-2 track panel moves the pager scrollTop >= 200px and the track scrollLeft by 0 (sampled at gesture end)",
+      end66.pagerTop - before66.pagerTop >= 200 && end66.trackLeft === before66.trackLeft,
+      `pager scrollTop ${before66.pagerTop} -> ${end66.pagerTop} (delta ${(end66.pagerTop - before66.pagerTop).toFixed(1)}, need >= 200); ` +
+        `track scrollLeft ${before66.trackLeft} -> ${end66.trackLeft} (need unchanged)`,
+    );
+
+    await page.evaluate(() => {
+      const pager = document.querySelector("[data-pager]");
+      pager.scrollTop = window.innerHeight;
+      document.querySelector('[data-section="save"] [data-track]').scrollLeft = 0;
+    });
+    await page.waitForTimeout(400);
+    const before67 = await state();
+    const end67 = await drag(330, 500, -200, 0, state);
+
+    check(
+      67,
+      "horizontal 200px touch drag over the same panel moves the track scrollLeft >= 150px and the pager scrollTop by 0 (sampled at gesture end)",
+      end67.trackLeft - before67.trackLeft >= 150 && end67.pagerTop === before67.pagerTop,
+      `track scrollLeft ${before67.trackLeft} -> ${end67.trackLeft} (delta ${(end67.trackLeft - before67.trackLeft).toFixed(1)}, need >= 150); ` +
+        `pager scrollTop ${before67.pagerTop} -> ${end67.pagerTop} (need unchanged)`,
+    );
+    await ctx.close();
+  });
+
+  /* --- 68: playback is intersection-gated, not load-gated. The page is
+   * scrolled to section 3 BEFORE hydration (waitUntil: commit + an instant
+   * scroll as soon as the pager exists), so the call section is never 60%
+   * visible when the engine mounts. --- */
+  await block("deep-arrival", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "commit" });
+    await page.waitForSelector("[data-pager]", { state: "attached" });
+    const tAtScroll = await page.evaluate(() => {
+      history.scrollRestoration = "manual";
+      const pager = document.querySelector("[data-pager]");
+      pager.scrollTop = pager.clientHeight * 2;
+      return document.querySelector("[data-demo]")?.getAttribute("data-t") ?? null;
+    });
+    await waitHydrated(page);
+    await page.waitForTimeout(2000);
+    const parked = await page.evaluate(() => ({
+      t: document.querySelector("[data-demo]").getAttribute("data-t"),
+      scrollTop: document.querySelector("[data-pager]").scrollTop,
+    }));
+    await page.evaluate(() => {
+      document.querySelector("[data-pager]").scrollTop = 0;
+    });
+    await page.waitForTimeout(500);
+    const started = await page.evaluate(
+      () => document.querySelector("[data-demo]").getAttribute("data-t"),
+    );
+
+    check(
+      68,
+      'loaded scrolled to section 3: playback NOT started 2s after hydration (data-t parked at "0.000"); starts within 500ms of section 1 reaching 60% visibility',
+      parked.t === "0.000" && Number.isFinite(parseFloat(started)) && parseFloat(started) > 0,
+      `data-t at scroll ${JSON.stringify(tAtScroll)}; 2s after hydration ${JSON.stringify(parked.t)} (need "0.000") ` +
+        `at pager scrollTop ${parked.scrollTop}; 500ms after returning to section 1: ${JSON.stringify(started)} (need > 0)`,
+    );
+    await ctx.close();
+  });
+
+  /* --- 69: the track IS the switcher. --- */
+  await block("track-preset-link", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+    await waitHydrated(page);
+    await goSection(page, 2);
+    await snapTrack(page, 1);
+    await page.waitForTimeout(400);
+    const g = await page.evaluate(() => ({
+      phoneHeader: document.querySelector("[data-biz-name]")?.textContent?.trim() ?? null,
+      callScreen: document.querySelector("[data-call-biz]")?.textContent?.trim() ?? null,
+      ledgerHeader: document.querySelector("[data-ledger-biz]")?.textContent?.trim() ?? null,
+      url: location.href,
+    }));
+
+    check(
+      69,
+      "snapping section 3's track to panel index 1 re-skins bizName everywhere within 400ms; URL gains ?biz=home",
+      g.phoneHeader === homePreset.bizName &&
+        g.callScreen === homePreset.bizName &&
+        g.ledgerHeader === homePreset.bizName &&
+        g.url.includes("biz=home"),
+      `phone header ${JSON.stringify(g.phoneHeader)}, call screen ${JSON.stringify(g.callScreen)}, ` +
+        `ledger header ${JSON.stringify(g.ledgerHeader)} (all must be ${JSON.stringify(homePreset.bizName)}); url ${g.url}`,
+    );
+    await ctx.close();
+  });
+
+  /* --- 70: keyboard drives the pager and the active track. --- */
+  await block("keyboard-nav", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+    await waitHydrated(page);
+    await page.waitForTimeout(300);
+    await page.keyboard.press("ArrowDown");
+    await page.waitForTimeout(900);
+    const afterDown = await page.evaluate(() => {
+      const dots = [...document.querySelectorAll("[data-pager-dot]")];
+      return {
+        activeIdx: dots.findIndex((d) => d.getAttribute("data-active") === "true"),
+        scrollTop: document.querySelector("[data-pager]").scrollTop,
+        vh: window.innerHeight,
+      };
+    });
+
+    await goSection(page, 2);
+    await page.waitForTimeout(400);
+    await page.keyboard.press("ArrowRight");
+    await page.waitForTimeout(900);
+    const afterRight = await page.evaluate(() => {
+      const track = document.querySelector('[data-section="yours"] [data-track]');
+      return { left: track.scrollLeft, w: track.clientWidth };
+    });
+
+    check(
+      70,
+      "ArrowDown from section 1 lands on section 2 (active dot index 1); ArrowRight in section 3 advances the track one panel",
+      afterDown.activeIdx === 1 &&
+        Math.abs(afterDown.scrollTop - afterDown.vh) <= 2 &&
+        Math.abs(afterRight.left - afterRight.w) <= 2,
+      `after ArrowDown: active dot ${afterDown.activeIdx} (need 1), pager scrollTop ${afterDown.scrollTop} ` +
+        `(need ~${afterDown.vh}); after ArrowRight in section 3: track scrollLeft ${afterRight.left} (need ~${afterRight.w})`,
+    );
+    await ctx.close();
+  });
+
+  /* --- 72: reduced motion — snap stays, programmatic scrolls go "auto". --- */
+  await block("reduced-pager", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await ctx.newPage();
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(
+      () => document.querySelector("[data-demo]")?.getAttribute("data-t") != null,
+    );
+    await page.waitForTimeout(300);
+    const g = await page.evaluate(() => {
+      const calls = [];
+      const orig = Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = function (opts) {
+        calls.push(opts && typeof opts === "object" ? (opts.behavior ?? null) : null);
+        return orig.call(this, opts);
+      };
+      document.querySelectorAll("[data-pager-dot]")[2].click();
+      Element.prototype.scrollIntoView = orig;
+      return {
+        snapType: getComputedStyle(document.querySelector("[data-pager]")).scrollSnapType,
+        calls,
+      };
+    });
+
+    check(
+      72,
+      'reduced motion: pager snap-type still "y mandatory"; a dot click calls scrollIntoView with behavior "auto" (spy)',
+      g.snapType === "y mandatory" && g.calls.length === 1 && g.calls[0] === "auto",
+      `snap ${JSON.stringify(g.snapType)} (need "y mandatory"); scrollIntoView calls ${JSON.stringify(g.calls)} ` +
+        `(need exactly ["auto"])`,
+    );
+    await ctx.close();
+  });
+
+  /* --- 73: the down-cue is settled-gated. --- */
+  await block("down-cue", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+    await waitT(page, 9.0);
+    const before = await page.evaluate((EFF) => {
+      const vis = eval(EFF);
+      const cue = document.querySelector("[data-down-cue]");
+      return {
+        t: document.querySelector("[data-demo]").getAttribute("data-t"),
+        visible: cue ? vis(cue) > 0.5 : false,
+        text: cue ? cue.textContent.trim() : null,
+      };
+    }, EFF);
+    await waitT(page, 11.3);
+    const after = await page.evaluate((EFF) => {
+      const vis = eval(EFF);
+      const cue = document.querySelector("[data-down-cue]");
+      return {
+        t: document.querySelector("[data-demo]").getAttribute("data-t"),
+        visible: cue ? vis(cue) > 0.5 : false,
+      };
+    }, EFF);
+
+    check(
+      73,
+      "section 1 down-cue: not visible during playback (t=9.0), visible once settled (t=11.3), carrying COPY.cues.down",
+      before.visible === false &&
+        after.visible === true &&
+        before.text != null &&
+        before.text.includes(cueDown),
+      `t=${before.t}: visible ${before.visible} (need false), text ${JSON.stringify(before.text)} ` +
+        `(must contain ${JSON.stringify(cueDown)}); t=${after.t}: visible ${after.visible} (need true)`,
+    );
     await ctx.close();
   });
 

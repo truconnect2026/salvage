@@ -7,16 +7,19 @@
  * the call, nobody picks up, and the save arrives as a Messages banner. The
  * pre-existing thread timeline is untouched — its beats below stay
  * THREAD-RELATIVE, and the engine offsets them by THREAD_START.
+ * Change 12: the clock no longer starts on page load — the pager arms it and
+ * the engine begins ticking when the "call" section is >= 60% visible. The
+ * beats themselves are unchanged. The headline left the timeline entirely: it
+ * is static content at the top of the "save" section now.
  * Global clock:
  *   0.0-1.0    outgoing call screen, "calling…"
  *   1.0-3.6    "ringing…" — the ellipsis cycles at DOT_PERIOD. Nobody answers.
- *   3.6        "Call Ended", screen dims 30%, the End button fades; on
- *              mobile the page headline fades + rises in on the same beat
+ *   3.6        "Call Ended", screen dims 30%, the End button fades
  *   4.4        a Messages banner slides down over the dead call screen
  *   5.2        400ms crossfade to the Messages thread
  *   5.6        the thread timeline's own t=0
  *   10.0       customer's closing bubble beat: the owner notification
- *   11.0       everything settled
+ *   11.0       everything settled — the down-cue and Replay land here
  */
 
 export const CALL_RINGING_AT = 1.0;
@@ -28,12 +31,6 @@ export const BANNER_IN = 0.3;
 export const THREAD_FADE_AT = 5.2;
 export const THREAD_FADE_DUR = 0.4;
 export const THREAD_START = 5.6;
-
-/** Mobile only — at >=1100px the headline is present from load (change 11):
- *  watch-then-read sequencing needs the phone alone on screen. */
-export const HEADLINE_AT = 3.6;
-export const HEADLINE_DUR = 0.5;
-export const HEADLINE_RISE = 16;
 
 /** Bubble index -> reveal time (seconds, THREAD-RELATIVE). Bubble 0 is the
  *  auto-text the banner already delivered at t=4.4 global — on her phone it

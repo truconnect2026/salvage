@@ -10,9 +10,9 @@ import { COPY, resolveName, resolvePreset } from "@/lib/client.config";
  * default, and every /?biz= link silently renders salon. Gates 9-11 cover
  * that; gate 54 covers the same failure mode for &name=.
  *
- * The headline moved into Demo (change 10): on mobile the phone is the first
- * frame and the headline lands beneath it on the missed-call beat, an order
- * only the client grid can express.
+ * Change 12: Demo renders the <main data-pager> itself — the pager is the
+ * page's one vertical scroller and its wiring (observers, keyboard, dots)
+ * is client-side, so the server component only frames it.
  */
 export default async function Home({
   searchParams,
@@ -50,12 +50,7 @@ export default async function Home({
         <p className="text-[15px] text-ink">{COPY.rotatePrompt}</p>
       </div>
 
-      <main
-        data-app-root
-        className="mx-auto w-full max-w-6xl px-5 pb-14 pt-6 min-[900px]:px-10 min-[900px]:pb-10 min-[900px]:pt-0"
-      >
-        <Demo initialPresetId={preset.id} initialName={initialName} />
-      </main>
+      <Demo initialPresetId={preset.id} initialName={initialName} />
     </>
   );
 }

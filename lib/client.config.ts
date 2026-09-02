@@ -18,7 +18,6 @@ export const COPY = {
   productName: "Salvage",
   headline: "The phone rang. Nobody answered. They called someone else.",
   sub: "Salvage catches the call you missed and books it before they move on.",
-  presetPrompt: "Pick your line of work:",
   replayLabel: "Watch it again",
   shareLabel: "Send this to someone",
   shareCopied: "Link copied",
@@ -69,6 +68,33 @@ export const COPY = {
   },
 
   rotatePrompt: "Turn your phone upright.",
+
+  // The snap pager (change 12, A4). Approved copy. Kicker + title are
+  // wayfinding, not headlines — small, top-left of each section.
+  sections: {
+    call: { kicker: "01", title: "The call" },
+    save: { kicker: "02", title: "The save" },
+    yours: { kicker: "03", title: "Make it yours" },
+    math: { kicker: "04", title: "The math" },
+  },
+  cues: {
+    down: "Swipe up",
+    right: "Swipe to see the owner's side",
+    presets: "Swipe to change trade",
+  },
+  a11y: {
+    pager: "Demo sections",
+    dot: "Go to section",
+    panelDot: "Go to panel",
+  },
+
+  // Section-3 preset panels (change 12, B). The numerals come from the
+  // preset; the unit phrases here complete the spec's approved lines
+  // ("$340 a job", "12 missed calls a month").
+  panel: {
+    ticketUnit: "a job",
+    missedUnit: "missed calls a month",
+  },
 
   // Phone / OG chrome. Same human veto as everything else in this file.
   chrome: {

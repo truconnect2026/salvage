@@ -61,3 +61,51 @@ business left/gray incoming), typing indicator side, Delivered under her final
 outgoing bubble, contact header identity, the call screen (nothing
 owner-flavored), the banner's sender and content, and no owner-addressed copy
 anywhere inside the phone.
+
+## Change 12 — adversarial review (2 lenses)
+
+Run after all 68 gates (64 asserted + 4 retired) passed locally; every
+confirmed finding fixed and re-verified (measured, not assumed) before the
+change-12 commit. Lens 1 tested in Playwright WebKit 26 and Chromium (CDP
+touch); real-device-iOS-only behaviors are marked speculative.
+
+### Lens 1 — "iOS Safari gesture fidelity: wrong axis, wrong section, or trapped?"
+
+| # | Finding | Verdict |
+|---|---------|---------|
+| 1 | **Blocker.** The save-section stack (owner card + ledger) was `justify-center`ed inside a clipped panel: on short phones the overflow spilled ABOVE the reachable origin — at 320x568 the owner card was 0px visible at any scroll position, at 375x667 (iPhone SE class) 50 of 81px hidden. The flat `zoom: 0.8` valve was not enough. | **Fixed.** Auto margins replace `justify-center` (center when fitting, clamp to the reachable top edge when not), and the zoom valve became a ladder (0.8/0.72/0.64/0.55 at 820/750/680/600px heights). Measured after: card fully visible with 0 hidden px at 320x568, 360x640, 375x667, 414x736, and 390x844. |
+| 2 | The track was accidentally a VERTICAL scroller: bare `overflow-x: auto` forces used `overflow-y: auto`, so any y-overflow latched vertical swipes into invisible scroll instead of paging. | **Fixed.** `overflow-y: clip` declared (computes to `hidden` next to `auto` per spec — still not user-scrollable), and the finding-1 fix removes the y-overflow itself: measured `scrollHeight - clientHeight === 0` at all five sizes. Desktop save keeps `overflow: visible` (the floating card lives above the column top). |
+| 3 | The rotate guard fired when an in-app browser's keyboard squashed the layout viewport (375x349 matches `landscape + max-height:500px`) — tap the name field in the Facebook browser, the app vanishes. | **Fixed.** Added `(min-aspect-ratio: 3/2)` to the guard query. Measured: 844x390 still guards (gate 48 green), 375x349 no longer does. |
+| 4 | No `100vh` fallback under `100dvh`: on iOS 15.0–15.3 the pager collapsed to auto height inside `overflow:hidden` — a total scroll dead-lock. | **Fixed.** `height: 100vh` fallback line before every `100dvh` (pager, sections, both device caps). |
+| 5 | `container-type`/`cqh` (iOS 16+) had no fallback: on iOS 15 the section-2 phone became a ~607px clipped slab in a 335px panel. | **Fixed.** A `vh`-based `max-width` fallback line precedes the `cqh` one. |
+| 6 | Cosmetic: 4–6px of the owner card's corners shaved by the track clip even at 390x844. | **Fixed** by finding 1's clamp (card top now rests exactly at the track edge). |
+
+Speculative, accepted as floor (no code change): iOS 15–16 nested-snap
+fling-through quirks; touch-down during track momentum latching one gesture;
+a hard fling crossing the middle preset panel (the queue chains it to the
+resting panel — worst case a transient double counter-roll). Traced clean:
+no hijack-capable listeners anywhere (keydown ignores form fields and only
+prevents keys it handles); axis routing under touch and wheel; snap
+re-settle in WebKit; rotate-guard display:none round-trip preserves pager,
+track, and preset state; `touch-action` audit found no dead zones; `100dvh`
+is stable because html/body never scroll (no URL-bar churn, so the 0.6 IO
+threshold cannot mis-fire).
+
+### Lens 2 — "Can the track, the URL, and the rendered preset disagree?"
+
+| # | Finding | Verdict |
+|---|---------|---------|
+| 1 | Resize (rotate) during a smooth dot-scroll stranded the track at a NON-snap pixel offset (scrollLeft kept in px while panel widths moved), silently switching the preset to whatever panel the stale target landed in — measured resting at 700px with snap points 0/860/1720, a salon sliver beside home, for 3+ seconds. | **Fixed.** A window `resize` listener re-snaps the track to the authoritative preset (`pending ?? transition target ?? current`). Measured after: mid-scroll resize settles ON a snap point with URL, rendered name, and track agreeing. Also covers the reviewer's speculative real-iOS rotate case defensively. |
+| 2 | Every non-salon deep link killed the "Swipe to change trade" cue before the visitor saw it: the mount effect's programmatic track positioning fired the async scroll event that tripped the `{once:true}` dismiss listener — and shared `?biz=` links are exactly the audience the cue teaches. | **Fixed.** The cue-dismiss listeners attach two rAFs after mount, past the initial programmatic scroll's dispatch. Measured: `?biz=dental` shows the cue with the track resting on panel 2. |
+| 3 | No-JS floor: on a deep link the SSR dots mark the preset's panel while the track visually rests at panel 0 (scroll position cannot be expressed without JS). | **Dismissed.** The no-JS floor renders the correct PRESET in every section; the dots honestly mark the intended panel, and seeding them to 0 instead would make the (hydrated) common case wrong during the pre-scroll frame. Accepted as the floor. |
+| 4 | A second ArrowRight inside the smooth scroll was swallowed: `round(scrollLeft/width)` read the mid-flight position and re-derived the origin panel. | **Fixed.** The keyboard handler advances from its pending target (800ms window) instead of the instantaneous scrollLeft. Measured: two presses 40ms apart land panel 2, URL `?biz=dental`. |
+| 5 | The URL leads the render by ~600ms inside the queued-transition window (rapid snap salon→home→dental). | **Dismissed (by design).** Only section 3 is on screen during the window and its panels are per-preset static; Share and the name debounce both resolve through `pendingPresetId`, so no wrong link can escape it. Documented, not hidden. |
+| S2 | (Speculative) A React commit stalled past the roll's end would park the counters computed from the stale preset. | **Fixed anyway** — the `[preset]` layout effect re-runs `park()` when the engine is armed with no transition, so a late commit repaints the parked frame. |
+
+Traced clean by the reviewer (Chromium + WebKit + Firefox): deep-link init
+order (scroll before observers; guard absorbs the initial IO refire; reduced
+motion still positions the track); plain resizes preserving panel, URL, and
+a typed name; the rapid-snap queue including A→B→A return; dot jumps across
+an intermediate panel chaining correctly; name debounce and Share during
+queued transitions; playback re-arm on preset switch and fresh restart on
+returning to section 1.

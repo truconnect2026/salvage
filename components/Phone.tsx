@@ -261,6 +261,7 @@ export default function Phone({
   screenMinHeight,
   typingBefore = [],
   showNotification = false,
+  variant = "live",
 }: {
   preset: Preset;
   /* The effective business name (custom or preset default). Falls back to the
@@ -274,6 +275,13 @@ export default function Phone({
   /* OG composition only: the owner notification rendered statically visible —
      there is no rAF phase on the OG page to slide it in. */
   showNotification?: boolean;
+  /* change 12: "static" renders the SETTLED thread only — no call screen, no
+     banner, no typing rows, no notification, and NONE of the playback/gate
+     data attributes (data-bubble, data-row, data-biz-name, …). The playback
+     engine binds by those attributes, so a static instance is invisible to
+     it, and the gates' whole-page tallies (bubble count, single bizName)
+     still see exactly one live phone. */
+  variant?: "live" | "static";
 }) {
   const thread = preset.thread;
   const typing = new Set(typingBefore);
@@ -281,6 +289,9 @@ export default function Phone({
   /* Aspect mode is the real device: box locked to 19.5:9, height follows
      width. OG crop mode keeps the old fixed-height screen. */
   const aspect = screenMinHeight == null;
+  const live = variant === "live";
+  /* Gate/engine attributes only exist on the live instance. */
+  const mark = (attrs: Record<string, string | number | boolean>) => (live ? attrs : {});
 
   const bezelShadow: CSSProperties = {
     boxShadow:
@@ -306,7 +317,7 @@ export default function Phone({
 
       {/* Contact header */}
       <div className="shrink-0 border-b border-line bg-surface-2 px-6 pb-3 pt-2 text-center">
-        <div data-biz-name className="text-[15px] font-semibold leading-tight text-ink">
+        <div {...mark({ "data-biz-name": true })} className="text-[15px] font-semibold leading-tight text-ink">
           {effectiveBizName}
         </div>
         <div className="mt-0.5 text-[11px] text-muted">{COPY.chrome.phone.threadLabel}</div>
@@ -317,7 +328,7 @@ export default function Phone({
           business's auto-text at its timestamp; the banner beat fills
           t=0-5.6, so the first thread frame is never an empty box. */}
       <div
-        data-thread-viewport
+        {...mark({ "data-thread-viewport": true })}
         className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-5 pt-4"
       >
         <div
@@ -329,7 +340,7 @@ export default function Phone({
             aspect ? "justify-end" : "justify-start"
           }`}
         >
-          <div data-thread-area className="flex flex-col pt-3">
+          <div {...mark({ "data-thread-area": true })} className="flex flex-col pt-3">
             {thread.map((b, i) => {
               const prev = thread[i - 1];
               const next = thread[i + 1];
@@ -338,12 +349,12 @@ export default function Phone({
 
               return (
                 <Fragment key={i}>
-                  {typing.has(i) && <TypingRow index={i} right={b.from === "customer"} />}
+                  {live && typing.has(i) && <TypingRow index={i} right={b.from === "customer"} />}
 
                   {/* iOS spacing (C1c): 8px between senders, 2px within a
                       same-sender run; the time label rides the sender change. */}
                   <div
-                    data-row={i}
+                    {...mark({ "data-row": i })}
                     className={`flex flex-col ${i === 0 ? "" : senderChange ? "mt-2" : "mt-0.5"}`}
                   >
                     {senderChange && (
@@ -359,7 +370,7 @@ export default function Phone({
                     {b.from === "customer" ? (
                       <div className="flex justify-end">
                         <div
-                          data-bubble="customer"
+                          {...mark({ "data-bubble": "customer" })}
                           className={`max-w-[72%] rounded-[20px] bg-teal px-[14px] py-2 text-[17px] leading-[1.29] text-abyss ${
                             runEnd ? "rounded-br-[6px]" : ""
                           }`}
@@ -370,7 +381,7 @@ export default function Phone({
                     ) : (
                       <div className="flex justify-start">
                         <div
-                          data-bubble="business"
+                          {...mark({ "data-bubble": "business" })}
                           className={`max-w-[72%] rounded-[20px] bg-surface-2 px-[14px] py-2 text-[17px] leading-[1.29] text-ink ${
                             runEnd ? "rounded-bl-[6px]" : ""
                           }`}
@@ -384,21 +395,24 @@ export default function Phone({
               );
             })}
 
-            <div data-delivered className="mt-0.5 pr-1 pt-1 text-right text-[11px] text-muted">
+            <div {...mark({ "data-delivered": true })} className="mt-0.5 pr-1 pt-1 text-right text-[11px] text-muted">
               {COPY.chrome.phone.deliveredLabel}
             </div>
           </div>
         </div>
       </div>
 
-      {/* The outgoing-call opening lives only on the interactive device. */}
-      {aspect && <CallScreen preset={preset} bizName={effectiveBizName} />}
+      {/* The outgoing-call opening lives only on the LIVE interactive device;
+          a static instance is the settled thread and nothing else. */}
+      {aspect && live && <CallScreen preset={preset} bizName={effectiveBizName} />}
 
       {/* HER phone's closing beat: the booking confirmation from the
           business — Messages identity, not the owner's Salvage alert (that
           card belongs on the ledger side only; change 11 review). Existing
           approved strings recomposed, no new copy. Slides down from the top
-          like every push she has ever received. */}
+          like every push she has ever received. Live instances only: the
+          static settled phone (change 12) has no closing beat. */}
+      {live && (
       <div
         data-notify-phone
         className="absolute inset-x-3 top-3 z-40"
@@ -430,6 +444,7 @@ export default function Phone({
           </div>
         </div>
       </div>
+      )}
 
       {/* Home indicator. Muted, low-alpha: chrome, not content. */}
       <div className="absolute bottom-2 left-1/2 z-50 h-1.25 w-35 -translate-x-1/2 rounded-full bg-muted/30" />
@@ -456,7 +471,11 @@ export default function Phone({
   /* The real device: 19.5:9 box (gate 46), 12px bezel, 44px screen radius
      inside a 56px outer radius (C1d). Height always follows width. */
   return (
-    <div data-phone-device className="relative mx-auto aspect-[9/19.5] w-full max-w-[390px] shrink-0">
+    <div
+      data-phone-device
+      {...(live ? {} : { "data-phone-static": true })}
+      className="relative mx-auto aspect-[9/19.5] w-full max-w-[390px] shrink-0"
+    >
       <div
         className="absolute inset-0 rounded-[56px] bg-[#05090F] p-3 ring-1 ring-inset ring-line/60"
         style={bezelShadow}

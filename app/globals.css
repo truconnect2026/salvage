@@ -15,11 +15,165 @@
   --font-body: var(--font-inter);
 }
 
+/* Change 12 (A1): the page itself never scrolls — the pager owns the one
+   vertical axis. */
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   background:
     radial-gradient(1200px 600px at 50% -10%, #0C1A2E 0%, transparent 60%),
     linear-gradient(180deg, #060B14 0%, #08111F 100%);
-  min-height: 100dvh;
+}
+
+/* The vertical pager (A1). Native CSS scroll-snap only: no wheel listeners,
+   no scroll hijacking — gates 64-67 hold this. The scrollbar is hidden
+   because the right-edge progress dots are the position indicator. */
+[data-pager] {
+  height: 100vh; /* iOS 15.0-15.3 fallback: without it nothing can scroll */
+  height: 100dvh;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+[data-pager]::-webkit-scrollbar {
+  display: none;
+}
+
+[data-section] {
+  position: relative;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+/* Horizontal tracks (A2). X only — a vertical swipe over a track must reach
+   the pager. `overflow-y: clip` matters: a bare overflow-x:auto forces the
+   used overflow-y to auto too, and any y-overflow would make the track a
+   hidden VERTICAL scroller that latches vertical swipes (review lens 1,
+   finding 2). clip clips without creating a scroll container. */
+[data-track] {
+  display: flex;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: clip;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+[data-track]::-webkit-scrollbar {
+  display: none;
+}
+[data-panel] {
+  flex: 0 0 100%;
+  min-width: 0;
+  height: 100%;
+  scroll-snap-align: start;
+}
+
+/* Section 2's wrapper is a track only below 1100px: on desktop the same two
+   children lay out as the static two-up (B2). The section-3 track stays a
+   track at every width — the horizontal gesture is the point (B3). */
+@media (min-width: 1100px) {
+  [data-section="save"] [data-track] {
+    display: grid;
+    grid-template-columns: 340px minmax(0, 1fr);
+    column-gap: 64px;
+    align-items: start;
+    /* Both axes visible: the docked owner card floats ABOVE the ledger
+       column's top edge here, and the base overflow-y clip would shave it. */
+    overflow: visible;
+    scroll-snap-type: none;
+  }
+  [data-section="save"] [data-panel] {
+    flex: none;
+    height: auto;
+  }
+}
+
+/* Device sizing inside the pager. Section 1: the largest 19.5:9 box that
+   fits with 24px margins (B1) — width-limited on phones, height-limited on
+   desktop. Section 2's mobile panel sizes its static phone against the
+   panel's own height (container units), since the headline above it eats an
+   unknown share of the section. */
+[data-section="call"] [data-phone-device] {
+  max-width: min(390px, calc((100vh - 48px) * 9 / 19.5));
+  max-width: min(390px, calc((100dvh - 48px) * 9 / 19.5));
+}
+@media (max-width: 1099.98px) {
+  [data-section="save"] [data-panel] {
+    container-type: size;
+  }
+  [data-section="save"] [data-phone-device] {
+    /* vh line is the iOS 15 floor (no container units there — review lens 1,
+       finding 5); the cqh line wins wherever container queries exist. */
+    max-width: calc((100vh - 300px) * 9 / 19.5);
+    max-width: calc((100cqh - 40px) * 9 / 19.5);
+  }
+}
+/* Desktop two-up: the 19.5:9 aspect means a 340px phone is 737px tall — with
+   the headline above it that cannot fit 900px, so the static phone is
+   height-driven here (the >=340px device gate belongs to section 1's full
+   phone). 292px reserve = header + card float + bottom padding at 1100+. */
+@media (min-width: 1100px) {
+  [data-section="save"] [data-phone-device] {
+    max-width: min(340px, calc((100vh - 292px) * 9 / 19.5));
+    max-width: min(340px, calc((100dvh - 292px) * 9 / 19.5));
+  }
+}
+
+/* Short-phone safety valve: below ~820px of height the save-section stack
+   (owner card + ledger) cannot fit a 100dvh section at full scale — scale
+   the stack, not the type ramp, in steps that track how much height is
+   missing (review lens 1, finding 1: a flat 0.8 left the owner card
+   unreachable on SE-class phones). Gate viewports (390x844, 1440x900)
+   never engage these. */
+@media (max-width: 1099.98px) and (max-height: 820px) {
+  [data-save-stack] {
+    zoom: 0.8;
+  }
+}
+@media (max-width: 1099.98px) and (max-height: 750px) {
+  [data-save-stack] {
+    zoom: 0.72;
+  }
+}
+@media (max-width: 1099.98px) and (max-height: 680px) {
+  [data-save-stack] {
+    zoom: 0.64;
+  }
+}
+@media (max-width: 1099.98px) and (max-height: 600px) {
+  [data-save-stack] {
+    zoom: 0.55;
+  }
+}
+
+/* The down-cue's chevron: an ambient bob. CSS, not the playback rAF — the
+   loop parks after LOOP_UNTIL and wayfinding must not wake it. */
+@keyframes cue-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(3px);
+  }
+}
+.cue-bob {
+  animation: cue-bob 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cue-bob {
+    animation: none;
+  }
 }
 
 /* Fraunces warmth: optical sizing on, SOFT axis raised. Applies wherever the
@@ -45,63 +199,16 @@ body {
   }
 }
 
-/* Change 10 page order. Mobile: the phone IS the first frame; the headline
-   lands beneath it on the missed-call beat, then name + presets, then the
-   ledger. Desktop reflows to the classic composition — headline block above
-   the two-up. A named-area grid, not `order-*`, because the desktop shape
-   needs multi-column areas. */
-.demo-grid {
-  grid-template-areas: "phone" "head" "namepre" "ledger";
-}
-@media (min-width: 900px) {
-  .demo-grid {
-    grid-template-areas:
-      "head head"
-      "namepre namepre"
-      "phone ledger";
-  }
-}
-
-/* 19.5:9 fit fallback (change 10, A3): on short viewports where a full-width
-   19.5:9 device would overflow, cap the device so its height is 78% of the
-   viewport and let the width follow. At 390x844 the full-width device fits
-   (758px + 24px padding < 844) and this cap never engages. */
-@media (max-width: 899px) and (max-height: 800px) {
-  [data-phone-device] {
-    max-width: calc(78dvh * 9 / 19.5);
-  }
-}
-
-/* Section reveal (change 10, C5a): below-the-fold sections fade + rise 16px
-   once, on first intersection. The classes are added by JS only — with no JS
-   (the SSR floor) nothing is ever hidden. The headline block is NOT part of
-   this: its reveal belongs to the playback engine (the missed-call beat). */
-[data-reveal].reveal-pending {
-  opacity: 0;
-  transform: translateY(16px);
-}
-[data-reveal].revealed {
-  opacity: 1;
-  transform: none;
-  transition:
-    opacity 400ms ease,
-    transform 400ms ease;
-}
-@media (prefers-reduced-motion: reduce) {
-  [data-reveal].reveal-pending,
-  [data-reveal].revealed {
-    opacity: 1;
-    transform: none;
-    transition: none;
-  }
-}
-
 /* Orientation guard (change 10, C4): landscape on a coarse-pointer device
    gets a full-screen rotate prompt and nothing else. */
 [data-rotate-guard] {
   display: none;
 }
-@media (pointer: coarse) and (max-height: 500px) and (orientation: landscape) {
+/* min-aspect-ratio 3/2: a real landscape phone is >= 1.7; a portrait layout
+   viewport squashed by an in-app browser's keyboard (~375x349 = 1.07) must
+   NOT trip the guard mid-typing (review lens 1, finding 3 — Facebook's
+   WKWebView is this demo's primary channel). */
+@media (pointer: coarse) and (max-height: 500px) and (orientation: landscape) and (min-aspect-ratio: 3/2) {
   [data-rotate-guard] {
     display: flex;
   }
