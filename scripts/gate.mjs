@@ -2161,14 +2161,34 @@ if (!chromium) {
   await block("deep-arrival", async () => {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
     const page = await ctx.newPage();
+    /* The scroll must land BEFORE the app boots — that is the scenario under
+       test. On a fast host hydration can win the race against the gate's own
+       round-trips (the change-13 live run proved it), so the framework
+       bundles are held back until the scroll is in place. Test plumbing
+       only: the app under test is unchanged. */
+    let holdScripts = true;
+    await page.route("**/*.js*", async (route) => {
+      while (holdScripts) await new Promise((r) => setTimeout(r, 50));
+      await route.continue();
+    });
     await page.goto(base, { waitUntil: "commit" });
-    await page.waitForSelector("[data-pager]", { state: "attached" });
+    /* All four sections must have STREAMED before the scroll, or scrollTop
+       clamps against a half-delivered document (the live host streams; the
+       dev server delivers in one chunk). */
+    await page.waitForFunction(() => {
+      const p = document.querySelector("[data-pager]");
+      return p != null && p.scrollHeight >= p.clientHeight * 3.5;
+    });
     const tAtScroll = await page.evaluate(() => {
       history.scrollRestoration = "manual";
       const pager = document.querySelector("[data-pager]");
       pager.scrollTop = pager.clientHeight * 2;
-      return document.querySelector("[data-demo]")?.getAttribute("data-t") ?? null;
+      return {
+        t: document.querySelector("[data-demo]")?.getAttribute("data-t") ?? null,
+        scrollTop: pager.scrollTop,
+      };
     });
+    holdScripts = false;
     await waitHydrated(page);
     await page.waitForTimeout(2000);
     const parked = await page.evaluate(() => ({
@@ -2187,8 +2207,9 @@ if (!chromium) {
       68,
       'loaded scrolled to section 3: playback NOT started 2s after hydration (data-t parked at "0.000"); starts within 500ms of section 1 reaching 60% visibility',
       parked.t === "0.000" && Number.isFinite(parseFloat(started)) && parseFloat(started) > 0,
-      `data-t at scroll ${JSON.stringify(tAtScroll)}; 2s after hydration ${JSON.stringify(parked.t)} (need "0.000") ` +
-        `at pager scrollTop ${parked.scrollTop}; 500ms after returning to section 1: ${JSON.stringify(started)} (need > 0)`,
+      `at scroll: data-t ${JSON.stringify(tAtScroll.t)}, scrollTop ${tAtScroll.scrollTop}; 2s after hydration ` +
+        `${JSON.stringify(parked.t)} (need "0.000") at pager scrollTop ${parked.scrollTop}; ` +
+        `500ms after returning to section 1: ${JSON.stringify(started)} (need > 0)`,
     );
     await ctx.close();
   });
