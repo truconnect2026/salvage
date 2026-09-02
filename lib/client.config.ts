@@ -14,7 +14,6 @@ export const META = {
 };
 
 export const COPY = {
-  eyebrow: "Concept demo · Davy Jones' Locker",
   productName: "Salvage",
   headline: "The phone rang. Nobody answered. They called someone else.",
   sub: "Salvage catches the call you missed and books it before they move on.",
@@ -88,12 +87,13 @@ export const COPY = {
     panelDot: "Go to panel",
   },
 
-  // Section-3 preset panels (change 12, B). The numerals come from the
-  // preset; the unit phrases here complete the spec's approved lines
-  // ("$340 a job", "12 missed calls a month").
-  panel: {
-    ticketUnit: "a job",
-    missedUnit: "missed calls a month",
+  // Section-3 tiles (change 13, S3d). Approved copy — the numerals come from
+  // the preset, the suffixes complete the lines ("$340 a job", "12 missed a
+  // month", "$4,080 still lost").
+  yours: {
+    ticketSuffix: "a job",
+    missedSuffix: "missed a month",
+    lostSuffix: "still lost",
   },
 
   // Phone / OG chrome. Same human veto as everything else in this file.

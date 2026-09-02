@@ -35,6 +35,16 @@ function WifiGlyph() {
   );
 }
 
+export function StatusGlyphs() {
+  return (
+    <span className="flex items-center gap-[6px] text-muted">
+      <SignalGlyph />
+      <WifiGlyph />
+      <BatteryGlyph />
+    </span>
+  );
+}
+
 function BatteryGlyph() {
   return (
     <svg width="25" height="12" viewBox="0 0 25 12" aria-hidden="true">
@@ -290,8 +300,12 @@ export default function Phone({
      width. OG crop mode keeps the old fixed-height screen. */
   const aspect = screenMinHeight == null;
   const live = variant === "live";
-  /* Gate/engine attributes only exist on the live instance. */
+  /* Gate/engine attributes only exist on the live instance. A static
+     instance carries its own "data-s-" namespace where a gate needs to
+     measure it (74/75) without polluting the live tallies. */
   const mark = (attrs: Record<string, string | number | boolean>) => (live ? attrs : {});
+  const markEither = (liveName: string, staticName: string, value: string | boolean = true) =>
+    live ? { [liveName]: value } : { [staticName]: value };
 
   const bezelShadow: CSSProperties = {
     boxShadow:
@@ -328,19 +342,23 @@ export default function Phone({
           business's auto-text at its timestamp; the banner beat fills
           t=0-5.6, so the first thread frame is never an empty box. */}
       <div
-        {...mark({ "data-thread-viewport": true })}
+        {...markEither("data-thread-viewport", "data-s-viewport")}
         className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-5 pt-4"
       >
         <div
           /* overflow-hidden matters: an overflowing justify-end box spills
              past its START edge, so without it a thread taller than the
              box would spill over the contact header at very narrow widths.
-             Clipped, it degrades like a scrolled thread. */
+             Clipped, it degrades like a scrolled thread.
+             change 13 (S2a): STATIC instances anchor the thread to the TOP —
+             their device bleeds off the section bottom, so the thread must
+             start at its first bubble and clip from the bottom, never the
+             top. The live phone keeps the bottom-anchored real-thread look. */
           className={`flex min-h-0 flex-1 flex-col overflow-hidden ${
-            aspect ? "justify-end" : "justify-start"
+            aspect && live ? "justify-end" : "justify-start"
           }`}
         >
-          <div {...mark({ "data-thread-area": true })} className="flex flex-col pt-3">
+          <div {...markEither("data-thread-area", "data-s-thread-area")} className="flex flex-col pt-3">
             {thread.map((b, i) => {
               const prev = thread[i - 1];
               const next = thread[i + 1];
@@ -370,7 +388,7 @@ export default function Phone({
                     {b.from === "customer" ? (
                       <div className="flex justify-end">
                         <div
-                          {...mark({ "data-bubble": "customer" })}
+                          {...markEither("data-bubble", "data-s-bubble", "customer")}
                           className={`max-w-[72%] rounded-[20px] bg-teal px-[14px] py-2 text-[17px] leading-[1.29] text-abyss ${
                             runEnd ? "rounded-br-[6px]" : ""
                           }`}
@@ -381,7 +399,7 @@ export default function Phone({
                     ) : (
                       <div className="flex justify-start">
                         <div
-                          {...mark({ "data-bubble": "business" })}
+                          {...markEither("data-bubble", "data-s-bubble", "business")}
                           className={`max-w-[72%] rounded-[20px] bg-surface-2 px-[14px] py-2 text-[17px] leading-[1.29] text-ink ${
                             runEnd ? "rounded-bl-[6px]" : ""
                           }`}

@@ -526,6 +526,7 @@ const BROWSER_GATES = [
   12, 13, 14, 15, 17, 18, 19, 20, 24, 26, 28, 29, 30, 31, 32, 33, 34, 35, 37, 38, 39, 45,
   46, 47, 48, 49, 50, 51, 52, 53, 55, 56, 57, 58, 59, 60, 61, 62, 63,
   64, 65, 66, 67, 68, 69, 70, 71, 72, 73,
+  74, 75, 76, 77, 78, 79, 80, 81, 82,
 ];
 
 if (!chromium) {
@@ -884,13 +885,28 @@ if (!chromium) {
         `page-wide: ${tokens.pageGoldCount} gold total (must equal hero + band + track)`,
     );
 
+    /* 82 (change 13): the section-3 tiles carry exactly ONE gold element per
+       panel — the ticket value — and the page census stays at 6. */
+    check(
+      82,
+      "section-3 gold is only the ticket value (1 per panel, 3 total); page-wide gold census is exactly 6",
+      tokens.ticketCount === presets.length &&
+        tokens.yoursGoldCount === presets.length &&
+        tokens.yoursGoldIsTickets &&
+        tokens.pageGoldCount === 6,
+      `${tokens.yoursGoldCount} gold element(s) in section 3 vs ${tokens.ticketCount} data-ticket ` +
+        `(need ${presets.length} each, all on data-ticket: ${tokens.yoursGoldIsTickets}); ` +
+        `page-wide gold ${tokens.pageGoldCount} (need exactly 6)`,
+    );
+
     await ctx.close();
   });
 
-  /* --- 30 (amended, change 12): the two-up lives in section 2 now — its
-   * phone is the static settled instance. Scroll the section into view, then
-   * the assertions are unchanged: phone left, panel right, tops aligned,
-   * both fully visible, no overlap. --- */
+  /* --- 30 (amended, change 13): section 2 is a 40/60 two-up whose LEFT
+   * column stacks headline-then-phone, the phone bleeding off the section
+   * bottom BY DESIGN (S2a) — so "fully visible" and "tops aligned" now apply
+   * to the ledger only. Kept: no overlap, phone strictly left, ledger fully
+   * visible, phone anchored inside the frame horizontally and at its top. */
   await block("desktop-pair-geometry", async () => {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const page = await ctx.newPage();
@@ -912,31 +928,25 @@ if (!chromium) {
         phone: { top: pr.top, bottom: pr.bottom, left: pr.left, right: pr.right },
         ledger: { top: lr.top, bottom: lr.bottom, left: lr.left, right: lr.right },
         overlap,
-        phoneInViewport: pr.left >= -0.5 && pr.right <= vw + 0.5 && pr.top >= -0.5 && pr.bottom <= vh + 0.5,
+        phoneAnchored: pr.top >= 0 && pr.left >= -0.5 && pr.right <= vw + 0.5,
         ledgerInViewport: lr.left >= -0.5 && lr.right <= vw + 0.5 && lr.top >= -0.5 && lr.bottom <= vh + 0.5,
-        topDiff: Math.abs(pr.top - lr.top),
-        // Non-overlap alone doesn't establish which box is on which side —
-        // a panel-left/phone-right composition would satisfy every other
-        // condition here too. Require the phone's right edge to clear the
-        // panel's left edge.
         phoneIsLeft: pr.right <= lr.left,
       };
     });
 
     check(
       30,
-      "section 2 at 1440x900: phone left, ledger panel right, fully visible, tops aligned",
+      "section 2 at 1440x900: phone column left of the ledger, no overlap, ledger fully visible; the phone bleeds off the bottom by design",
       g != null &&
         g.overlap === false &&
         g.phoneIsLeft === true &&
-        g.phoneInViewport === true &&
-        g.ledgerInViewport === true &&
-        g.topDiff <= 8,
+        g.phoneAnchored === true &&
+        g.ledgerInViewport === true,
       g == null
         ? "phone or ledger panel not found"
         : `overlap ${g.overlap}, phone left of ledger ${g.phoneIsLeft}, ` +
-          `phone in viewport ${g.phoneInViewport} (${JSON.stringify(g.phone)}), ` +
-          `ledger in viewport ${g.ledgerInViewport} (${JSON.stringify(g.ledger)}), topDiff ${g.topDiff}px (need <= 8)`,
+          `phone anchored (top >= 0, horizontally inside) ${g.phoneAnchored} (${JSON.stringify(g.phone)}), ` +
+          `ledger in viewport ${g.ledgerInViewport} (${JSON.stringify(g.ledger)})`,
     );
 
     await ctx.close();
@@ -1089,11 +1099,10 @@ if (!chromium) {
     );
   });
 
-  /* --- 34 (amended, change 12): the desktop HERO frame is SECTION 2 —
-   * headline block + static phone + ledger panel + the docked owner card +
-   * the share button, all inside one 100dvh section at 1440x900. The name
-   * field moved to section 3 and is no longer a member. The claim is
-   * unchanged: everything the hero frame shows must actually fit it. --- */
+  /* --- 34 (amended, change 13): the hero frame is still section 2, but the
+   * full-scale phone now bleeds off the section bottom by design (S2a) — it
+   * is excluded from the bottom fit and must only anchor its TOP inside the
+   * frame. Headline, ledger panel, docked card, and Share must all fit. */
   await block("marketing-frame-fit", async () => {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const page = await ctx.newPage();
@@ -1110,30 +1119,29 @@ if (!chromium) {
       const share = document.querySelector("[data-share]");
       if (!header || !phone || !panel || !card || !share) return null;
       const hr = header.getBoundingClientRect();
-      const pr = phone.getBoundingClientRect();
       const lr = panel.getBoundingClientRect();
       const cr = card.getBoundingClientRect();
       const sr = share.getBoundingClientRect();
       return {
         headerBottom: hr.bottom,
-        phoneBottom: pr.bottom,
         panelBottom: lr.bottom,
         shareBottom: sr.bottom,
         cardTop: cr.top,
-        frameBottom: Math.max(hr.bottom, pr.bottom, lr.bottom, sr.bottom),
+        phoneTop: phone.getBoundingClientRect().top,
+        frameBottom: Math.max(hr.bottom, lr.bottom, sr.bottom),
         innerHeight: window.innerHeight,
       };
     });
 
     check(
       34,
-      "desktop hero section 2 (headline + static phone + ledger panel + docked card + share) fits 1440x900 with no scroll",
-      g != null && g.frameBottom <= g.innerHeight && g.cardTop >= 0,
+      "desktop hero section 2 (headline + ledger panel + docked card + share) fits 1440x900; the bleeding phone anchors its top inside the frame",
+      g != null && g.frameBottom <= g.innerHeight && g.cardTop >= 0 && g.phoneTop >= 0,
       g == null
         ? "headline, phone, ledger panel, card, or share not found"
         : `frame bottom ${Math.round(g.frameBottom)}px (header ${Math.round(g.headerBottom)}px, ` +
-          `phone ${Math.round(g.phoneBottom)}px, panel ${Math.round(g.panelBottom)}px, share ${Math.round(g.shareBottom)}px) ` +
-          `vs viewport ${g.innerHeight}px; card top ${Math.round(g.cardTop)}px (need >= 0)`,
+          `panel ${Math.round(g.panelBottom)}px, share ${Math.round(g.shareBottom)}px) vs viewport ${g.innerHeight}px; ` +
+          `card top ${Math.round(g.cardTop)}px, phone top ${Math.round(g.phoneTop)}px (both need >= 0)`,
     );
 
     await ctx.close();
@@ -1647,6 +1655,19 @@ if (!chromium) {
       `phone header ${JSON.stringify(named.phoneHeader)}, call screen ${JSON.stringify(named.callScreen)}, notify contains "Test Salon": ` +
         `${named.notifyText != null && named.notifyText.includes("Test Salon")}, ledger header ` +
         `${JSON.stringify(named.ledgerHeader)}, url ${named.url}`,
+    );
+
+    /* 78 (change 13): the section-3 live-skin phone — the active panel's
+       contact header carries the typed name within the same 300ms window. */
+    const cropBiz = await page.evaluate(
+      (id) => document.querySelector(`[data-crop-biz="${id}"]`)?.textContent?.trim() ?? null,
+      expected.id,
+    );
+    check(
+      78,
+      'section 3 panel 0: the live-skin phone\'s contact header updates to "Test Salon" within 300ms of typing',
+      cropBiz === "Test Salon",
+      `[data-crop-biz="${expected.id}"] text ${JSON.stringify(cropBiz)} (need "Test Salon")`,
     );
 
     await page.fill("[data-name-input]", "<b>x</b>");
@@ -2313,6 +2334,215 @@ if (!chromium) {
       `t=${before.t}: visible ${before.visible} (need false), text ${JSON.stringify(before.text)} ` +
         `(must contain ${JSON.stringify(cueDown)}); t=${after.t}: visible ${after.visible} (need true)`,
     );
+    await ctx.close();
+  });
+
+  /* --- 74 + 76 + 77 + 79 + 80 + 81: frame scale, desktop pass. --- */
+  await block("frame-scale-desktop", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+
+    const g = await page.evaluate(() => {
+      const device = document.querySelector('[data-section="save"] [data-phone-device]');
+      const bubble = document.querySelector('[data-section="save"] [data-s-bubble]');
+      const vp = document.querySelector('[data-section="save"] [data-s-viewport]');
+      if (!device || !bubble || !vp) return null;
+      return {
+        w: device.getBoundingClientRect().width,
+        bubbleTop: bubble.getBoundingClientRect().top,
+        vpTop: vp.getBoundingClientRect().top,
+      };
+    });
+
+    check(
+      74,
+      "section 2 desktop static phone width >= 340 at 1440x900; the thread's first bubble is not clipped (top >= thread viewport top)",
+      g != null && g.w >= 340 && g.bubbleTop >= g.vpTop - 1,
+      g == null
+        ? "save device, first static bubble, or thread viewport not found"
+        : `device width ${g.w.toFixed(1)}px (need >= 340); first bubble top ${g.bubbleTop.toFixed(1)} vs ` +
+          `thread viewport top ${g.vpTop.toFixed(1)} (bubble must not start above it)`,
+    );
+
+    const tiles = await page.evaluate(() => {
+      const money = document.querySelector("[data-money]");
+      const visibleTiles = money
+        ? [...money.children].filter((el) => getComputedStyle(el).display !== "none").length
+        : -1;
+      const share = document.querySelector("[data-share]");
+      const scs = share ? getComputedStyle(share) : null;
+      const root = getComputedStyle(document.documentElement);
+      const toRgb = (name) => {
+        const h = root.getPropertyValue(name).trim().replace("#", "");
+        if (h.length < 6) return null;
+        return `rgb(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)})`;
+      };
+      return {
+        visibleTiles,
+        teal: toRgb("--color-teal"),
+        shareBg: scs ? scs.backgroundColor : null,
+        shareW: share ? share.getBoundingClientRect().width : 0,
+      };
+    });
+
+    const yours = await page.evaluate(() => {
+      const root = getComputedStyle(document.documentElement);
+      const toRgb = (name) => {
+        const h = root.getPropertyValue(name).trim().replace("#", "");
+        if (h.length < 6) return null;
+        return `rgb(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)})`;
+      };
+      const gold = toRgb("--color-gold");
+      const panels = [...document.querySelectorAll('[data-section="yours"] [data-panel]')];
+      return {
+        gold,
+        panelCount: panels.length,
+        tileCounts: panels.map((p) => p.querySelectorAll("[data-tile]").length),
+        ticketColors: panels.map((p) => {
+          const t = p.querySelector("[data-ticket]");
+          return t ? getComputedStyle(t).color : null;
+        }),
+        valueSizes: [...document.querySelectorAll('[data-section="yours"] [data-tile-value]')].map((el) =>
+          parseFloat(getComputedStyle(el).fontSize),
+        ),
+      };
+    });
+
+    check(
+      79,
+      "section 3: three tiles per panel; ticket value computed color === gold; tile values >= 40px at 1440",
+      yours.panelCount === presets.length &&
+        yours.tileCounts.every((n) => n === 3) &&
+        yours.ticketColors.every((c) => c === yours.gold) &&
+        yours.valueSizes.length === presets.length * 3 &&
+        yours.valueSizes.every((n) => n >= 40),
+      `${yours.panelCount} panel(s), tiles per panel [${yours.tileCounts.join(", ")}] (need 3 each); ` +
+        `ticket colors ${JSON.stringify(yours.ticketColors)} (need gold ${yours.gold}); ` +
+        `value sizes [${yours.valueSizes.join(", ")}] (need all >= 40)`,
+    );
+
+    const typeScan = await page.evaluate(() => {
+      const math = document.querySelector("[data-math]");
+      if (!math) return null;
+      let max = 0;
+      let maxTag = null;
+      for (const el of document.querySelectorAll("body *")) {
+        const cs = getComputedStyle(el);
+        if (cs.display === "none" || cs.visibility === "hidden") continue;
+        if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
+        const fs = parseFloat(cs.fontSize);
+        if (fs > max) {
+          max = fs;
+          maxTag = math.contains(el) || el === math ? "in-math" : el.tagName + (el.dataset ? JSON.stringify({ ...el.dataset }) : "");
+        }
+      }
+      return { mathFS: parseFloat(getComputedStyle(math).fontSize), max, maxTag };
+    });
+
+    const glows = await page.evaluate(() => {
+      const sections = [...document.querySelectorAll("[data-section]")];
+      return sections.map((sec) => {
+        const g = sec.querySelectorAll("[data-glow]");
+        return {
+          id: sec.dataset.section,
+          count: g.length,
+          animation: g[0] ? getComputedStyle(g[0]).animationName : null,
+        };
+      });
+    });
+
+    check(
+      81,
+      'each section has exactly one [data-glow], and its computed animation-name is "none"',
+      glows.length === 4 && glows.every((g) => g.count === 1 && g.animation === "none"),
+      glows.map((g) => `${g.id}: ${g.count} glow(s), animation ${JSON.stringify(g.animation)}`).join(" | "),
+    );
+
+    /* --- 75-77, 80: mobile pass. --- */
+    const ctxM = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const pageM = await ctxM.newPage();
+    await pageM.goto(base, { waitUntil: "domcontentloaded" });
+    await pageM.evaluate(() => document.fonts.ready);
+
+    const m = await pageM.evaluate(() => {
+      const call = document.querySelector('[data-section="call"] [data-phone-device]');
+      const save = document.querySelector('[data-section="save"] [data-phone-device]');
+      const money = document.querySelector("[data-money]");
+      const share = document.querySelector("[data-share]");
+      const math = document.querySelector("[data-math]");
+      const root = getComputedStyle(document.documentElement);
+      const toRgb = (name) => {
+        const h = root.getPropertyValue(name).trim().replace("#", "");
+        if (h.length < 6) return null;
+        return `rgb(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)})`;
+      };
+      let max = 0;
+      let maxTag = null;
+      for (const el of document.querySelectorAll("body *")) {
+        const cs = getComputedStyle(el);
+        if (cs.display === "none" || cs.visibility === "hidden") continue;
+        if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
+        const fs = parseFloat(cs.fontSize);
+        if (fs > max) {
+          max = fs;
+          maxTag = math && (math.contains(el) || el === math) ? "in-math" : el.tagName;
+        }
+      }
+      return {
+        callW: call ? call.getBoundingClientRect().width : 0,
+        saveW: save ? save.getBoundingClientRect().width : 0,
+        visibleTiles: money
+          ? [...money.children].filter((el) => getComputedStyle(el).display !== "none").length
+          : -1,
+        teal: toRgb("--color-teal"),
+        shareBg: share ? getComputedStyle(share).backgroundColor : null,
+        shareW: share ? share.getBoundingClientRect().width : 0,
+        mathFS: math ? parseFloat(getComputedStyle(math).fontSize) : 0,
+        max,
+        maxTag,
+      };
+    });
+
+    check(
+      75,
+      "section 2 mobile panel-1 phone width === section 1 phone width ±2px at 390x844",
+      m.callW > 0 && Math.abs(m.callW - m.saveW) <= 2,
+      `section-1 device ${m.callW.toFixed(1)}px, section-2 device ${m.saveW.toFixed(1)}px (need equal ±2)`,
+    );
+
+    check(
+      76,
+      "metric tiles: exactly 2 rendered below 600px, 3 at desktop",
+      m.visibleTiles === 2 && tiles.visibleTiles === 3,
+      `390x844 visible tiles ${m.visibleTiles} (need 2); 1440x900 visible tiles ${tiles.visibleTiles} (need 3)`,
+    );
+
+    check(
+      77,
+      "share button computed background === teal and width >= 280 at 390x844 and 1440x900",
+      m.shareBg === m.teal && m.shareW >= 280 && tiles.shareBg === tiles.teal && tiles.shareW >= 280,
+      `390: bg ${m.shareBg}, width ${m.shareW.toFixed(1)}px; 1440: bg ${tiles.shareBg}, width ${tiles.shareW.toFixed(1)}px ` +
+        `(need bg teal ${m.teal}, width >= 280)`,
+    );
+
+    check(
+      80,
+      "math line font-size >= 40px at 390 and >= 64px at 1440, and it is the largest text on the page at both",
+      m.mathFS >= 40 &&
+        m.max <= m.mathFS + 0.5 &&
+        m.maxTag === "in-math" &&
+        typeScan != null &&
+        typeScan.mathFS >= 64 &&
+        typeScan.max <= typeScan.mathFS + 0.5 &&
+        typeScan.maxTag === "in-math",
+      `390: math ${m.mathFS}px (need >= 40), page max ${m.max}px on ${JSON.stringify(m.maxTag)}; ` +
+        `1440: math ${typeScan?.mathFS}px (need >= 64), page max ${typeScan?.max}px on ${JSON.stringify(typeScan?.maxTag)} ` +
+        `(the max must live inside [data-math])`,
+    );
+
+    await ctxM.close();
     await ctx.close();
   });
 

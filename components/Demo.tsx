@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import Ledger from "@/components/Ledger";
-import Phone, { NotifyCard } from "@/components/Phone";
+import Phone, { NotifyCard, StatusGlyphs } from "@/components/Phone";
 import { COPY, MAX_NAME_LEN, PRESETS, SHARE_ORIGIN, resolveName, type Preset } from "@/lib/client.config";
 import { usd } from "@/lib/format";
 import {
@@ -393,38 +393,73 @@ const ghost =
   "transition-colors hover:bg-teal/10 outline-none " +
   "focus-visible:ring-2 focus-visible:ring-teal-bright focus-visible:ring-offset-2 focus-visible:ring-offset-abyss";
 
-const ghostShare =
-  "rounded-full border border-teal px-4 py-2 text-[12px] min-[1100px]:px-5 min-[1100px]:py-2.5 " +
-  "min-[1100px]:text-[13px] font-medium text-teal-bright transition-colors hover:bg-teal/10 outline-none " +
+/* change 13 (S2d): Share is a teal FILL now — the section's one big action.
+   Full width minus margins on phones, >=280px centered on desktop. */
+const shareFill =
+  "rounded-full bg-teal px-8 py-3.5 text-[15px] font-semibold text-abyss " +
+  "transition-colors hover:bg-teal-bright outline-none w-full min-[600px]:w-auto min-[600px]:min-w-[280px] " +
   "focus-visible:ring-2 focus-visible:ring-teal-bright focus-visible:ring-offset-2 focus-visible:ring-offset-abyss";
 
 const buildQuery = (biz: string, name: string) =>
   `?biz=${encodeURIComponent(biz)}${name ? `&name=${encodeURIComponent(name)}` : ""}`;
 
-/* Wayfinding, not headlines (A4): kicker + title, small, top-left. */
+/* Wayfinding, not headlines (change 13, G3): kicker 12px tracked, title
+   Fraunces 28px, muted, 32px inset. Below 1100px the title runs 20px — at
+   28px it would sit on the section-1 phone's status row on a 390px screen. */
 function SectionMark({ kicker, title }: { kicker: string; title: string }) {
   return (
-    <div className="pointer-events-none absolute left-5 top-5 z-20 min-[1100px]:left-10 min-[1100px]:top-7">
-      <p className="text-[11px] uppercase tracking-[0.3em] text-muted">{kicker}</p>
-      <p className="mt-0.5 font-display text-[15px] text-muted">{title}</p>
+    <div className="pointer-events-none absolute left-8 top-8 z-20">
+      <p className="text-[12px] uppercase tracking-[0.3em] text-muted">{kicker}</p>
+      <p className="mt-1 font-display text-[20px] leading-tight text-muted min-[1100px]:text-[28px]">{title}</p>
     </div>
   );
 }
 
-/* Section 3's per-preset panel: a short static crop of the phone showing
-   thread[0] only — the auto-text is the product, one glance per trade. */
-function PhoneCrop({ preset, bizName }: { preset: Preset; bizName: string }) {
+/* Section ground (change 13, G2): one radial light source per section, behind
+   its primary object. Static — gate 81 asserts no animation ever rides it. */
+function Glow() {
   return (
-    <div className="w-full max-w-[300px] overflow-hidden rounded-t-[36px] bg-[#05090F] p-2.5 pb-0 ring-1 ring-inset ring-line/60">
-      <div className="overflow-hidden rounded-t-[28px] bg-surface font-phone">
-        <div className="border-b border-line bg-surface-2 px-5 pb-2 pt-2.5 text-center">
-          <div className="truncate text-[13px] font-semibold leading-tight text-ink">{bizName}</div>
-          <div className="mt-0.5 text-[10px] text-muted">{COPY.chrome.phone.threadLabel}</div>
+    <div
+      data-glow
+      aria-hidden="true"
+      className="pointer-events-none absolute left-1/2 top-1/2 z-0 h-[900px] w-[900px] -translate-x-1/2 -translate-y-1/2"
+      style={{
+        background:
+          "radial-gradient(closest-side, color-mix(in srgb, var(--color-surface) 14%, transparent), transparent)",
+      }}
+    />
+  );
+}
+
+/* Section 3's per-preset phone (change 13, S3a/b): the top of a real device —
+   status row, contact header, thread[0] — LIVE-skinned by the name field.
+   This is the one place the visitor watches their own name land on a phone.
+   thread[0]'s bizName mention follows the live name too: a pure substitution
+   inside the existing approved string, no new copy. */
+function PhoneTop({ preset, bizName }: { preset: Preset; bizName: string }) {
+  const text = preset.thread[0].text.replace(preset.bizName, bizName);
+  return (
+    <div
+      className="w-full overflow-hidden rounded-t-[56px] bg-[#05090F] p-3 pb-0 ring-1 ring-inset ring-line/60"
+      style={{ boxShadow: "inset 0 1px 0 0 rgba(255,255,255,0.08), 0 24px 60px -24px rgba(0,0,0,0.8)" }}
+    >
+      <div className="relative overflow-hidden rounded-t-[44px] bg-surface pb-6 font-phone">
+        <div className="absolute left-1/2 top-0 z-40 h-[26px] w-[120px] -translate-x-1/2 rounded-b-[14px] bg-[#05090F]" />
+        <div className="relative z-10 flex h-[36px] items-center justify-between px-6 pt-1">
+          <span className="text-[13px] font-semibold tabular-nums text-ink">{COPY.chrome.phone.statusTime}</span>
+          <StatusGlyphs />
         </div>
-        <div className="px-3 pb-4 pt-2.5">
+        <div className="border-b border-line bg-surface-2 px-6 pb-3 pt-2 text-center">
+          <div data-crop-biz={preset.id} className="truncate text-[15px] font-semibold leading-tight text-ink">
+            {bizName}
+          </div>
+          <div className="mt-0.5 text-[11px] text-muted">{COPY.chrome.phone.threadLabel}</div>
+        </div>
+        <div className="px-4 pt-3">
+          <div className="pb-1.5 text-center text-[11px] tabular-nums text-muted">{preset.thread[0].time}</div>
           <div className="flex justify-start">
-            <div className="max-w-[88%] rounded-[16px] rounded-bl-[5px] bg-surface-2 px-3 py-1.5 text-left text-[13px] leading-[1.32] text-ink">
-              {preset.thread[0].text}
+            <div className="max-w-[85%] rounded-[20px] rounded-bl-[6px] bg-surface-2 px-[14px] py-2 text-left text-[17px] leading-[1.29] text-ink">
+              {text}
             </div>
           </div>
         </div>
@@ -877,6 +912,12 @@ export default function Demo({
       active ? "border-teal bg-teal" : "border-muted/40 bg-transparent"
     }`;
 
+  /* Horizontal panel dots (change 13, G4): 8px, inactive 40%, active teal. */
+  const panelDot = (active: boolean) =>
+    `h-2 w-2 rounded-full transition-opacity outline-none focus-visible:ring-2 focus-visible:ring-teal-bright ${
+      active ? "bg-teal opacity-100" : "bg-muted opacity-40"
+    }`;
+
   return (
     /* The pager (A1): the ONLY vertical scroller on the page. html/body are
        overflow:hidden; the snap properties live in globals.css. */
@@ -890,9 +931,10 @@ export default function Demo({
     >
       {/* ---- SECTION 1 — the call. The phone, and nothing else. ---- */}
       <section data-section="call">
+        <Glow />
         <SectionMark {...COPY.sections.call} />
 
-        <div className="flex h-full w-full items-center justify-center p-6">
+        <div className="relative z-10 flex h-full w-full items-center justify-center p-6">
           <Phone preset={preset} bizName={bizName} typingBefore={[2]} />
         </div>
 
@@ -928,51 +970,49 @@ export default function Demo({
         </div>
       </section>
 
-      {/* ---- SECTION 2 — the save. Headline + the two-sided moment. ---- */}
+      {/* ---- SECTION 2 — the save. Headline + the two-sided moment.
+           change 13 (S2a/b): the headline lives INSIDE the left column /
+           first panel, and the static phone beneath it runs at full scale —
+           bleeding off the section bottom by design, thread anchored to its
+           FIRST bubble (the device clips from the bottom, never the top). ---- */}
       <section data-section="save">
+        <Glow />
         <SectionMark {...COPY.sections.save} />
 
-        <div className="mx-auto flex h-full w-full max-w-6xl flex-col px-5 pb-12 pt-12 min-[1100px]:px-10">
-          <header data-headline className="shrink-0">
-            {/* Below 500px the eyebrow would collide with the section mark
-                (both own the top-left corner) — the mark wins on phones, the
-                eyebrow returns at >=500px where the header is inset. */}
-            <p className="hidden text-[11px] uppercase tracking-[0.3em] text-muted min-[500px]:block">
-              {COPY.eyebrow}
-            </p>
-            <h1 className="mt-2 max-w-3xl font-display font-medium leading-[1.15] text-ink [font-size:clamp(20px,5.5vw,28px)]">
-              {COPY.headline}
-            </h1>
-            <p data-sub className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-muted min-[1100px]:mt-2 min-[1100px]:text-[15px]">
-              {COPY.sub}
-            </p>
-          </header>
+        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col px-6 pb-[84px] pt-[88px] min-[1100px]:px-10 min-[1100px]:pb-20 min-[1100px]:pt-24">
+          {/* Mobile: a two-panel horizontal track (headline + phone | ledger).
+              Desktop >=1100: the same two children as a 40/60 two-up grid —
+              the overrides live in globals.css under [data-section="save"]. */}
+          <div ref={saveTrackRef} data-track className="min-h-0 w-full flex-1">
+            <div data-panel className="flex min-h-0 flex-col px-1 min-[1100px]:px-0">
+              <header data-headline className="shrink-0">
+                <h1 className="max-w-3xl font-display font-medium leading-[1.12] text-ink [font-size:clamp(32px,3vw,44px)]">
+                  {COPY.headline}
+                </h1>
+                <p data-sub className="mt-2 max-w-xl text-[14px] leading-relaxed text-muted min-[1100px]:text-[16px]">
+                  {COPY.sub}
+                </p>
+              </header>
 
-          {/* Mobile: a two-panel horizontal track (phone | ledger). Desktop
-              >=1100: the same two children as a static two-up grid — the
-              overrides live in globals.css under [data-section="save"]. The
-              desktop top margin reserves the floating card's height. */}
-          <div ref={saveTrackRef} data-track className="mt-3 min-h-0 w-full flex-1 min-[1100px]:mt-28">
-            <div data-panel className="flex min-h-0 items-center justify-center px-1 pb-8 min-[1100px]:block min-[1100px]:px-0 min-[1100px]:pb-0">
               {/* The settled phone: a second, STATIC instance — playback
-                  disabled, no gate attributes (see Phone variant="static"). */}
-              <Phone preset={preset} bizName={bizName} variant="static" />
+                  disabled, top-anchored thread (see Phone variant="static").
+                  Same size as section 1's phone on mobile (gate 75); full
+                  390px in the desktop column (gate 74). */}
+              <div className="mx-auto mt-5 w-full max-w-[390px] min-[1100px]:mx-0 min-[1100px]:mt-6">
+                <Phone preset={preset} bizName={bizName} variant="static" />
+              </div>
             </div>
 
             {/* No justify-center here: auto margins center the stack when it
                 fits but clamp to the TOP edge when it overflows, so the owner
                 card can never spill above the reachable origin on short
                 phones (change 12 review, lens 1 finding 1). */}
-            <div data-panel className="flex min-h-0 flex-col px-1 pb-6 min-[1100px]:block min-[1100px]:px-0 min-[1100px]:pb-0">
+            <div data-panel className="flex min-h-0 flex-col px-1 min-[1100px]:px-0">
               <div data-save-stack className="relative my-auto w-full min-[1100px]:my-0">
-                {/* The owner card: DOCKED statically (change 12, B2) — in flow
-                    above the panel on mobile, floated 12px above its top edge
-                    on desktop. No engine writes here anymore, so the Tailwind
-                    translate utility is safe again (nothing composes with it). */}
-                <div
-                  data-notify-ledger
-                  className="z-30 mx-auto mb-3 w-[min(92%,440px)] min-[1100px]:absolute min-[1100px]:bottom-[calc(100%+12px)] min-[1100px]:left-1/2 min-[1100px]:mx-0 min-[1100px]:mb-0 min-[1100px]:-translate-x-1/2"
-                >
+                {/* The owner card: DOCKED statically in flow, 12px above the
+                    panel at every width (change 13 flattens the old desktop
+                    float — the right column owns its full height now). */}
+                <div data-notify-ledger className="z-30 mx-auto mb-3 w-[min(92%,440px)]">
                   <NotifyCard bizName={bizName} entry={preset.caught[0]} />
                 </div>
                 <div data-ledger-panel className="w-full">
@@ -983,16 +1023,17 @@ export default function Demo({
           </div>
 
           {/* Panel dots + the one-shot cue — the track exists below 1100 only. */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-16 z-20 text-center min-[1100px]:hidden">
+          {/* The cue floats over the bleeding phone, so it rides a chip. */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-[108px] z-20 flex justify-center min-[1100px]:hidden">
             <p
-              className={`text-[12px] text-muted transition-opacity duration-500 ${
+              className={`rounded-full bg-abyss/80 px-3 py-1 text-[12px] text-muted backdrop-blur transition-opacity duration-500 ${
                 saveCueGone ? "opacity-0" : "opacity-100"
               }`}
             >
               {COPY.cues.right}
             </p>
           </div>
-          <div className="absolute inset-x-0 bottom-6 z-20 flex justify-center gap-2.5 min-[1100px]:hidden">
+          <div className="absolute inset-x-0 bottom-[88px] z-20 flex justify-center gap-2.5 min-[1100px]:hidden">
             {[0, 1].map((i) => (
               <button
                 key={i}
@@ -1001,14 +1042,15 @@ export default function Demo({
                 data-active={savePanel === i ? "true" : "false"}
                 aria-label={`${COPY.a11y.panelDot} ${i + 1}`}
                 onClick={() => goPanel(saveTrackRef.current, i)}
-                className={pagerDot(savePanel === i)}
+                className={panelDot(savePanel === i)}
               />
             ))}
           </div>
         </div>
 
-        {/* Share lives here (B2), bottom-right. */}
-        <div className="absolute bottom-6 right-5 z-20 flex flex-col items-end gap-2 min-[1100px]:right-10">
+        {/* Share (S2d): teal fill, bottom-center — full width on phones,
+            centered under the two-up on desktop. */}
+        <div className="absolute inset-x-6 bottom-5 z-30 flex flex-col items-center gap-2 min-[1100px]:bottom-6">
           {share === "manual" && (
             <input
               data-share-fallback
@@ -1016,22 +1058,26 @@ export default function Demo({
               value={shareUrl}
               onFocus={(e) => e.currentTarget.select()}
               aria-label={COPY.shareLabel}
-              className="w-[min(70vw,320px)] rounded-lg border border-line bg-surface px-3 py-2 text-[12px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-teal-bright"
+              className="w-[min(80vw,360px)] rounded-lg border border-line bg-surface px-3 py-2 text-[12px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-teal-bright"
             />
           )}
-          {/* Smaller on phones so the panel dots beneath the track clear it. */}
-          <button data-share type="button" onClick={onShare} className={ghostShare}>
+          <button data-share type="button" onClick={onShare} className={shareFill}>
             {share === "copied" ? COPY.shareCopied : COPY.shareLabel}
           </button>
         </div>
       </section>
 
-      {/* ---- SECTION 3 — make it yours. Name + the preset track. ---- */}
+      {/* ---- SECTION 3 — make it yours (change 13 rebuild, S3a/b): each
+           panel is a full composition — preset label, a LIVE-skinned phone
+           top showing the contact header + thread[0], and three money tiles.
+           This is the one section where the visitor watches their typed name
+           land on a phone. ---- */}
       <section data-section="yours">
+        <Glow />
         <SectionMark {...COPY.sections.yours} />
 
-        <div className="mx-auto flex h-full w-full max-w-6xl flex-col px-5 pb-14 pt-16 min-[1100px]:px-10 min-[1100px]:pt-20">
-          <div className="relative shrink-0 max-w-md min-[1100px]:max-w-[520px]">
+        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col px-6 pb-[76px] pt-[88px] min-[1100px]:px-10 min-[1100px]:pb-16 min-[1100px]:pt-24">
+          <div className="shrink-0 max-w-md min-[1100px]:max-w-[520px]">
             <label className="block">
               <span className="text-[12px] uppercase tracking-[0.18em] text-muted">{COPY.name.label}</span>
               <input
@@ -1048,38 +1094,62 @@ export default function Demo({
             <p className="mt-1.5 text-[12px] text-muted">{COPY.name.hint}</p>
           </div>
 
-          {/* The switcher IS the track (B3): one panel per preset, snapping
-              sets the preset for the whole page. Pills are gone. */}
-          <div ref={yoursTrackRef} data-track className="mt-2 min-h-0 w-full flex-1">
-            {PRESETS.map((p) => (
-              <div
-                key={p.id}
-                data-panel
-                data-preset={p.id}
-                className="flex min-h-0 flex-col items-center justify-center gap-3 px-2 pb-8 text-center"
-              >
-                <p className="font-display text-[32px] font-medium leading-tight text-ink min-[1100px]:text-[44px]">
-                  {p.label}
-                </p>
-                <p className="text-[18px] text-ink min-[1100px]:text-[20px]">
-                  <span data-ticket className="font-display text-[26px] font-semibold text-gold lining-nums min-[1100px]:text-[30px]">
-                    ${p.ticket}
-                  </span>{" "}
-                  {COPY.panel.ticketUnit}
-                </p>
-                <p className="text-[14px] text-ink min-[1100px]:text-[15px]">
-                  {p.missedPerMonth} {COPY.panel.missedUnit}
-                </p>
-                <div className="mt-2 w-full max-w-[300px]">
-                  <PhoneCrop preset={p} bizName={p.id === preset.id ? bizName : p.bizName} />
+          {/* The switcher IS the track: one panel per preset, snapping sets
+              the preset for the whole page. */}
+          <div ref={yoursTrackRef} data-track className="mt-3 min-h-0 w-full flex-1">
+            {PRESETS.map((p) => {
+              const panelName = p.id === preset.id ? bizName : p.bizName;
+              return (
+                <div
+                  key={p.id}
+                  data-panel
+                  data-preset={p.id}
+                  className="flex min-h-0 flex-col justify-center px-1 min-[1100px]:grid min-[1100px]:grid-cols-2 min-[1100px]:items-center min-[1100px]:gap-16 min-[1100px]:px-2"
+                >
+                  <p className="text-center font-display text-[28px] font-medium leading-tight text-ink min-[1100px]:hidden">
+                    {p.label}
+                  </p>
+
+                  <div className="mx-auto mt-3 w-full max-w-[390px] min-[1100px]:mt-0">
+                    <PhoneTop preset={p} bizName={panelName} />
+                  </div>
+
+                  <div className="mt-4 min-[1100px]:mt-0">
+                    <p className="hidden font-display text-[28px] font-medium leading-tight text-ink min-[1100px]:block">
+                      {p.label}
+                    </p>
+                    {/* Three money tiles (S3a/d): ticket gold, missed ink,
+                        lost muted — exactly ONE gold element per panel, the
+                        ticket value (gates 79/82). */}
+                    <div className="mt-3 grid grid-cols-2 gap-2 min-[1100px]:mt-5 min-[1100px]:grid-cols-1 min-[1100px]:gap-3">
+                      <div data-tile="ticket" className="rounded-xl border border-line bg-surface p-3 text-center min-[1100px]:p-5 min-[1100px]:text-left">
+                        <span data-ticket data-tile-value className="font-display text-[28px] font-semibold text-gold lining-nums min-[1100px]:text-[56px]">
+                          ${p.ticket}
+                        </span>{" "}
+                        <span className="text-[13px] text-ink min-[1100px]:text-[17px]">{COPY.yours.ticketSuffix}</span>
+                      </div>
+                      <div data-tile="missed" className="rounded-xl border border-line bg-surface p-3 text-center min-[1100px]:p-5 min-[1100px]:text-left">
+                        <span data-tile-value className="font-display text-[28px] font-semibold text-ink lining-nums min-[1100px]:text-[56px]">
+                          {p.missedPerMonth}
+                        </span>{" "}
+                        <span className="text-[13px] text-ink min-[1100px]:text-[17px]">{COPY.yours.missedSuffix}</span>
+                      </div>
+                      <div data-tile="lost" className="col-span-2 rounded-xl border border-line bg-surface p-3 text-center min-[1100px]:col-span-1 min-[1100px]:p-5 min-[1100px]:text-left">
+                        <span data-tile-value className="font-display text-[28px] font-semibold text-muted lining-nums min-[1100px]:text-[56px]">
+                          {usd(p.lost)}
+                        </span>{" "}
+                        <span className="text-[13px] text-muted min-[1100px]:text-[17px]">{COPY.yours.lostSuffix}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
-          <div className="pointer-events-none absolute inset-x-0 bottom-16 z-20 text-center">
+          <div className="pointer-events-none absolute inset-x-0 bottom-12 z-20 flex justify-center">
             <p
-              className={`text-[12px] text-muted transition-opacity duration-500 ${
+              className={`rounded-full bg-abyss/80 px-3 py-1 text-[12px] text-muted backdrop-blur transition-opacity duration-500 ${
                 yoursCueGone ? "opacity-0" : "opacity-100"
               }`}
             >
@@ -1095,55 +1165,59 @@ export default function Demo({
                 data-active={yoursPanel === i ? "true" : "false"}
                 aria-label={`${COPY.a11y.panelDot} ${i + 1}`}
                 onClick={() => goPanel(yoursTrackRef.current, i)}
-                className={pagerDot(yoursPanel === i)}
+                className={panelDot(yoursPanel === i)}
               />
             ))}
           </div>
         </div>
       </section>
 
-      {/* ---- SECTION 4 — the math. The close, vertically centered. ---- */}
+      {/* ---- SECTION 4 — the math (change 13, S4): the line is the largest
+           type on the page and owns the section. Numerals gold at the line's
+           own size. ---- */}
       <section data-section="math" data-bottom-band className="border-t border-line bg-surface">
+        <Glow />
         <SectionMark {...COPY.sections.math} />
 
-        <div className="mx-auto flex h-full w-full max-w-3xl flex-col items-center justify-center gap-9 px-5 text-center">
-          <p data-math className="max-w-2xl text-[19px] leading-relaxed text-ink min-[1100px]:text-[23px]">
+        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col items-center justify-center gap-10 px-6 text-center min-[1100px]:gap-12">
+          <p data-math className="max-w-[20ch] font-display font-medium leading-[1.12] text-ink [font-size:clamp(40px,6vw,72px)]">
             {COPY.mathLead}{" "}
-            <span data-math-numeral className="font-display text-[1.4em] font-semibold text-gold lining-nums">
+            <span data-math-numeral className="font-semibold text-gold lining-nums">
               {preset.missedPerMonth}
             </span>{" "}
             {COPY.mathMid}{" "}
-            <span data-math-numeral className="font-display text-[1.4em] font-semibold text-gold lining-nums">
+            <span data-math-numeral className="font-semibold text-gold lining-nums">
               ${preset.ticket}
             </span>{" "}
             {COPY.mathTail}
           </p>
 
-          <div>
-            <a
-              href={COPY.ctaHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block rounded-full bg-gold px-8 py-4 text-[15px] font-semibold text-abyss outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-abyss"
-            >
-              {COPY.ctaLabel}
-            </a>
-            <p className="mt-3 text-[12px] text-muted">{COPY.footNote}</p>
-          </div>
-
-          {/* Since-install, restated at the close (B4). Same approved strings
-              as the ledger strip; the dollar figure stays ink — gold in this
-              region belongs to the math numerals alone (gate 38). */}
-          <div className="border-t border-line pt-5">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-muted">{COPY.ledger.sinceLabel}</p>
-            <p className="mt-1.5 text-[13px] text-muted">
+          {/* One row on desktop: the CTA and the since-install strip beside
+              it at 18px ink (S4b) — a standing total, not a footnote. The
+              dollar figure stays ink: gold here belongs to the math numerals
+              alone (gates 38/45). */}
+          <div className="flex flex-col items-center gap-7 min-[1100px]:flex-row min-[1100px]:gap-12">
+            <div>
+              <a
+                href={COPY.ctaHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block rounded-full bg-gold px-8 py-4 text-[15px] font-semibold text-abyss outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-abyss"
+              >
+                {COPY.ctaLabel}
+              </a>
+              <p className="mt-3 text-[13px] text-muted">{COPY.footNote}</p>
+            </div>
+            <p className="text-[18px] text-ink">
               {preset.sinceCalls} calls caught ·{" "}
-              <span className="font-semibold text-ink">{usd(preset.sinceRecovered)}</span> recovered
+              <span className="font-semibold">{usd(preset.sinceRecovered)}</span> recovered
             </p>
           </div>
-
-          <p className="text-[11px] uppercase tracking-[0.3em] text-muted">{COPY.chrome.og.wordmark}</p>
         </div>
+
+        <p className="absolute bottom-8 left-8 z-10 text-[12px] uppercase tracking-[0.3em] text-muted">
+          {COPY.chrome.og.wordmark}
+        </p>
       </section>
 
       {/* ---- Progress dots: right edge, one per section (A3). ---- */}

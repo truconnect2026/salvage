@@ -63,10 +63,16 @@ export default function Ledger({
         </span>
       </div>
 
-      {/* Three metric tiles */}
+      {/* Metric tiles. change 13 (S2c): below 600px the interactive panel
+          shows TWO tiles — Recovered | Still lost, one full-width row — and
+          Reply time returns at >=600px. The OG compact variant keeps three. */}
       <div
         data-money
-        className={`grid grid-cols-[repeat(auto-fit,minmax(96px,1fr))] ${compact ? "mt-2 gap-3" : "mt-3 gap-2 min-[500px]:gap-3 min-[1100px]:mt-4"}`}
+        className={`grid ${
+          compact
+            ? "mt-2 gap-3 grid-cols-[repeat(auto-fit,minmax(96px,1fr))]"
+            : "mt-3 gap-2 grid-cols-2 min-[500px]:gap-3 min-[600px]:grid-cols-3 min-[1100px]:mt-4"
+        }`}
       >
         <div className={`rounded-xl border border-line bg-surface-2 ${compact ? "p-3" : "p-2.5 min-[500px]:p-4"}`}>
           <p className="text-[11px] uppercase tracking-[0.14em] text-muted">{L.recoveredLabel}</p>
@@ -126,7 +132,11 @@ export default function Ledger({
           )}
         </div>
 
-        <div className={`rounded-xl border border-line bg-surface-2 ${compact ? "p-3" : "p-2.5 min-[500px]:p-4"}`}>
+        <div
+          className={`rounded-xl border border-line bg-surface-2 ${
+            compact ? "p-3" : "hidden p-2.5 min-[500px]:p-4 min-[600px]:block"
+          }`}
+        >
           <p className="text-[11px] uppercase tracking-[0.14em] text-muted">{L.replyLabel}</p>
           <p className={`${tileValue} text-ink`}>{L.replyValue}</p>
           {!compact && <p className="mt-1.5 hidden text-[12px] text-muted min-[500px]:block">{L.replyCaption}</p>}

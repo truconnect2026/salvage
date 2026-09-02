@@ -84,11 +84,12 @@ body {
 @media (min-width: 1100px) {
   [data-section="save"] [data-track] {
     display: grid;
-    grid-template-columns: 340px minmax(0, 1fr);
-    column-gap: 64px;
+    /* change 13 (S2a): 40/60 columns. Overflow stays visible so the left
+       column's full-scale phone can bleed to the SECTION's bottom edge
+       (the section's own overflow:hidden is the crop). */
+    grid-template-columns: 2fr 3fr;
+    column-gap: 48px;
     align-items: start;
-    /* Both axes visible: the docked owner card floats ABOVE the ledger
-       column's top edge here, and the base overflow-y clip would shave it. */
     overflow: visible;
     scroll-snap-type: none;
   }
@@ -107,25 +108,17 @@ body {
   max-width: min(390px, calc((100vh - 48px) * 9 / 19.5));
   max-width: min(390px, calc((100dvh - 48px) * 9 / 19.5));
 }
+/* change 13: below 1100px, sections 1 and 2 run the SAME phone size (gate
+   75) — the largest device that clears the 28px-inset section mark above it
+   (140px reserve). Section 2's phone is allowed to bleed off the section
+   bottom; section 1's must still fit whole, which this cap guarantees. The
+   old container-query sizing is gone with it (and with that, the iOS-15
+   cqh-fallback concern). */
 @media (max-width: 1099.98px) {
-  [data-section="save"] [data-panel] {
-    container-type: size;
-  }
+  [data-section="call"] [data-phone-device],
   [data-section="save"] [data-phone-device] {
-    /* vh line is the iOS 15 floor (no container units there — review lens 1,
-       finding 5); the cqh line wins wherever container queries exist. */
-    max-width: calc((100vh - 300px) * 9 / 19.5);
-    max-width: calc((100cqh - 40px) * 9 / 19.5);
-  }
-}
-/* Desktop two-up: the 19.5:9 aspect means a 340px phone is 737px tall — with
-   the headline above it that cannot fit 900px, so the static phone is
-   height-driven here (the >=340px device gate belongs to section 1's full
-   phone). 292px reserve = header + card float + bottom padding at 1100+. */
-@media (min-width: 1100px) {
-  [data-section="save"] [data-phone-device] {
-    max-width: min(340px, calc((100vh - 292px) * 9 / 19.5));
-    max-width: min(340px, calc((100dvh - 292px) * 9 / 19.5));
+    max-width: min(390px, calc((100vh - 140px) * 9 / 19.5));
+    max-width: min(390px, calc((100dvh - 140px) * 9 / 19.5));
   }
 }
 
