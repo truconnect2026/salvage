@@ -4807,7 +4807,9 @@ if (!chromium) {
       for (const m of raw.matchAll(/@font-face\s*\{([^}]+)\}/g)) {
         const body = m[1];
         if (!new RegExp(`font-family:\\s*'?${family}'?`, "i").test(body)) continue;
-        for (const u of body.matchAll(/url\((\/_next\/static\/media\/[^)]+\.woff2)\)/g)) urls.add(u[1]);
+        /* Vercel serves content-addressed assets under static/immutable/;
+           local builds under static/. Accept both. */
+        for (const u of body.matchAll(/url\((\/_next\/static\/(?:immutable\/)?media\/[^)]+\.woff2)\)/g)) urls.add(u[1]);
       }
       return [...urls];
     };
