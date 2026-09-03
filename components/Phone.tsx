@@ -202,11 +202,25 @@ export function NotifyCard({ bizName, entry }: { bizName: string; entry: CaughtE
         <span className="text-[11px] font-medium text-muted">{COPY.notify.appTag}</span>
         <span className="ml-auto text-[11px] text-muted">{COPY.notify.nowLabel}</span>
       </div>
+      {/* change 19 (B4): the entry names the CALLER — the owner reads who
+          was caught, not their own shingle. */}
       <div className="mt-1.5 truncate text-[14px] font-medium leading-snug text-ink">
-        {bizName} · {COPY.notify.bookedLabel}
+        {entry.name} · {entry.detail} · <span data-figure>${entry.amount}</span>
       </div>
-      <div className="mt-0.5 truncate text-[13px] leading-snug text-muted">
-        {entry.detail} · <span data-figure>${entry.amount}</span>
+      <div className="mt-0.5 flex items-center gap-1.5 text-[13px] leading-snug text-muted">
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 14 14"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          aria-hidden="true"
+        >
+          <rect x="1" y="2.5" width="12" height="10.5" rx="1.5" />
+          <path d="M1 6h12M4.5 1v3M9.5 1v3" />
+        </svg>
+        <span className="truncate">{COPY.ledger.calendarLine}</span>
       </div>
     </div>
   );
@@ -506,6 +520,8 @@ export default function Phone({
                         right, teal; the business's texts are incoming —
                         left, surface. The old orientation was the owner's
                         POV. */}
+                    {/* change 19 (B5): the auto-reply tag under the FIRST
+                        business bubble only — the one Salvage sent. */}
                     {b.from === "customer" ? (
                       <div className="flex justify-end">
                         <div
@@ -518,7 +534,7 @@ export default function Phone({
                         </div>
                       </div>
                     ) : (
-                      <div className="flex justify-start">
+                      <div className="flex flex-col items-start">
                         <div
                           {...markEither("data-bubble", "data-s-bubble", "business")}
                           className={`max-w-[72%] rounded-[20px] bg-surface-3 px-[14px] py-2 text-[17px] leading-[1.29] text-ink ${
@@ -527,6 +543,11 @@ export default function Phone({
                         >
                           {skinText(b.text)}
                         </div>
+                        {i === 0 && (
+                          <div data-auto-reply className="mt-0.5 pl-2 text-[10px] text-muted">
+                            {COPY.chrome.autoReplyTag}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

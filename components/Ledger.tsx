@@ -200,12 +200,14 @@ function CaughtRow({
       <span className="mt-0.5 shrink-0 text-muted">
         <MissedCallGlyph />
       </span>
+      {/* change 19 (B3): the NAME leads — a log of people, not numbers.
+          Detail second; the phone number drops to a third mono line. */}
       <div className="min-w-0 flex-1">
         <div
-          data-figure
-          className={`text-ink ${compact ? "text-[15px]" : "text-[13px] min-[500px]:text-[14px]"}`}
+          data-caught-name={index}
+          className={`truncate font-medium text-ink ${compact ? "text-[15px]" : "text-[13px] min-[500px]:text-[14px]"}`}
         >
-          {entry.number}
+          {entry.name}
         </div>
         <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
           <span className={`truncate text-muted ${compact ? "text-[17px]" : "text-[12px]"}`}>{entry.detail}</span>
@@ -223,6 +225,11 @@ function CaughtRow({
             </span>
           )}
         </div>
+        {!compact && (
+          <div data-caught-number={index} data-figure className="mt-0.5 text-[12px] text-muted">
+            {entry.number}
+          </div>
+        )}
       </div>
       <div className="shrink-0 text-right">
         <div data-caught-amount={index} data-figure className={`text-ink ${compact ? "text-[15px]" : "text-[14px]"}`}>

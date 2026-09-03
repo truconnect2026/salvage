@@ -62,6 +62,7 @@ const presets = (() => {
     return {
       id: mark.id,
       bizName: pick(/bizName:\s*"([^"]+)"/, "bizName"),
+      customerName: pick(/customerName:\s*"([^"]+)"/, "customerName"),
       // First text: in the block is thread[0].text (caught entries carry
       // detail:, not text:). Gate 58 asserts the banner quotes it.
       firstText: pick(/text:\s*"([^"]+)"/, "thread[0].text"),
@@ -75,9 +76,9 @@ const presets = (() => {
       bubbles: (block.match(/\{\s*from:/g) ?? []).length,
       caught: [
         ...block.matchAll(
-          /\{\s*number:\s*"([^"]+)",\s*detail:\s*"([^"]+)",\s*amount:\s*(\d+),\s*date:\s*"([^"]+)"\s*\}/g,
+          /\{\s*name:\s*"([^"]+)",\s*number:\s*"([^"]+)",\s*detail:\s*"([^"]+)",\s*amount:\s*(\d+),\s*date:\s*"([^"]+)"\s*\}/g,
         ),
-      ].map((m) => ({ number: m[1], detail: m[2], amount: Number(m[3]), date: m[4] })),
+      ].map((m) => ({ name: m[1], number: m[2], detail: m[3], amount: Number(m[4]), date: m[5] })),
     };
   });
 })();
@@ -315,10 +316,11 @@ retired(
 const ledgerRows = [];
 for (const p of [byId("salon"), homePreset, dentalPreset]) {
   const page = await getPage(`/?biz=${p.id}`);
-  // Row divs nest other divs (number/detail/amount/date), which breaks
-  // elementsIn's lazy same-tag-close assumption — so amounts are read from the
-  // dedicated leaf-level data-caught-amount marker, not the row wrapper.
-  const rowTexts = [0, 1, 2, 3].map((i) => elementsIn(page.html, `data-caught-row="${i}"`)[0] ?? null);
+  // Row divs nest other divs, which breaks elementsIn's lazy same-tag-close
+  // assumption — every field is read from its leaf marker. Amended (change
+  // 19): the row leads with the caller's NAME; the number is its own leaf.
+  const rowTexts = [0, 1, 2, 3].map((i) => elementsIn(page.html, `data-caught-name="${i}"`)[0] ?? null);
+  const rowNumbers = [0, 1, 2, 3].map((i) => elementsIn(page.html, `data-caught-number="${i}"`)[0] ?? null);
   const amounts = [0, 1, 2, 3].map((i) => {
     const hit = elementsIn(page.html, `data-caught-amount="${i}"`)[0];
     if (!hit) return null;
@@ -331,9 +333,9 @@ for (const p of [byId("salon"), homePreset, dentalPreset]) {
     path: `/?biz=${p.id}`,
     status: page.status,
     rowCount: rowTexts.filter(Boolean).length,
-    row0HasNumber: rowTexts[0] != null && rowTexts[0].includes(p.caught[0].number),
+    row0HasNumber: rowNumbers[0] === p.caught[0].number,
     wantRow0Number: p.caught[0].number,
-    row0Text: rowTexts[0],
+    row0Text: `${rowTexts[0]} / ${rowNumbers[0]}`,
     panelRecovered: panelRecovered[0] ?? null,
     wantPanelRecovered: usd(p.recovered),
     amounts,
@@ -370,21 +372,7 @@ check(
   ledgerRows.map((r) => `${r.path} -> amounts ${JSON.stringify(r.amounts)} sum ${r.sum} (want ${r.wantSum})`).join(" | "),
 );
 
-/* 36: change 7 stripped the trailing period from every callReason, since
-   Phone.tsx's call card joins it to COPY.callCard.meta with " · " — a
-   surviving period would render as ". ·". Checked on plain decoded page
-   text (not a specific element), across all three presets. */
-const dotMiddotRows = [];
-for (const p of [byId("salon"), homePreset, dentalPreset]) {
-  const page = await getPage(`/?biz=${p.id}`);
-  dotMiddotRows.push({ id: p.id, status: page.status, hasBad: page.text.includes(". ·") });
-}
-check(
-  36,
-  'no rendered string contains ". ·" — all three ?biz values, SSR',
-  dotMiddotRows.length === 3 && dotMiddotRows.every((r) => r.status === 200 && !r.hasBad),
-  dotMiddotRows.map((r) => `?biz=${r.id} -> HTTP ${r.status}, contains ". ·": ${r.hasBad}`).join(" | "),
-);
+retired(36, "change 19 gave every caught row an initialed name ('Danielle R. · …') — the '. ·' pattern this guarded against is legitimate output now");
 
 /* 54: the server reads &name= itself — a shared link renders the custom name
    with no client hydration. Raw HTML, scripts stripped, so the RSC payload
@@ -541,6 +529,7 @@ const BROWSER_GATES = [
   91, 92, 93, 94, 95, 96, 97, 98, 99, 100,
   101, 102, 103, 104, 105, 106, 107, 108,
   109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120,
+  121, 122, 123, 124, 125, 126, 127, 128, 129, 130,
 ];
 
 if (!chromium) {
@@ -899,18 +888,19 @@ if (!chromium) {
         `page-wide: ${tokens.pageGoldCount} gold total (must equal hero + band + track)`,
     );
 
-    /* 82 (change 13): the section-3 tiles carry exactly ONE gold element per
-       panel — the ticket value — and the page census stays at 6. */
+    /* 82 (change 13; census made preset-count-relative in change 19): one
+       gold ticket per panel; page-wide gold = tickets + the recovered
+       figure + the two math numerals, nothing else. */
     check(
       82,
-      "section-3 gold is only the ticket value (1 per panel, 3 total); page-wide gold census is exactly 6",
+      `section-3 gold is only the ticket value (1 per panel, ${presets.length} total); page-wide gold census is exactly ${presets.length + 3}`,
       tokens.ticketCount === presets.length &&
         tokens.yoursGoldCount === presets.length &&
         tokens.yoursGoldIsTickets &&
-        tokens.pageGoldCount === 6,
+        tokens.pageGoldCount === presets.length + 3,
       `${tokens.yoursGoldCount} gold element(s) in section 3 vs ${tokens.ticketCount} data-ticket ` +
         `(need ${presets.length} each, all on data-ticket: ${tokens.yoursGoldIsTickets}); ` +
-        `page-wide gold ${tokens.pageGoldCount} (need exactly 6)`,
+        `page-wide gold ${tokens.pageGoldCount} (need exactly ${presets.length + 3})`,
     );
 
     await ctx.close();
@@ -2653,7 +2643,6 @@ if (!chromium) {
           `card inside ${g84.cardInside}, ledger inside ${g84.ledgerInside} (both need true)`,
     );
 
-    await ctxD.close();
     await ctx.close();
   });
 
@@ -4052,6 +4041,257 @@ if (!chromium) {
     );
 
     await ctx.close();
+  });
+
+  /* --- 121-130: change 19 — comprehension copy, names, the fourth
+         preset. --- */
+  await block("names-19", async () => {
+    const mobileCalls = need(/mobile:\s*\{\s*calls:\s*"([^"]+)"/, "COPY.scene.mobile.calls");
+    const mobileNobody = need(/nobody:\s*"([^"]+)"/, "COPY.scene.mobile.nobody");
+    const mobileCaught = need(/mobile:\s*\{[^}]*caught:\s*"([^"]+)"/, "COPY.scene.mobile.caught");
+    const screenLabel = need(/screenLabel:\s*"([^"]+)"/, "COPY.ledger.screenLabel");
+    const calendarLine = need(/calendarLine:\s*"([^"]+)"/, "COPY.ledger.calendarLine");
+    const autoReplyTag = need(/autoReplyTag:\s*"([^"]+)"/, "COPY.chrome.autoReplyTag");
+    const fictionalNote = need(/fictionalNote:\s*"([^"]+)"/, "COPY.fictionalNote");
+    const mathLead = need(/mathLead:\s*"([^"]+)"/, "COPY.mathLead");
+
+    /* 123 + 124 + 126 + 128 + 129 + 130: SSR truths, straight fetches. */
+    const nameRows = [];
+    for (const p of presets) {
+      const page = await getPage(`/?biz=${p.id}`);
+      const row0Name = elementsIn(page.html, 'data-caught-name="0"')[0] ?? null;
+      /* The entry nests divs (breaks elementsIn's lazy close) — decode the
+         raw slice between the entry marker and the panel that follows it. */
+      const nIdx = page.html.indexOf("data-notify-ledger");
+      const pIdx = page.html.indexOf("data-panel-content");
+      const notify = nIdx >= 0 && pIdx > nIdx ? decode(page.html.slice(nIdx, pIdx)) : "";
+      nameRows.push({
+        id: p.id,
+        status: page.status,
+        row0Name,
+        wantName: p.customerName,
+        notifyHasName: notify.includes(p.customerName),
+        notifyHasCalendar: notify.includes(calendarLine),
+      });
+    }
+    /* check(123) fires below, once the browser half has read the row's
+       rendered line order. */
+    check(
+      124,
+      `owner entry contains customerName + ${JSON.stringify(calendarLine)}, all four presets`,
+      nameRows.every((r) => r.notifyHasName && r.notifyHasCalendar),
+      nameRows.map((r) => `${r.id}: name ${r.notifyHasName}, calendar ${r.notifyHasCalendar}`).join(" | "),
+    );
+
+    const homeSSR = await getPage("");
+    check(
+      126,
+      `${JSON.stringify(fictionalNote)} present in section 2's SSR`,
+      homeSSR.text.includes(fictionalNote),
+      `page text contains the note: ${homeSSR.text.includes(fictionalNote)}`,
+    );
+
+    const named = await getPage("/?name=Test%20Co");
+    const namedMath = elementsIn(named.html, "data-math")[0] ?? "";
+    const genericMath = elementsIn(homeSSR.html, "data-math")[0] ?? "";
+    check(
+      128,
+      '"?name=Test Co" math line starts "Test Co misses"; no name -> the generic line',
+      namedMath.startsWith("Test Co misses") && genericMath.startsWith(mathLead),
+      `named ${JSON.stringify(namedMath.slice(0, 40))}; generic ${JSON.stringify(genericMath.slice(0, 40))}`,
+    );
+
+    const other = byId("other");
+    const otherSSR = await getPage("/?biz=other");
+    const panelCount = (otherSSR.html.match(/data-panel(?:=""|="true")/g) ?? []).length;
+    const otherAmounts = [0, 1, 2].map((i) => {
+      const hit = elementsIn(otherSSR.html, `data-caught-amount="${i}"`)[0];
+      const m = hit ? hit.match(/[\d,]+/) : null;
+      return m ? Number(m[0].replace(/,/g, "")) : null;
+    });
+    const otherSum = otherAmounts.every((a) => a != null) ? otherAmounts.reduce((a, b) => a + b, 0) : null;
+    check(
+      129,
+      'four track panels; "?biz=other" SSR renders "Your business" + its thread; sum(caught) === recovered (750)',
+      panelCount === 4 &&
+        otherSSR.status === 200 &&
+        otherSSR.biz[0] === other.bizName &&
+        otherSSR.text.includes(other.firstText) &&
+        otherSum === other.recovered,
+      `${panelCount} panel(s) (need 4); HTTP ${otherSSR.status}; header ${JSON.stringify(otherSSR.biz[0] ?? null)} ` +
+        `(want ${JSON.stringify(other.bizName)}); thread[0] present ${otherSSR.text.includes(other.firstText)}; ` +
+        `amounts ${JSON.stringify(otherAmounts)} sum ${otherSum} (want ${other.recovered})`,
+    );
+
+    /* The flap board nests a span per glyph — join the leaf faces. */
+    const leakOther = elementsIn(otherSSR.html, "data-flap-face").join("") || null;
+    const recoveredOther = elementsIn(otherSSR.html, "data-panel-recovered")[0] ?? null;
+    const ticketsOther = elementsIn(otherSSR.html, "data-ticket");
+    check(
+      130,
+      '"other" figures render correctly: still-lost $2,500 (flap board), recovered $750, ticket $250',
+      leakOther === usd(other.lost) &&
+        recoveredOther === usd(other.recovered) &&
+        ticketsOther.includes(`$${other.ticket}`),
+      `leak ${JSON.stringify(leakOther)} (want ${JSON.stringify(usd(other.lost))}); recovered ${JSON.stringify(recoveredOther)} ` +
+        `(want ${JSON.stringify(usd(other.recovered))}); tickets ${JSON.stringify(ticketsOther)} (need to include $${other.ticket})`,
+    );
+
+    /* 121: the mobile caption rides the beats at 390; absent at 1440. */
+    const ctxM = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const pageM = await ctxM.newPage();
+    await pageM.goto(base, { waitUntil: "domcontentloaded" });
+    await pageM.evaluate(() => document.fonts.ready);
+    const readCaption = () =>
+      pageM.evaluate((EFF) => {
+        const vis = eval(EFF);
+        const box = document.querySelector("[data-scene-mobile]");
+        const lines = box ? [...box.querySelectorAll("[data-scene-line]")] : [];
+        const visible = lines.filter((l) => vis(l) > 0.5);
+        return {
+          t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
+          texts: visible.map((l) => l.textContent.trim()),
+        };
+      }, EFF);
+    await waitT(pageM, 0.5);
+    const c1 = await readCaption();
+    await waitT(pageM, 4.0);
+    const c2 = await readCaption();
+    await waitT(pageM, 6.5);
+    const c3 = await readCaption();
+    await ctxM.close();
+
+    const ctxD = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+    const pageD = await ctxD.newPage();
+    await pageD.goto(base, { waitUntil: "domcontentloaded" });
+    const capD = await pageD.evaluate((EFF) => {
+      const vis = eval(EFF);
+      const box = document.querySelector("[data-scene-mobile]");
+      return box ? vis(box) : null;
+    }, EFF);
+    await ctxD.close();
+
+    check(
+      121,
+      `mobile caption at 390: ${JSON.stringify(mobileCalls)} at t=0.5, ${JSON.stringify(mobileNobody)} at t=4.0, ${JSON.stringify(mobileCaught)} at t=6.5; absent at 1440`,
+      c1.texts.length === 1 &&
+        c1.texts[0] === mobileCalls &&
+        c2.texts.length === 1 &&
+        c2.texts[0] === mobileNobody &&
+        c3.texts.length === 1 &&
+        c3.texts[0] === mobileCaught &&
+        capD === 0,
+      `t=${c1.t}: ${JSON.stringify(c1.texts)}; t=${c2.t}: ${JSON.stringify(c2.texts)}; t=${c3.t}: ${JSON.stringify(c3.texts)}; ` +
+        `1440 caption effective opacity ${capD} (need 0)`,
+    );
+
+    /* 122 + 125: the ledger header + auto-reply tag, one desktop load. */
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+    const g = await page.evaluate(
+      ({ screenLabel, autoReplyTag }) => {
+        const panel = document.querySelector("[data-panel-content]");
+        const labelEl = panel?.querySelector("p");
+        const pills = panel
+          ? [...panel.querySelectorAll("*")].filter((el) => {
+              const cs = getComputedStyle(el);
+              return parseFloat(cs.borderTopLeftRadius) > 8 && el.getBoundingClientRect().width > 0;
+            })
+          : [];
+        const hasActive = panel ? panel.textContent.includes("Active") : null;
+
+        const threads = [
+          ...document.querySelectorAll("[data-thread-area], [data-s-thread-area]"),
+        ].map((area) => {
+          const tags = [...area.querySelectorAll("[data-auto-reply]")];
+          const inFirstRow =
+            tags.length === 1 &&
+            (tags[0].closest("[data-row]")?.matches('[data-row="0"]') ||
+              area.querySelector("[data-s-bubble], [data-bubble]")?.parentElement?.parentElement?.contains(tags[0]) === true);
+          return { tags: tags.length, text: tags[0]?.textContent?.trim() ?? null, inFirstRow };
+        });
+
+        /* 123's rendered half: name FIRST, number LAST (12px mono). */
+        const row0 = document.querySelector('[data-caught-row="0"]');
+        const nameEl = row0?.querySelector("[data-caught-name]");
+        const numEl = row0?.querySelector("[data-caught-number]");
+        const rowOrder =
+          nameEl && numEl
+            ? {
+                nameFirst: nameEl.getBoundingClientRect().top < numEl.getBoundingClientRect().top,
+                numFS: getComputedStyle(numEl).fontSize,
+                numMono: getComputedStyle(numEl).fontFamily.includes("IBM Plex Mono"),
+              }
+            : null;
+        return { label: labelEl?.textContent?.trim() ?? null, pills: pills.length, hasActive, threads, rowOrder, screenLabel, autoReplyTag };
+      },
+      { screenLabel, autoReplyTag },
+    );
+    check(
+      122,
+      `ledger label === ${JSON.stringify(screenLabel)}; no status pill`,
+      g.label === screenLabel && g.pills === 0 && g.hasActive === false,
+      `label ${JSON.stringify(g.label)}; ${g.pills} pill-radius element(s) in the panel; contains "Active": ${g.hasActive}`,
+    );
+    check(
+      125,
+      "exactly one auto-reply tag per rendered thread, under the first business bubble",
+      g.threads.length > 0 && g.threads.every((t) => t.tags === 1 && t.text === autoReplyTag && t.inFirstRow),
+      g.threads.map((t, i) => `thread ${i}: ${t.tags} tag(s) ${JSON.stringify(t.text)} first-row ${t.inFirstRow}`).join(" | "),
+    );
+    check(
+      123,
+      "row[0] primary text === customerName (all four presets, SSR); the number renders as the row's LAST line at 12px mono",
+      nameRows.length === 4 &&
+        nameRows.every((r) => r.status === 200 && r.row0Name === r.wantName) &&
+        g.rowOrder != null &&
+        g.rowOrder.nameFirst === true &&
+        g.rowOrder.numFS === "12px" &&
+        g.rowOrder.numMono === true,
+      nameRows.map((r) => `${r.id}: ${JSON.stringify(r.row0Name)} (want ${JSON.stringify(r.wantName)})`).join(" | ") +
+        ` | rendered order ${JSON.stringify(g.rowOrder)}`,
+    );
+
+    await ctx.close();
+
+    /* 127: the scroll-up pointer tracks snap and typing. Its own
+       motion-on context — waitHydrated polls for a numeric data-t, which a
+       reduced-motion page never produces. */
+    const ctx127 = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page127 = await ctx127.newPage();
+    await page127.goto(base, { waitUntil: "domcontentloaded" });
+    await page127.evaluate(() => document.fonts.ready);
+    await waitHydrated(page127);
+    await goSection(page127, 2);
+    await page127.waitForTimeout(200);
+    const readScrollUp = () =>
+      page127.evaluate(() => {
+        const els = [...document.querySelectorAll("[data-scroll-up]")];
+        const vis = els.find((el) => el.getBoundingClientRect().width > 0 && getComputedStyle(el).display !== "none");
+        return (vis ?? els[0])?.textContent?.trim() ?? null;
+      });
+    const s0 = await readScrollUp();
+    await snapTrack(page127, 1);
+    await page127.waitForTimeout(700);
+    const s1 = await readScrollUp();
+    await page127.fill("[data-name-input]", "Test Co");
+    await page127.waitForTimeout(400);
+    const s2 = await readScrollUp();
+    await ctx127.close();
+
+    check(
+      127,
+      "scroll-up pointer carries the active name — follows a track snap and live typing",
+      s0 != null &&
+        s0.includes(byId(defaultId).bizName) &&
+        s1 != null &&
+        s1.includes(byId("home").bizName) &&
+        s2 != null &&
+        s2.includes("Test Co"),
+      `at rest ${JSON.stringify(s0)}; after snap ${JSON.stringify(s1)}; after typing ${JSON.stringify(s2)}`,
+    );
   });
 
   await browser.close();

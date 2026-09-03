@@ -1,7 +1,11 @@
 export type Bubble = { from: "business" | "customer"; text: string; time: string };
-export type CaughtEntry = { number: string; detail: string; amount: number; date: string };
+export type CaughtEntry = { name: string; number: string; detail: string; amount: number; date: string };
 export type Preset = {
   id: string; label: string; bizName: string;
+  /* change 19: the caller who owns this preset's thread — row[0]'s name. */
+  customerName: string;
+  /* change 19 (B9): the "other" preset's one-line tagline; empty elsewhere. */
+  tagline?: string;
   ticket: number; missedPerMonth: number; callsCaught: number; recovered: number; lost: number;
   sinceCalls: number; sinceRecovered: number;
   caught: CaughtEntry[];
@@ -23,15 +27,24 @@ export const COPY = {
   mathLead: "Miss",
   mathMid: "calls a month at",
   mathTail: "a job. That's what's walking out the door.",
+  // change 19 (A/B8, APPROVED): the personal math line when a name is set —
+  // rendered by splitting on the placeholders, never by rewording.
+  mathPersonal:
+    "{bizName} misses {missed} calls a month at ${ticket} a job. That's what's walking out the door.",
+  // change 19 (A/B6, APPROVED).
+  fictionalNote: "Fictional businesses. Real product.",
   ctaLabel: "See it on your own number",
   ctaHref: "https://calendly.com/andy-davyjoneslocker/30min",
   footNote: "Demo. Numbers are illustrative.",
 
   ledger: {
-    screenLabel: "Owner view",
+    // change 19 (A, APPROVED): the owner's side, addressed to the owner.
+    screenLabel: "Your side",
+    // change 19 (A/B4, APPROVED): the owner entry's third line.
+    calendarLine: "Added to Google Calendar",
     // monthLabel removed (change 17, D2): the month is computed at request
     // time in America/New_York — see lib/dates.ts.
-    statusLabel: "Active",
+    // statusLabel retired with its pill (change 18 A4 / change 19 B2).
     recoveredLabel: "Recovered",
     lostLabel: "Still lost",
     replyLabel: "Reply time",
@@ -65,11 +78,12 @@ export const COPY = {
     nowLabel: "now",
   },
 
-  // The live business-name field (change 10). Approved copy.
+  // The live business-name field (change 10). Approved copy. The old hint
+  // ("Everything below updates as you type.") retired — change 19 (B7)
+  // replaced it with yours.hint.
   name: {
     label: "Type your business name",
     placeholder: "Harbor Row Aesthetics",
-    hint: "Everything below updates as you type.",
   },
 
   rotatePrompt: "Turn your phone upright.",
@@ -101,10 +115,17 @@ export const COPY = {
   },
 
   // Desktop section-1 scene type (change 15, A2). Approved copy.
+  // change 19 (A/B1, APPROVED): the mobile caption runs its own three
+  // lines on the same beats (0 / 3.6 / 5.6).
   scene: {
     closed: "Closed since 6.",
     dialing: "She's already dialing the next one.",
     caught: "Not this time.",
+    mobile: {
+      calls: "A customer calls you.",
+      nobody: "Nobody answers.",
+      caught: "Not this time.",
+    },
   },
 
   // Section-3 tiles (change 13, S3d). Approved copy — the numerals come from
@@ -114,12 +135,17 @@ export const COPY = {
     ticketSuffix: "a job",
     missedSuffix: "missed a month",
     lostSuffix: "still lost",
+    // change 19 (A/B7, APPROVED).
+    hint: "Your name lands on the phone.",
+    scrollUp: "Scroll up to watch it as {bizName}.",
   },
 
   // Phone / OG chrome. Same human veto as everything else in this file.
   chrome: {
     // change 17 (C3, APPROVED): prefixes thread[0].time only.
     todayPrefix: "Today ",
+    // change 19 (A/B5, APPROVED): under the first business bubble only.
+    autoReplyTag: "Salvage · auto-reply",
     phone: {
       statusTime: "8:47",
       // change 17 (D1, APPROVED): March 14, 2026 is a Saturday; the
@@ -136,15 +162,16 @@ export const COPY = {
 
 export const PRESETS: Preset[] = [
   {
-    id: "salon", label: "Salon & Spa", bizName: "Harbor Row Aesthetics",
+    id: "salon", label: "Salon and Spa", bizName: "Harbor Row Aesthetics",
+    customerName: "Danielle R.",
     ticket: 340, missedPerMonth: 12, callsCaught: 4, recovered: 1360, lost: 4080,
     sinceCalls: 31, sinceRecovered: 9240,
     // Entry [0] is this thread's own booking. Sum of all 4 amounts === recovered.
     caught: [
-      { number: "(804) 555-0142", detail: "Thu 2:00 with Marisa · filler", amount: 340, date: "Mar 14" },
-      { number: "(804) 555-0119", detail: "Tue 11:00 with Marisa · color", amount: 260, date: "Mar 11" },
-      { number: "(804) 555-0176", detail: "Sat 9:30 with Priya · facial", amount: 380, date: "Mar 8" },
-      { number: "(804) 555-0133", detail: "Wed 4:15 with Marisa · lash fill", amount: 380, date: "Mar 4" },
+      { name: "Danielle R.", number: "(804) 555-0142", detail: "Thu 2:00 with Marisa · filler", amount: 340, date: "Mar 14" },
+      { name: "Renee K.", number: "(804) 555-0119", detail: "Tue 11:00 with Marisa · color", amount: 260, date: "Mar 11" },
+      { name: "Alyssa P.", number: "(804) 555-0176", detail: "Sat 9:30 with Priya · facial", amount: 380, date: "Mar 8" },
+      { name: "Tara W.", number: "(804) 555-0133", detail: "Wed 4:15 with Marisa · lash fill", amount: 380, date: "Mar 4" },
     ],
     thread: [
       { from: "business", time: "8:47 PM", text: "This is Harbor Row Aesthetics, sorry we missed you. We're closed for the night, but I can get you on the book right now if you want." },
@@ -155,13 +182,14 @@ export const PRESETS: Preset[] = [
   },
   {
     id: "home", label: "Home Services", bizName: "Ridgeline Plumbing",
+    customerName: "Mark T.",
     ticket: 850, missedPerMonth: 15, callsCaught: 5, recovered: 4250, lost: 12750,
     sinceCalls: 24, sinceRecovered: 18700,
     caught: [
-      { number: "(804) 555-0197", detail: "Tue 8:00 · water heater", amount: 850, date: "Mar 13" },
-      { number: "(804) 555-0155", detail: "Fri 1:00 · drain clog", amount: 900, date: "Mar 10" },
-      { number: "(804) 555-0184", detail: "Mon 9:00 · toilet install", amount: 1200, date: "Mar 6" },
-      { number: "(804) 555-0161", detail: "Thu 7:30 · water heater replace", amount: 1300, date: "Mar 2" },
+      { name: "Mark T.", number: "(804) 555-0197", detail: "Tue 8:00 · water heater", amount: 850, date: "Mar 13" },
+      { name: "Chris D.", number: "(804) 555-0155", detail: "Fri 1:00 · drain clog", amount: 900, date: "Mar 10" },
+      { name: "Elena V.", number: "(804) 555-0184", detail: "Mon 9:00 · toilet install", amount: 1200, date: "Mar 6" },
+      { name: "Sam O.", number: "(804) 555-0161", detail: "Thu 7:30 · water heater replace", amount: 1300, date: "Mar 2" },
     ],
     thread: [
       { from: "business", time: "8:47 PM", text: "Ridgeline Plumbing, sorry we couldn't pick up. What's going on? I can get someone scheduled." },
@@ -172,19 +200,40 @@ export const PRESETS: Preset[] = [
   },
   {
     id: "dental", label: "Dental", bizName: "Fairfield Dental",
+    customerName: "Priya S.",
     ticket: 600, missedPerMonth: 9, callsCaught: 3, recovered: 1800, lost: 5400,
     sinceCalls: 19, sinceRecovered: 9800,
     caught: [
-      { number: "(804) 555-0168", detail: "Fri 9:15 with Dr. Nakamura · chipped tooth", amount: 600, date: "Mar 12" },
-      { number: "(804) 555-0122", detail: "Wed 10:30 with Dr. Nakamura · cleaning", amount: 300, date: "Mar 9" },
-      { number: "(804) 555-0147", detail: "Mon 2:00 with Dr. Osei · filling", amount: 400, date: "Mar 5" },
-      { number: "(804) 555-0109", detail: "Thu 3:45 with Dr. Nakamura · crown", amount: 500, date: "Mar 1" },
+      { name: "Priya S.", number: "(804) 555-0168", detail: "Fri 9:15 with Dr. Nakamura · chipped tooth", amount: 600, date: "Mar 12" },
+      { name: "Owen L.", number: "(804) 555-0122", detail: "Wed 10:30 with Dr. Nakamura · cleaning", amount: 300, date: "Mar 9" },
+      { name: "Maya F.", number: "(804) 555-0147", detail: "Mon 2:00 with Dr. Osei · filling", amount: 400, date: "Mar 5" },
+      { name: "Luis R.", number: "(804) 555-0109", detail: "Thu 3:45 with Dr. Nakamura · crown", amount: 500, date: "Mar 1" },
     ],
     thread: [
       { from: "business", time: "8:47 PM", text: "Fairfield Dental, sorry we missed your call. Office opens at 8, but I can hold a time for you now." },
       { from: "customer", time: "8:54 PM", text: "Chipped a molar tonight. Not bleeding, just sharp." },
       { from: "business", time: "8:55 PM", text: "We keep two same-day slots. 9:15 tomorrow with Dr. Nakamura?" },
       { from: "customer", time: "8:57 PM", text: "I'll take it." },
+    ],
+  },
+  // change 19 (A, APPROVED): the fourth preset — every business that takes
+  // calls. Three caught entries; their sum === recovered (750, stored).
+  {
+    id: "other", label: "Something else", bizName: "Your business",
+    customerName: "Jordan M.",
+    tagline: "Any business that takes calls.",
+    ticket: 250, missedPerMonth: 10, callsCaught: 3, recovered: 750, lost: 2500,
+    sinceCalls: 22, sinceRecovered: 5500,
+    caught: [
+      { name: "Jordan M.", number: "(804) 555-0151", detail: "Fri 3:30 · appointment", amount: 250, date: "Sep 2" },
+      { name: "Casey B.", number: "(804) 555-0128", detail: "Tue 1:00 · appointment", amount: 250, date: "Sep 1" },
+      { name: "Morgan L.", number: "(804) 555-0187", detail: "Mon 9:30 · appointment", amount: 250, date: "Sep 1" },
+    ],
+    thread: [
+      { from: "business", time: "8:47 PM", text: "Sorry we missed your call. We're closed right now, but I can get you booked." },
+      { from: "customer", time: "8:50 PM", text: "Yes, I need to come in this week." },
+      { from: "business", time: "8:51 PM", text: "Wednesday 10:00 or Friday 3:30?" },
+      { from: "customer", time: "8:53 PM", text: "Friday 3:30." },
     ],
   },
 ];

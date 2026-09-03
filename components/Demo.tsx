@@ -89,9 +89,11 @@ type Nodes = {
   threadArea: HTMLElement | null;
   leak: HTMLElement | null;
   controls: HTMLElement | null;
-  sceneClosed: HTMLElement | null;
-  sceneDialing: HTMLElement | null;
-  sceneCaught: HTMLElement | null;
+  /* change 19 (B1): arrays — the desktop scene type and the mobile caption
+     share slots and beats; whichever the viewport renders, one clock. */
+  sceneClosed: HTMLElement[];
+  sceneDialing: HTMLElement[];
+  sceneCaught: HTMLElement[];
   ledgerPanel: HTMLElement | null;
   caughtRow0: HTMLElement | null;
   panelRecovered: HTMLElement | null;
@@ -291,9 +293,9 @@ function collect(root: HTMLElement): Nodes {
     threadArea: q("[data-thread-area]"),
     leak: q("[data-leak-lost]"),
     controls: q("[data-controls]"),
-    sceneClosed: q('[data-scene-line="closed"]'),
-    sceneDialing: q('[data-scene-line="dialing"]'),
-    sceneCaught: q('[data-scene-line="caught"]'),
+    sceneClosed: Array.from(root.querySelectorAll<HTMLElement>('[data-scene-line="closed"]')),
+    sceneDialing: Array.from(root.querySelectorAll<HTMLElement>('[data-scene-line="dialing"]')),
+    sceneCaught: Array.from(root.querySelectorAll<HTMLElement>('[data-scene-line="caught"]')),
     ledgerPanel: q("[data-ledger-panel]"),
     caughtRow0: q('[data-caught-row="0"]'),
     panelRecovered: q("[data-panel-recovered]"),
@@ -458,9 +460,9 @@ function paintScene(ctx: Ctx, t: number) {
          and again when the thread begins. Same clock as everything else. --- */
   const dialingIn = easeOut(clamp01((t - SCENE_DIALING_AT) / SCENE_FADE));
   const caughtIn = easeOut(clamp01((t - SCENE_CAUGHT_AT) / SCENE_FADE));
-  if (n.sceneClosed) n.sceneClosed.style.opacity = String(1 - dialingIn);
-  if (n.sceneDialing) n.sceneDialing.style.opacity = String(Math.min(dialingIn, 1 - caughtIn));
-  if (n.sceneCaught) n.sceneCaught.style.opacity = String(caughtIn);
+  n.sceneClosed.forEach((el) => (el.style.opacity = String(1 - dialingIn)));
+  n.sceneDialing.forEach((el) => (el.style.opacity = String(Math.min(dialingIn, 1 - caughtIn))));
+  n.sceneCaught.forEach((el) => (el.style.opacity = String(caughtIn)));
 
   /* --- The customer's closing beat: the booking confirmation on her phone.
          (The owner's ledger-side card is a static dock now — change 12, B2 —
@@ -864,6 +866,7 @@ export default function Demo({
     const fontFade = [
       ...root.querySelectorAll<HTMLElement>("[data-phone-screen]"),
       ...root.querySelectorAll<HTMLElement>("[data-scene]"),
+      ...root.querySelectorAll<HTMLElement>("[data-scene-mobile]"),
     ];
     /* Hide INSTANTLY (this layout effect runs before the hydration paint,
        so the SSR frame never flashes), then transition only the fade-IN. */
@@ -1354,6 +1357,33 @@ export default function Demo({
           </div>
 
           <div className="w-full max-w-[390px] shrink-0">
+            {/* change 19 (B1): the mobile caption — Newsreader italic 22px,
+                centered above the phone, height reserved, riding the same
+                three beats as the desktop scene type (same slots, one
+                clock). SSR seeds the settled "caught" line. */}
+            <div data-scene-mobile className="relative mx-auto mb-2 h-[30px] text-center min-[1100px]:hidden">
+              <p
+                data-scene-line="closed"
+                className="absolute inset-x-0 top-0 font-display text-[22px] font-normal italic leading-[30px] text-muted"
+                style={{ opacity: 0 }}
+              >
+                {COPY.scene.mobile.calls}
+              </p>
+              <p
+                data-scene-line="dialing"
+                className="absolute inset-x-0 top-0 font-display text-[22px] font-normal italic leading-[30px] text-muted"
+                style={{ opacity: 0 }}
+              >
+                {COPY.scene.mobile.nobody}
+              </p>
+              <p
+                data-scene-line="caught"
+                className="absolute inset-x-0 top-0 font-display text-[22px] font-normal italic leading-[30px] text-muted"
+                style={{ opacity: 1 }}
+              >
+                {COPY.scene.mobile.caught}
+              </p>
+            </div>
             <Phone preset={preset} bizName={bizName} typingBefore={[2]} slab sonar />
           </div>
         </div>
@@ -1395,6 +1425,10 @@ export default function Demo({
                 <p data-sub className="mt-2 max-w-xl text-[14px] leading-relaxed text-muted min-[1100px]:hidden">
                   {COPY.sub}
                 </p>
+                {/* change 19 (B6): the honesty line. */}
+                <p data-fictional className="mt-1 text-[13px] text-muted min-[1100px]:hidden">
+                  {COPY.fictionalNote}
+                </p>
               </header>
 
               {/* The settled phone — DESKTOP ONLY (change 15, A1). Static
@@ -1421,8 +1455,11 @@ export default function Demo({
                     the left column so the phone's height budget closes at a
                     >=340px width. Gate 33 accepts whichever [data-sub] is
                     visible. */}
-                <p data-sub className="mb-3 hidden text-[16px] leading-relaxed text-muted min-[1100px]:block">
+                <p data-sub className="hidden text-[16px] leading-relaxed text-muted min-[1100px]:block">
                   {COPY.sub}
+                </p>
+                <p data-fictional className="mb-3 mt-0.5 hidden text-[13px] text-muted min-[1100px]:block">
+                  {COPY.fictionalNote}
                 </p>
                 {/* The owner card: DOCKED statically in flow, 12px above the
                     panel at every width. */}
@@ -1482,7 +1519,7 @@ export default function Demo({
                 className="mt-2 block w-full border-x-0 border-b border-t-0 border-solid border-line bg-transparent pb-1.5 font-display text-[22px] text-ink outline-none transition-colors placeholder:text-muted/50 focus:border-teal"
               />
             </label>
-            <p className="mt-1.5 text-[12px] text-muted">{COPY.name.hint}</p>
+            <p className="mt-1.5 text-[12px] text-muted">{COPY.yours.hint}</p>
           </div>
 
           <div className="mt-2 flex min-h-0 w-full flex-1 flex-col min-[1100px]:mt-3 min-[1100px]:grid min-[1100px]:grid-cols-2 min-[1100px]:grid-rows-[100%] min-[1100px]:items-start min-[1100px]:gap-x-12">
@@ -1512,6 +1549,8 @@ export default function Demo({
                     className="flex min-h-0 flex-col justify-start min-[1100px]:px-2"
                   >
                     <p className="font-display text-[28px] font-medium leading-[1.02] tracking-[-0.01em] text-ink">{p.label}</p>
+                    {/* change 19 (B9): the fourth preset explains itself. */}
+                    {p.tagline && <p className="mt-0.5 text-[13px] text-muted">{p.tagline}</p>}
                     {/* change 18 (C2): the tiles are a ruled two-column
                         table now — label left in body, figure right in
                         mono. Ticket stays the one gold element per panel
@@ -1545,7 +1584,7 @@ export default function Demo({
                 (change 16, B4) so the phone's top edge is deterministic. */}
             <div
               data-yours-cueband
-              className="order-2 mt-2 flex h-14 shrink-0 flex-col items-center justify-center gap-1.5 min-[1100px]:hidden"
+              className="order-2 mt-2 flex h-14 shrink-0 flex-col items-center justify-center gap-1 min-[1100px]:hidden"
             >
               <p
                 className={`text-[12px] text-muted transition-opacity duration-500 ${
@@ -1567,6 +1606,11 @@ export default function Demo({
                   />
                 ))}
               </div>
+              {/* change 19 (B7): the payoff pointer, live with the active or
+                  typed name. */}
+              <p data-scroll-up className="text-[12px] text-muted">
+                {COPY.yours.scrollUp.replace("{bizName}", bizName)}
+              </p>
             </div>
           </div>
 
@@ -1580,18 +1624,23 @@ export default function Demo({
               {COPY.cues.presets}
             </p>
           </div>
-          <div className="absolute inset-x-0 bottom-6 z-20 hidden justify-center gap-2.5 min-[1100px]:flex">
-            {PRESETS.map((p, i) => (
-              <button
-                key={p.id}
-                type="button"
-                data-panel-dot
-                data-active={yoursPanel === i ? "true" : "false"}
-                aria-label={`${COPY.a11y.panelDot} ${i + 1}`}
-                onClick={() => goPanel(yoursTrackRef.current, i)}
-                className={panelDot(yoursPanel === i)}
-              />
-            ))}
+          <div className="absolute inset-x-0 bottom-6 z-20 hidden flex-col items-center gap-1.5 min-[1100px]:flex">
+            <div className="flex justify-center gap-2.5">
+              {PRESETS.map((p, i) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  data-panel-dot
+                  data-active={yoursPanel === i ? "true" : "false"}
+                  aria-label={`${COPY.a11y.panelDot} ${i + 1}`}
+                  onClick={() => goPanel(yoursTrackRef.current, i)}
+                  className={panelDot(yoursPanel === i)}
+                />
+              ))}
+            </div>
+            <p data-scroll-up className="text-[12px] text-muted">
+              {COPY.yours.scrollUp.replace("{bizName}", bizName)}
+            </p>
           </div>
         </div>
       </section>
@@ -1609,17 +1658,43 @@ export default function Demo({
           {/* change 18 (C5): the math line is the ledger's TOTAL — a 2px
               rule above, 1px below, numerals in mono at display size. */}
           <div data-total className="w-full border-b border-t-2 border-line py-8 min-[1100px]:py-10">
-            <p data-math className="mx-auto max-w-[20ch] font-display font-medium leading-[1.08] tracking-[-0.01em] text-ink [font-size:clamp(40px,6vw,72px)]">
-              {COPY.mathLead}{" "}
-              <span data-math-numeral data-figure className="font-medium text-gold">
-                {preset.missedPerMonth}
-              </span>{" "}
-              {COPY.mathMid}{" "}
-              <span data-math-numeral data-figure className="font-medium text-gold">
-                ${preset.ticket}
-              </span>{" "}
-              {COPY.mathTail}
-            </p>
+            {name ? (
+              /* change 19 (B8): the personal line — the approved template
+                 split on its placeholders, the typed name in ink, numerals
+                 mono gold. */
+              (() => {
+                const afterName = COPY.mathPersonal.split("{bizName}")[1] ?? "";
+                const beforeMissed = afterName.split("{missed}")[0];
+                const midPart = afterName.split("{missed}")[1]?.split("${ticket}")[0] ?? "";
+                const tailPart = afterName.split("${ticket}")[1] ?? "";
+                return (
+                  <p data-math className="mx-auto max-w-[24ch] font-display font-medium leading-[1.08] tracking-[-0.01em] text-ink [font-size:clamp(40px,6vw,72px)]">
+                    <span data-math-name>{name}</span>
+                    {beforeMissed}
+                    <span data-math-numeral data-figure className="font-medium text-gold">
+                      {preset.missedPerMonth}
+                    </span>
+                    {midPart}
+                    <span data-math-numeral data-figure className="font-medium text-gold">
+                      ${preset.ticket}
+                    </span>
+                    {tailPart}
+                  </p>
+                );
+              })()
+            ) : (
+              <p data-math className="mx-auto max-w-[20ch] font-display font-medium leading-[1.08] tracking-[-0.01em] text-ink [font-size:clamp(40px,6vw,72px)]">
+                {COPY.mathLead}{" "}
+                <span data-math-numeral data-figure className="font-medium text-gold">
+                  {preset.missedPerMonth}
+                </span>{" "}
+                {COPY.mathMid}{" "}
+                <span data-math-numeral data-figure className="font-medium text-gold">
+                  ${preset.ticket}
+                </span>{" "}
+                {COPY.mathTail}
+              </p>
+            )}
           </div>
 
           {/* One row on desktop: the CTA and the since-install strip beside

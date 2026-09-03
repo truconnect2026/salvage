@@ -155,6 +155,24 @@ deviation: the brief's gate 114 sampled "two rings at t=1.9", but D1's own
 coordinates (births 0.2/1.4/2.6, life 1.4s) leave one ring alive there; the
 gate samples the two-alive claim inside a real overlap window (t≈1.5).
 
+## Change 19 — adversarial review (1 lens)
+
+Lens: state coherence across 4 presets × name × URL. Scripted walk in
+Chromium (1440x900): deep link `?biz=other&name=Acme%20Repair` renders the
+name on the phone header, the track resting on panel 3, the scroll-up
+pointer, and the personal math line, with the URL untouched; snapping the
+track 0→1→2→3→0 keeps URL, phone header, scroll-up pointer, math line, and
+cleared name field in agreement at every rest (including the new fourth
+panel); typing "Bay Windows LLC" rethreads the name through URL, header,
+pointer, and personal math within the debounce; Share copies the exact
+resting deep link. No findings — the change-12 queue/pending machinery
+extends to four presets untouched, because every path is index- or
+id-driven (`PRESETS.map`, IO-driven snap, `pending ?? transition ?? current`
+resolution). Two notes for Andy: gate 36 retired (initialed names
+legitimately compose ". ·"), and the "other" preset's three phone numbers
+were invented to fill B3's third line — same fictional (804) 555-01XX
+scheme as the approved rows; veto welcome.
+
 ## Change 15 — adversarial review (1 lens)
 
 Lens: is there ANY code path where audio is scheduled from a clock other
