@@ -37,8 +37,11 @@ const need = (re, label) => {
 };
 
 const defaultId = need(/export const DEFAULT_PRESET = "([^"]+)"/, "DEFAULT_PRESET");
-const ctaHref = need(/ctaHref:\s*"([^"]+)"/, "COPY.ctaHref");
-const shareOrigin = need(/export const SHARE_ORIGIN = "([^"]+)"/, "SHARE_ORIGIN");
+/* Amended (change 21): the CTA is the calendly link in COPY.contact; the
+   share origin is SITE.domain. Both read as VALUES from config — gates
+   assert shape against whatever Andy ships (gate 146's contract). */
+const ctaHref = need(/calendly:\s*"([^"]+)"/, "COPY.contact.calendly");
+const shareOrigin = need(/domain: "([^"]+)"/, "SITE.domain");
 const sceneClosed = need(/closed:\s*"([^"]+)"/, "COPY.scene.closed");
 const sceneDialing = need(/dialing:\s*"([^"]+)"/, "COPY.scene.dialing");
 const sceneCaught = need(/caught:\s*"([^"]+)"/, "COPY.scene.caught");
@@ -534,6 +537,7 @@ const BROWSER_GATES = [
   109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120,
   121, 122, 123, 124, 125, 126, 127, 128, 129, 130,
   131, 132, 133, 134, 135, 136, 137, 138, 139,
+  140, 141, 142, 143, 144, 145, 146,
 ];
 
 if (!chromium) {
@@ -3642,6 +3646,9 @@ if (!chromium) {
         for (const el of document.querySelectorAll("body *")) {
           if (el.closest("[data-phone-device]")) continue;
           if (el.tagName === "A" && el.getAttribute("href") === ctaHref) continue;
+          /* change 21 (B): the builtBy portrait (photo or S-mark fallback)
+             is round by convention — the one sanctioned circle. */
+          if (el.closest("[data-builtby-photo]")) continue;
           if (!vis(el)) continue;
           const r = el.getBoundingClientRect();
           if (r.width === 0 || r.height === 0) continue;
@@ -4524,6 +4531,250 @@ if (!chromium) {
       "sound enabled at t=2.0 -> the phase resets (reads < 1.0 within 200ms); enabled at t=5.0 -> no reset (reads >= 5.0)",
       Number.isFinite(afterEarly) && afterEarly < 1.0 && Number.isFinite(afterLate) && afterLate >= 5.0,
       `after enable at 2.0 -> t=${afterEarly} (need < 1.0); after enable at 5.0 -> t=${afterLate} (need >= 5.0)`,
+    );
+  });
+
+  /* --- 140-146: change 21 — the close. --- */
+  await block("close-21", async () => {
+    const smsHref = need(/smsHref:\s*"([^"]+)"/, "COPY.contact.smsHref");
+    const phoneText = need(/phone:\s*"([^"]+)",\s*\/\/ PLACEHOLDER/, "COPY.contact.phone");
+    const footNote = need(/footNote:\s*"([^"]+)"/, "COPY.footNote");
+
+    /* 140 + 141: static order + spacing, one reduced desktop load. */
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+    await page.evaluate(() => {
+      const pg = document.querySelector("[data-pager]");
+      pg.scrollTop = 3 * pg.clientHeight;
+    });
+    await page.waitForTimeout(250);
+    const g = await page.evaluate(
+      ({ ctaHref, smsHref, footNote }) => {
+        const order = [
+          "[data-total]",
+          "[data-cta]",
+          "[data-cta-sub]",
+          "[data-sms-line]",
+          "[data-price-line]",
+          "[data-close-rule]",
+          "[data-since-row]",
+          "[data-builtby]",
+          "[data-loop]",
+          "[data-wordmark]",
+        ];
+        const els = order.map((sel) => document.querySelector(`[data-section="math"] ${sel}`));
+        const tops = els.map((el) => (el ? el.getBoundingClientRect().top : null));
+        const ordered = tops.every((t, i) => t != null && (i === 0 || t >= tops[i - 1] - 0.5));
+        const cta = document.querySelector("[data-cta]");
+        const sms = document.querySelector("[data-sms]");
+        const ctaR = cta?.getBoundingClientRect();
+        /* footNote proximity: any element rendering the note within 120px
+           below the CTA. */
+        const noteEls = [...document.querySelectorAll('[data-section="math"] *')].filter(
+          (el) =>
+            [...el.childNodes].some((nd) => nd.nodeType === 3 && nd.textContent.includes(footNote)) &&
+            el.getBoundingClientRect().width > 0,
+        );
+        const noteNear = noteEls.filter((el) => {
+          const r = el.getBoundingClientRect();
+          return ctaR && r.top >= ctaR.bottom - 1 && r.top <= ctaR.bottom + 120;
+        });
+        return {
+          missing: order.filter((sel, i) => !els[i]),
+          ordered,
+          ctaHrefOk: cta?.getAttribute("href") === ctaHref,
+          ctaTarget: cta?.getAttribute("target"),
+          smsHrefRaw: sms?.getAttribute("href") ?? null,
+          smsOk: (sms?.getAttribute("href") ?? "").startsWith("sms:"),
+          smsMatchesConfig: sms?.getAttribute("href") === smsHref,
+          noteCount: noteEls.length,
+          noteNear: noteNear.length,
+          noteGap: noteEls[0] && ctaR ? Math.round(noteEls[0].getBoundingClientRect().top - ctaR.bottom) : null,
+        };
+      },
+      { ctaHref, smsHref, footNote },
+    );
+    await ctx.close();
+
+    check(
+      140,
+      "section 4 runs EXACTLY the close order (total, CTA, sub, sms, price, rule, since, builtBy, loop, wordmark); CTA href === calendly (_blank); sms href starts \"sms:\"",
+      g.missing.length === 0 && g.ordered && g.ctaHrefOk && g.ctaTarget === "_blank" && g.smsOk && g.smsMatchesConfig,
+      `missing ${JSON.stringify(g.missing)}; ordered ${g.ordered}; cta href ok ${g.ctaHrefOk} target ${JSON.stringify(g.ctaTarget)}; ` +
+        `sms ${JSON.stringify(g.smsHrefRaw)} (starts sms: ${g.smsOk})`,
+    );
+    check(
+      141,
+      "no footNote text within 120px below the CTA",
+      g.noteCount > 0 && g.noteNear === 0,
+      `${g.noteCount} element(s) carry the note; ${g.noteNear} within 120px of the CTA (first note sits ${g.noteGap}px below)`,
+    );
+
+    /* 142: native share on coarse pointers; clipboard elsewhere — both URLs
+       from SITE.domain. */
+    const ctxM = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
+      hasTouch: true,
+    });
+    const pageM = await ctxM.newPage();
+    await pageM.addInitScript(() => {
+      window.__shared = [];
+      Object.defineProperty(Navigator.prototype, "share", {
+        value: function (data) {
+          window.__shared.push(data);
+          return Promise.resolve();
+        },
+        configurable: true,
+      });
+    });
+    await pageM.goto(base, { waitUntil: "domcontentloaded" });
+    await waitHydrated(pageM);
+    await pageM.evaluate(() => {
+      const pg = document.querySelector("[data-pager]");
+      pg.scrollTop = 2 * pg.clientHeight;
+    });
+    await pageM.waitForTimeout(250);
+    await pageM.fill("[data-name-input]", "Test Salon");
+    await pageM.waitForTimeout(300);
+    await pageM.click("[data-rail-share]");
+    await pageM.waitForTimeout(250);
+    const shared = await pageM.evaluate(() => window.__shared);
+    await ctxM.close();
+
+    const origin = new URL(base).origin;
+    const ctxD = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    await ctxD.grantPermissions(["clipboard-read", "clipboard-write"], { origin });
+    const pageD = await ctxD.newPage();
+    await pageD.goto(base, { waitUntil: "domcontentloaded" });
+    await waitHydrated(pageD);
+    await pageD.evaluate(() => {
+      const pg = document.querySelector("[data-pager]");
+      pg.scrollTop = 2 * pg.clientHeight;
+    });
+    await pageD.waitForTimeout(250);
+    await pageD.fill("[data-name-input]", "Test Salon");
+    await pageD.waitForTimeout(300);
+    await pageD.click("[data-rail-share]");
+    await pageD.waitForTimeout(250);
+    let clip = null;
+    try {
+      clip = await pageD.evaluate(() => navigator.clipboard.readText());
+    } catch (err) {
+      clip = `clipboard error: ${err.message}`;
+    }
+    await ctxD.close();
+
+    const wantUrl = `${shareOrigin}/?biz=${defaultId}&name=Test%20Salon`;
+    check(
+      142,
+      "coarse pointer: navigator.share called once with the SITE.domain deep link (biz= and name=); no share API: the clipboard gets the same URL",
+      shared.length === 1 &&
+        typeof shared[0]?.url === "string" &&
+        shared[0].url.startsWith(shareOrigin) &&
+        shared[0].url.includes("biz=") &&
+        shared[0].url.includes("name=") &&
+        clip === wantUrl,
+      `share() calls ${shared.length}, url ${JSON.stringify(shared[0]?.url ?? null)}; clipboard ${JSON.stringify(clip)} (want ${JSON.stringify(wantUrl)})`,
+    );
+
+    /* 143: the loop button. */
+    const ctxL = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const pageL = await ctxL.newPage();
+    await pageL.goto(base, { waitUntil: "domcontentloaded" });
+    await waitHydrated(pageL);
+    const bizBefore = await pageL.evaluate(() => document.querySelector("[data-biz-name]")?.textContent?.trim());
+    await goSection(pageL, 3);
+    await pageL.waitForTimeout(300);
+    await pageL.click("[data-loop]");
+    await pageL.waitForTimeout(800);
+    const afterLoop = await pageL.evaluate(() => ({
+      scrollTop: document.querySelector("[data-pager]").scrollTop,
+      t: parseFloat(document.querySelector("[data-demo]")?.getAttribute("data-t") ?? "NaN"),
+      biz: document.querySelector("[data-biz-name]")?.textContent?.trim(),
+    }));
+    await ctxL.close();
+    check(
+      143,
+      "loop button -> section 1 within 800ms, phase restarted from 0, preset unchanged",
+      afterLoop.scrollTop <= 40 && Number.isFinite(afterLoop.t) && afterLoop.t < 1.2 && afterLoop.biz === bizBefore,
+      `pager scrollTop ${afterLoop.scrollTop} (need ~0); data-t ${afterLoop.t} (need < 1.2); ` +
+        `preset ${JSON.stringify(afterLoop.biz)} (was ${JSON.stringify(bizBefore)})`,
+    );
+
+    /* 144: the analytics seam — no PII, no mount-fire, share carries method. */
+    const ctxT = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    await ctxT.grantPermissions(["clipboard-read", "clipboard-write"], { origin });
+    const pageT = await ctxT.newPage();
+    await pageT.addInitScript(() => {
+      window.__events = [];
+      window.__track = (name, data) => window.__events.push({ name, data });
+    });
+    await pageT.goto(base, { waitUntil: "domcontentloaded" });
+    await waitHydrated(pageT);
+    await pageT.waitForTimeout(800);
+    const mountEvents = await pageT.evaluate(() => window.__events.map((e) => e.name));
+    await goSection(pageT, 2);
+    await pageT.waitForTimeout(300);
+    await pageT.fill("[data-name-input]", "Secret Name LLC");
+    await pageT.waitForTimeout(400);
+    await pageT.click("[data-rail-share]");
+    await pageT.waitForTimeout(300);
+    const events = await pageT.evaluate(() => window.__events);
+    await ctxT.close();
+
+    const nameEvt = events.find((e) => e.name === "name_typed");
+    const shareEvt = events.find((e) => e.name === "share");
+    const leaked = JSON.stringify(events).includes("Secret Name");
+    check(
+      144,
+      "track: no section_reached on mount; name_typed payload is exactly {hasName:true} (never the value); share fires with a method",
+      !mountEvents.includes("section_reached") &&
+        nameEvt != null &&
+        JSON.stringify(Object.keys(nameEvt.data ?? {})) === '["hasName"]' &&
+        nameEvt.data.hasName === true &&
+        !leaked &&
+        shareEvt != null &&
+        typeof shareEvt.data?.method === "string",
+      `mount events ${JSON.stringify(mountEvents)} (no section_reached allowed); name_typed ${JSON.stringify(nameEvt ?? null)}; ` +
+        `typed value leaked: ${leaked}; share ${JSON.stringify(shareEvt ?? null)}`,
+    );
+
+    /* 145: OG urls resolve under SITE.domain. */
+    const home145 = await fetch(base + "/", { headers: { "cache-control": "no-cache" } });
+    const raw145 = await home145.text();
+    const meta = (prop) => {
+      const m = raw145.match(new RegExp(`<meta[^>]*property="${prop}"[^>]*content="([^"]+)"`));
+      return m ? m[1] : null;
+    };
+    const ogUrl = meta("og:url");
+    const ogImage = meta("og:image");
+    const ogAlt = meta("og:image:alt");
+    check(
+      145,
+      "SSR head: og:url === SITE.domain; og:image resolves under SITE.domain; og:image:alt is the description",
+      ogUrl != null &&
+        ogUrl.replace(/\/$/, "") === shareOrigin &&
+        ogImage != null &&
+        ogImage.startsWith(shareOrigin) &&
+        ogAlt != null &&
+        ogAlt.length > 10,
+      `og:url ${JSON.stringify(ogUrl)} (want ${shareOrigin}); og:image ${JSON.stringify(ogImage)}; og:image:alt ${JSON.stringify(ogAlt)}`,
+    );
+
+    /* 146: shape, never values — the contract that placeholder swaps keep
+       gates 140/142 green. Every expectation above was READ from config;
+       here the shapes themselves are asserted. */
+    check(
+      146,
+      "placeholder contract: sms href is a valid sms: URI, the phone renders as a phone number, the CTA is https, the share origin is an https origin — shapes only, values free",
+      /^sms:\+?[\d]+$/.test(smsHref) &&
+        /\(\d{3}\)\s*\d{3}-\d{4}/.test(phoneText) &&
+        /^https:\/\//.test(ctaHref) &&
+        /^https:\/\/[^/]+$/.test(shareOrigin),
+      `smsHref ${JSON.stringify(smsHref)}; phone ${JSON.stringify(phoneText)}; cta ${JSON.stringify(ctaHref)}; origin ${JSON.stringify(shareOrigin)}`,
     );
   });
 

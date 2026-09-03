@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+
 import Demo from "@/components/Demo";
 import { COPY, resolveName, resolvePreset } from "@/lib/client.config";
 import { ledgerDates } from "@/lib/dates";
@@ -27,6 +30,10 @@ export default async function Home({
      here — the one server component — and passed down so the client
      hydrates the same strings. */
   const dates = ledgerDates();
+  /* change 21 (B): /andy.jpg is a PLACEHOLDER path — until Andy drops the
+     photo in public/, the builtBy row renders the teal S mark. Checked on
+     the server so the client never 404-flashes a broken image. */
+  const hasPhoto = existsSync(join(process.cwd(), "public", COPY.contact.photo));
 
   return (
     <>
@@ -55,7 +62,7 @@ export default async function Home({
         <p className="text-[15px] text-ink">{COPY.rotatePrompt}</p>
       </div>
 
-      <Demo initialPresetId={preset.id} initialName={initialName} dates={dates} />
+      <Demo initialPresetId={preset.id} initialName={initialName} dates={dates} hasPhoto={hasPhoto} />
     </>
   );
 }

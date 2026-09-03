@@ -39,9 +39,27 @@ export const COPY = {
     "{bizName} misses {missed} calls a month at ${ticket} a job. That's what's walking out the door.",
   // change 19 (A/B6, APPROVED).
   fictionalNote: "Fictional businesses. Real product.",
-  ctaLabel: "See it on your own number",
-  ctaHref: "https://calendly.com/andy-davyjoneslocker/30min",
+  // ctaLabel/ctaHref retired (change 21) — the close block below owns the
+  // conversion path. footNote relocated to the wordmark line.
   footNote: "Demo. Numbers are illustrative.",
+
+  // change 21 (A, APPROVED): the close.
+  close: {
+    ctaLabel: "Talk to Andy · 20 min",
+    ctaSub: "He sets it up on your number during the call.",
+    textLead: "or text Andy:",
+    priceLine: "$1,000 setup · $200 a month",
+    builtBy: "Built by Andy Jones · Chesterfield, VA",
+    loopLabel: "Watch it again",
+  },
+  // change 21 (A): contact endpoints. PLACEHOLDERS marked — Andy replaces
+  // phone, smsHref, and photo; gates assert shape, never values.
+  contact: {
+    phone: "(804) 000-0000", // PLACEHOLDER
+    smsHref: "sms:+18040000000", // PLACEHOLDER
+    calendly: "https://calendly.com/andy-davyjoneslocker/30min",
+    photo: "/andy.jpg", // PLACEHOLDER — fallback: teal S mark
+  },
 
   ledger: {
     // change 19 (A, APPROVED): the owner's side, addressed to the owner.
@@ -273,4 +291,8 @@ export function resolveName(raw: string | string[] | undefined): string {
   return s.trim().slice(0, MAX_NAME_LEN);
 }
 
-export const SHARE_ORIGIN = "https://salvage-demo.vercel.app";
+/* change 21 (A): the canonical domain — share links and OG urls come from
+   HERE, never from location.origin and never the vercel.app host. */
+export const SITE = { domain: "https://salvage.davyjoneslocker.app" };
+
+export const SHARE_ORIGIN = SITE.domain;

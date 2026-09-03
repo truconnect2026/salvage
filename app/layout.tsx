@@ -1,6 +1,7 @@
+import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Newsreader } from "next/font/google";
-import { META } from "@/lib/client.config";
+import { META, SITE } from "@/lib/client.config";
 import "./globals.css";
 
 /* change 18 — FONTS (Andy's veto block, KEEP_BRAND_FONTS = false):
@@ -33,8 +34,10 @@ const plexMono = IBM_Plex_Mono({
   display: "swap",
 });
 
+/* change 21 (E): every absolute URL — og:url, og:image — resolves under
+   SITE.domain, never the vercel.app host. */
 export const metadata: Metadata = {
-  metadataBase: new URL("https://salvage-demo.vercel.app"),
+  metadataBase: new URL(SITE.domain),
   title: META.title,
   description: META.description,
   openGraph: {
@@ -43,7 +46,7 @@ export const metadata: Metadata = {
     url: "/",
     siteName: "Salvage",
     type: "website",
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: META.title }],
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: META.description }],
   },
   twitter: {
     card: "summary_large_image",
@@ -56,7 +59,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${newsreader.variable} ${plexSans.variable} ${plexMono.variable}`}>
-      <body className="bg-abyss text-ink font-body antialiased">{children}</body>
+      <body className="bg-abyss text-ink font-body antialiased">
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }

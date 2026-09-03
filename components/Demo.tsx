@@ -4,7 +4,8 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from
 
 import Ledger from "@/components/Ledger";
 import Phone, { NotifyCard } from "@/components/Phone";
-import { COPY, MAX_NAME_LEN, PRESETS, SHARE_ORIGIN, resolveName, type Preset } from "@/lib/client.config";
+import { COPY, MAX_NAME_LEN, META, PRESETS, SHARE_ORIGIN, resolveName, type Preset } from "@/lib/client.config";
+import { track } from "@/lib/track";
 import { type LedgerDates } from "@/lib/dates";
 import { usd } from "@/lib/format";
 import {
@@ -747,11 +748,14 @@ export default function Demo({
   initialPresetId,
   initialName = "",
   dates,
+  hasPhoto = false,
 }: {
   initialPresetId: string;
   initialName?: string;
   /* change 17 (D2): request-time ledger dates, computed server-side. */
   dates?: LedgerDates;
+  /* change 21 (B): server-checked existence of the PLACEHOLDER photo. */
+  hasPhoto?: boolean;
 }) {
   const [presetId, setPresetId] = useState(initialPresetId);
   const [share, setShare] = useState<"idle" | "copied" | "manual">("idle");
@@ -791,6 +795,15 @@ export default function Demo({
   const activeSectionRef = useRef(0);
   useEffect(() => {
     activeSectionRef.current = activeSection;
+  }, [activeSection]);
+
+  /* change 21 (D): section_reached fires on every user-driven section
+     change — never for the section the page mounted on. */
+  const trackedSection = useRef(0);
+  useEffect(() => {
+    if (activeSection === trackedSection.current) return;
+    trackedSection.current = activeSection;
+    track("section_reached", { section: activeSection + 1 });
   }, [activeSection]);
 
   /* Re-bind to the DOM whenever React swaps the preset markup. Runs before
@@ -948,6 +961,7 @@ export default function Demo({
     if (id === current && !ctx.pendingPresetId) return;
     const next = PRESETS.find((p) => p.id === id);
     if (!next) return;
+    track("preset_change", { preset: id });
 
     /* Preset switch clears the name (B2): the incoming preset's own bizName
        shows, and the URL drops &name=. */
@@ -1209,6 +1223,7 @@ export default function Demo({
     nameTimer.current = window.setTimeout(() => {
       const clean = resolveName(raw);
       setName(clean);
+      track("name_typed", { hasName: clean !== "" });
       /* Prefer an in-flight swap's TARGET preset: a debounce firing during
          the half-second transition must not resurrect the outgoing preset's
          id into the URL (change 10 review lens 2, finding 4). */
@@ -1282,6 +1297,7 @@ export default function Demo({
     const next = !soundOn;
     setSoundOn(next);
     ctx.audio.enabled = next;
+    if (next) track("sound_on");
     try {
       window.sessionStorage.setItem("salvage:sound", next ? "1" : "0");
     } catch {}
@@ -1333,18 +1349,50 @@ export default function Demo({
     }
     const ctx = ctxRef.current;
     const bizId = ctx?.pendingPresetId ?? ctx?.transition?.to.id ?? preset.id;
+    /* change 21 (C): the URL comes from SITE.domain — never location.origin,
+       never the vercel host. */
     const url = `${SHARE_ORIGIN}/${buildQuery(bizId, committed)}`;
     syncUrl(bizId, committed);
+
+    /* change 21 (C): a coarse-pointer device with the native share sheet
+       gets share(); everything else falls back to the clipboard. */
+    if (window.matchMedia("(pointer: coarse)").matches && typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title: META.title, text: COPY.sub, url });
+        track("share", { method: "share", preset: bizId });
+      } catch {
+        /* user dismissed the sheet — nothing to clean up */
+      }
+      return;
+    }
 
     try {
       if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
       await navigator.clipboard.writeText(url);
+      track("share", { method: "clipboard", preset: bizId });
       setShare("copied");
       if (copyTimer.current != null) window.clearTimeout(copyTimer.current);
       copyTimer.current = window.setTimeout(() => setShare("idle"), 2000);
     } catch {
+      track("share", { method: "manual", preset: bizId });
       setShare("manual");
     }
+  };
+
+  /* change 21 (B): the loop button — back to section 1, phase 0, preset
+     untouched. The replay mechanics plus the one permitted programmatic
+     scroll. */
+  const onLoop = () => {
+    const ctx = ctxRef.current;
+    if (ctx && !ctx.reduced && !ctx.transition) {
+      ctx.armed = false;
+      ctx.start = null;
+      ctx.audio.lastT = -1;
+      ctx.caretLatched = false;
+      setCaretBob(false);
+      schedule(ctx);
+    }
+    goSection(0);
   };
 
   const goSection = (i: number) => {
@@ -1779,34 +1827,81 @@ export default function Demo({
             )}
           </div>
 
-          {/* One row on desktop: the CTA and the since-install strip beside
-              it at 18px ink (S4b) — a standing total, not a footnote. The
-              dollar figure stays ink: gold here belongs to the math numerals
-              alone (gates 38/45). */}
-          <div className="flex flex-col items-center gap-7 min-[1100px]:flex-row min-[1100px]:gap-12">
-            <div>
+          {/* change 21 (B): the close, in exactly this order — CTA, sub,
+              text line, price, rule, since-install row, builtBy, loop,
+              wordmark. Nothing else. */}
+          <div className="flex w-full max-w-md flex-col items-center gap-2.5">
+            <a
+              data-cta
+              href={COPY.contact.calendly}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => track("cta_calendly", { preset: preset.id })}
+              className="inline-block rounded-full bg-gold px-8 py-4 text-[15px] font-semibold text-abyss outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-abyss"
+            >
+              {COPY.close.ctaLabel}
+            </a>
+            <p data-cta-sub className="text-[14px] text-muted">
+              {COPY.close.ctaSub}
+            </p>
+            <p data-sms-line className="text-[14px] text-muted">
+              {COPY.close.textLead}{" "}
               <a
-                href={COPY.ctaHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-block rounded-full bg-gold px-8 py-4 text-[15px] font-semibold text-abyss outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-abyss"
+                data-sms
+                data-figure
+                href={COPY.contact.smsHref}
+                onClick={() => track("cta_sms", { preset: preset.id })}
+                className="text-teal-bright underline decoration-teal underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-teal-bright"
               >
-                {COPY.ctaLabel}
+                {COPY.contact.phone}
               </a>
-              <p className="mt-3 text-[13px] text-muted">{COPY.footNote}</p>
+            </p>
+            <p data-price-line data-figure className="text-[15px] text-ink">
+              {COPY.close.priceLine}
+            </p>
+
+            <div data-close-rule className="mt-2 w-full border-t border-line" />
+
+            <div data-since-row className="flex w-full items-baseline justify-between gap-3 border-b border-line py-2">
+              <p className="text-[12px] text-muted">{COPY.ledger.sinceLabel}</p>
+              <p className="text-[13px] text-muted">
+                <span data-figure>{preset.sinceCalls}</span> calls caught ·{" "}
+                <span data-figure className="font-medium text-ink">{usd(preset.sinceRecovered)}</span> recovered
+              </p>
             </div>
-            <p className="text-[18px] text-ink">
-              <span data-figure>{preset.sinceCalls}</span> calls caught ·{" "}
-              <span data-figure className="font-medium">{usd(preset.sinceRecovered)}</span> recovered
+
+            <div data-builtby className="mt-1.5 flex items-center gap-2.5">
+              {hasPhoto ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  data-builtby-photo
+                  src={COPY.contact.photo}
+                  alt=""
+                  width={40}
+                  height={40}
+                  className="h-10 w-10 rounded-full object-cover"
+                />
+              ) : (
+                <span
+                  data-builtby-photo
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-teal"
+                >
+                  <span className="font-display text-[20px] font-semibold leading-none text-abyss">S</span>
+                </span>
+              )}
+              <span className="text-[13px] text-muted">{COPY.close.builtBy}</span>
+            </div>
+
+            <button data-loop type="button" onClick={onLoop} className={`mt-1 ${ghost}`}>
+              {COPY.close.loopLabel}
+            </button>
+
+            <p data-wordmark className="mt-2 text-[11px] uppercase text-muted">
+              <span className="font-figures">{COPY.chrome.og.wordmark}</span>
+              <span className="normal-case"> · {COPY.footNote}</span>
             </p>
           </div>
         </div>
-
-        {/* change 18 (A3): the wordmark sheds its uppercase tracking — only
-            folios stay tracked-caps. */}
-        <p className="absolute bottom-8 left-8 z-10 text-[12px] text-muted">
-          {COPY.chrome.og.wordmark}
-        </p>
       </section>
 
       {/* ---- The rail (change 15, A3): Share, sound, dots, next-chevron —
