@@ -20,6 +20,9 @@
   /* change 18 FONTS (KEEP_BRAND_FONTS = false): Newsreader display, IBM
      Plex Sans body, IBM Plex Mono figures. */
   --font-display: var(--font-newsreader);
+  /* change 23: the caption face is its own family — Newsreader 400 italic
+     only (next/font cannot mix per-style weights in one loader). */
+  --font-caption: var(--font-newsreader-italic);
   --font-body: var(--font-plex-sans);
   --font-figures: var(--font-plex-mono);
 }
@@ -30,6 +33,9 @@
 [data-figure] {
   font-family: var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
   font-variant-numeric: tabular-nums;
+  /* change 23 (lever 1): Plex Mono ships 400 ONLY — the semibold figures
+     dropped to 400 rather than synthesizing a fake 500. */
+  font-weight: 400;
 }
 
 /* Change 12 (A1): the page itself never scrolls — the pager owns the one

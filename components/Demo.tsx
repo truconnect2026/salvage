@@ -1464,21 +1464,21 @@ export default function Demo({
             <div className="relative mt-5 h-[80px]">
               <p
                 data-scene-line="closed"
-                className="absolute inset-x-0 top-0 font-display text-[30px] font-normal italic leading-[30px] text-muted"
+                className="absolute inset-x-0 top-0 font-caption text-[30px] font-normal italic leading-[30px] text-muted"
                 style={{ opacity: 0 }}
               >
                 {COPY.scene.closed}
               </p>
               <p
                 data-scene-line="dialing"
-                className="absolute inset-x-0 top-0 font-display text-[30px] font-normal italic leading-[30px] text-muted"
+                className="absolute inset-x-0 top-0 font-caption text-[30px] font-normal italic leading-[30px] text-muted"
                 style={{ opacity: 0 }}
               >
                 {COPY.scene.dialing}
               </p>
               <p
                 data-scene-line="caught"
-                className="absolute inset-x-0 top-0 font-display text-[30px] font-normal italic leading-[30px] text-[var(--accent,#8AA0B4)]"
+                className="absolute inset-x-0 top-0 font-caption text-[30px] font-normal italic leading-[30px] text-[var(--accent,#8AA0B4)]"
                 style={{ opacity: 1 }}
               >
                 {COPY.scene.caught}
@@ -1494,21 +1494,21 @@ export default function Demo({
             <div data-scene-mobile data-client-world className="relative mx-auto mb-2 h-[30px] text-center min-[1100px]:hidden">
               <p
                 data-scene-line="closed"
-                className="absolute inset-x-0 top-0 font-display text-[22px] font-normal italic leading-[30px] text-muted"
+                className="absolute inset-x-0 top-0 font-caption text-[22px] font-normal italic leading-[30px] text-muted"
                 style={{ opacity: 0 }}
               >
                 {COPY.scene.mobile.calls}
               </p>
               <p
                 data-scene-line="dialing"
-                className="absolute inset-x-0 top-0 font-display text-[22px] font-normal italic leading-[30px] text-muted"
+                className="absolute inset-x-0 top-0 font-caption text-[22px] font-normal italic leading-[30px] text-muted"
                 style={{ opacity: 0 }}
               >
                 {COPY.scene.mobile.nobody}
               </p>
               <p
                 data-scene-line="caught"
-                className="absolute inset-x-0 top-0 font-display text-[22px] font-normal italic leading-[30px] text-[var(--accent,#8AA0B4)]"
+                className="absolute inset-x-0 top-0 font-caption text-[22px] font-normal italic leading-[30px] text-[var(--accent,#8AA0B4)]"
                 style={{ opacity: 1 }}
               >
                 {COPY.scene.mobile.caught}
@@ -1646,7 +1646,7 @@ export default function Demo({
                 placeholder={COPY.name.placeholder}
                 maxLength={MAX_NAME_LEN}
                 autoComplete="off"
-                className="mt-2 block w-full border-x-0 border-b border-t-0 border-solid border-line bg-transparent pb-1.5 font-display text-[22px] text-ink outline-none transition-colors placeholder:text-muted/50 focus:border-teal"
+                className="mt-2 block w-full border-x-0 border-b border-t-0 border-solid border-line bg-transparent pb-1.5 font-display font-medium text-[22px] text-ink outline-none transition-colors placeholder:text-muted/50 focus:border-teal"
               />
             </label>
             <p className="mt-1.5 text-[12px] text-muted">{COPY.yours.hint}</p>

@@ -19,6 +19,7 @@
  *     node scripts/gate.mjs http://localhost:3000
  */
 import { readFileSync } from "node:fs";
+import zlib from "node:zlib";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -537,7 +538,7 @@ const BROWSER_GATES = [
   109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120,
   121, 122, 123, 124, 125, 126, 127, 128, 129, 130,
   131, 132, 133, 134, 135, 136, 137, 138, 139,
-  140, 141, 142, 143, 144, 145, 146, 147,
+  140, 141, 142, 143, 144, 145, 146, 147, 148, 149,
 ];
 
 if (!chromium) {
@@ -4823,17 +4824,70 @@ if (!chromium) {
     const hit = (urls) => preloads.filter((p) => urls.includes(p.href));
     const known = [...display, ...mono, ...faceUrls("IBM Plex Sans")];
     const strays = preloads.filter((p) => !known.includes(p.href));
+    /* Amended (change 23, lever 2): AT MOST two preloads, and they are the
+       two above-the-fold faces — a Newsreader face (the t=0 caption) and
+       the Plex Mono face (the folio mark). Everything else loads on
+       demand. */
     check(
       147,
-      'head carries as="font" crossorigin preloads for the display (Newsreader) and mono (IBM Plex Mono) faces, all matching declared @font-face URLs',
+      'head carries <= 2 as="font" crossorigin preloads: one Newsreader face, one IBM Plex Mono face — the above-the-fold pair',
       preloads.length > 0 &&
+        preloads.length <= 2 &&
         preloads.every((p) => p.crossorigin) &&
-        hit(display).length >= 1 &&
-        hit(mono).length >= 1 &&
+        hit(display).length === 1 &&
+        hit(mono).length === 1 &&
         strays.length === 0,
-      `${preloads.length} font preload(s), all crossorigin ${preloads.every((p) => p.crossorigin)}; ` +
-        `display hits ${hit(display).length}/${display.length} faces, mono hits ${hit(mono).length}/${mono.length}; ` +
+      `${preloads.length} font preload(s) (need <= 2), all crossorigin ${preloads.every((p) => p.crossorigin)}; ` +
+        `Newsreader hits ${hit(display).length} (need 1), mono hits ${hit(mono).length} (need 1); ` +
         `strays ${JSON.stringify(strays.map((p) => p.href.slice(-30)))}`,
+    );
+
+    /* --- 148: font bytes on the LCP critical path, measured under the
+           Moto-class profile. --- */
+    const ctx148 = await browser.newContext({ viewport: { width: 412, height: 823 } });
+    const page148 = await ctx148.newPage();
+    const cdp = await ctx148.newCDPSession(page148);
+    await cdp.send("Network.emulateNetworkConditions", {
+      offline: false,
+      latency: 150,
+      downloadThroughput: (1.6 * 1024 * 1024) / 8,
+      uploadThroughput: (750 * 1024) / 8,
+    });
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+    await page148.addInitScript(() => {
+      window.__lcp = 0;
+      new PerformanceObserver((l) => {
+        for (const e of l.getEntries()) window.__lcp = Math.round(e.startTime);
+      }).observe({ type: "largest-contentful-paint", buffered: true });
+    });
+    await page148.goto(base, { waitUntil: "load" });
+    await page148.waitForTimeout(5000);
+    const g148 = await page148.evaluate(() => {
+      const lcp = window.__lcp;
+      const fonts = performance
+        .getEntriesByType("resource")
+        .filter((r) => r.name.endsWith(".woff2") && r.startTime < lcp);
+      return {
+        lcp,
+        bytes: fonts.reduce((s, r) => s + (r.transferSize || r.encodedBodySize || 0), 0),
+        files: fonts.map((r) => `${r.name.split("/").pop().slice(0, 24)}:${r.transferSize}`),
+      };
+    });
+    await ctx148.close();
+    check(
+      148,
+      "total font bytes requested before LCP <= 120KB (slow-4G + 4x CPU profile)",
+      g148.lcp > 0 && g148.bytes <= 120 * 1024,
+      `${g148.bytes} bytes across ${g148.files.length} file(s) before LCP@${g148.lcp}ms (need <= ${120 * 1024}); ${JSON.stringify(g148.files)}`,
+    );
+
+    /* --- 149: the document itself stays lean. --- */
+    const gz = zlib.gzipSync(Buffer.from(raw)).length;
+    check(
+      149,
+      "HTML document for / gzips to <= 60KB",
+      gz <= 60 * 1024,
+      `${gz} bytes gzipped (raw ${raw.length}; need <= ${60 * 1024})`,
     );
   });
 

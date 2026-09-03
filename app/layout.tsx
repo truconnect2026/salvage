@@ -31,20 +31,31 @@ function fontPreloads(): string[] {
   return fontFiles;
 }
 
-/* change 18 — FONTS (Andy's veto block, KEEP_BRAND_FONTS = false):
-   display Newsreader (opsz variable, 400/500 + italic 400), body IBM Plex
-   Sans (400/500), figures IBM Plex Mono (400/500) for EVERY number,
-   timestamp, date, phone number, and currency outside the phone screen —
-   tabular-nums, wired through the [data-figure] contract in globals.css.
-   The phone screen keeps the system stack. To restore the brand pack set
-   KEEP_BRAND_FONTS = true and swap back Fraunces/Inter here (mono figures
-   stay regardless — they are what makes a log a log). */
+/* change 18 — FONTS (Andy's veto block, KEEP_BRAND_FONTS = false), put on
+   a byte diet by change 23: the variable Newsreader files (147KB + 132KB)
+   were the LCP clog. The display face carries ONLY 500 normal; the caption
+   face ONLY 400 italic (its own family — next/font cannot mix per-style
+   weights in one loader); Plex Sans 400/500; Plex Mono 400 only, with the
+   figures dropped to 400 ([data-figure] in globals.css). All latin, all
+   static instances. preload: true marks ONLY the two above-the-fold faces
+   (caption italic + mono — the folio mark and the t=0 caption are the only
+   web-font text in section 1) in the font manifest the layout reads. */
 const newsreader = Newsreader({
   variable: "--font-newsreader",
   subsets: ["latin"],
-  style: ["normal", "italic"],
-  axes: ["opsz"],
+  weight: "500",
+  style: "normal",
   display: "swap",
+  preload: false,
+});
+
+const newsreaderItalic = Newsreader({
+  variable: "--font-newsreader-italic",
+  subsets: ["latin"],
+  weight: "400",
+  style: "italic",
+  display: "swap",
+  preload: true,
 });
 
 const plexSans = IBM_Plex_Sans({
@@ -52,13 +63,15 @@ const plexSans = IBM_Plex_Sans({
   subsets: ["latin"],
   weight: ["400", "500"],
   display: "swap",
+  preload: false,
 });
 
 const plexMono = IBM_Plex_Mono({
   variable: "--font-plex-mono",
   subsets: ["latin"],
-  weight: ["400", "500"],
+  weight: "400",
   display: "swap",
+  preload: true,
 });
 
 /* change 21 (E): every absolute URL — og:url, og:image — resolves under
@@ -85,7 +98,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${newsreader.variable} ${plexSans.variable} ${plexMono.variable}`}>
+    <html
+      lang="en"
+      className={`${newsreader.variable} ${newsreaderItalic.variable} ${plexSans.variable} ${plexMono.variable}`}
+    >
       <body className="bg-abyss text-ink font-body antialiased">
         {/* React hoists preload links rendered anywhere into <head>. */}
         {fontPreloads().map((href) => (
