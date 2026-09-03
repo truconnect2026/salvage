@@ -55,8 +55,8 @@ export const COPY = {
   // change 21 (A): contact endpoints. PLACEHOLDERS marked — Andy replaces
   // phone, smsHref, and photo; gates assert shape, never values.
   contact: {
-    phone: "(804) 000-0000", // PLACEHOLDER
-    smsHref: "sms:+18040000000", // PLACEHOLDER
+    phone: "(757) 807-3318",
+    smsHref: "sms:+17578073318",
     calendly: "https://calendly.com/andy-davyjoneslocker/30min",
     photo: "/andy.jpg", // PLACEHOLDER — fallback: teal S mark
   },
