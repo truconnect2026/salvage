@@ -4615,7 +4615,9 @@ if (!chromium) {
   /* --- 140-146: change 21 — the close. --- */
   await block("close-21", async () => {
     const smsHref = need(/smsHref:\s*"([^"]+)"/, "COPY.contact.smsHref");
-    const phoneText = need(/phone:\s*"([^"]+)",\s*\/\/ PLACEHOLDER/, "COPY.contact.phone");
+    /* No comment anchor: gate 146's whole point is that placeholder swaps
+       (real numbers replacing marked stand-ins) change nothing here. */
+    const phoneText = need(/phone:\s*"([^"]+)"/, "COPY.contact.phone");
     const footNote = need(/footNote:\s*"([^"]+)"/, "COPY.footNote");
 
     /* 140 + 141: static order + spacing, one reduced desktop load. */
