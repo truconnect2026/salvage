@@ -5,11 +5,14 @@ const nextConfig: NextConfig = {
      production DOM, change 11 step 7) — disabled here so local review
      screenshots stop carrying it and gate 63 asserts the same everywhere. */
   devIndicators: false,
-  /* change 17 enabled experimental.inlineCss so @font-face was discovered
-     without waiting for the stylesheet fetch. change 24 turns it back OFF:
-     the fonts are explicitly preloaded now (gate 147), so the ~40KB of
-     inlined CSS was nothing but document depth in front of the LCP
-     element. */
+  /* change 17 enabled experimental.inlineCss; change 24 disabled it on the
+     premise that the inlined CSS was pure document depth — measurement
+     falsified that (it was render-UNBLOCKING: the score gate regressed
+     77 -> 72 while observed LCP didn't move). change 25 restores it and
+     keeps change 24's other lever (presets as data). */
+  experimental: {
+    inlineCss: true,
+  },
 };
 
 export default nextConfig;
