@@ -11,7 +11,15 @@ import { COPY, DEFAULT_PRESET, PRESETS } from "@/lib/client.config";
  * on the ledger side uses Ledger's compact variant (bigger, tighter) rather
  * than the interactive panel's own sizing.
  */
-export default function OgFrame() {
+export default async function OgFrame({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  /* change 26 (G6): /og?ref=djl renders the portfolio variant — the DJL
+     headline and a doubled wordmark — shot to public/og-djl.png. */
+  const sp = await searchParams;
+  const refDjl = (Array.isArray(sp.ref) ? sp.ref[0] : sp.ref) === "djl";
   const base = PRESETS.find((p) => p.id === DEFAULT_PRESET) ?? PRESETS[0];
   /* The settled thread's tail — not the call card plus one reply: showing
      the missed call next to a single response read as a broken screenshot.
@@ -37,7 +45,7 @@ export default function OgFrame() {
       <div className="absolute inset-x-16 top-8">
         <span aria-hidden="true" className="block h-px w-14 bg-gold" />
         <h1 className="mt-3 max-w-[1080px] font-display text-[33px] font-medium leading-[1.12] text-ink">
-          {COPY.headline}
+          {refDjl ? COPY.portfolio.ogHeadline : COPY.headline}
         </h1>
       </div>
 
@@ -50,7 +58,9 @@ export default function OgFrame() {
         </div>
       </div>
 
-      <p className="absolute bottom-6 left-16 text-[13px] uppercase tracking-[0.28em] text-muted">
+      <p
+        className={`absolute bottom-6 left-16 uppercase text-muted ${refDjl ? "text-[26px] tracking-[0.2em]" : "text-[13px] tracking-[0.28em]"}`}
+      >
         {COPY.chrome.og.wordmark}
       </p>
     </div>

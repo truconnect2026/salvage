@@ -129,9 +129,11 @@ body {
    desktop. Section 2's mobile panel sizes its static phone against the
    panel's own height (container units), since the headline above it eats an
    unknown share of the section. */
+/* change 26 (C7): the desktop cap reserves the in-flow settled controls
+   (64px) plus margins. */
 [data-section="call"] [data-phone-device] {
-  max-width: min(390px, calc((100vh - 48px) * 9 / 19.5));
-  max-width: min(390px, calc((100dvh - 48px) * 9 / 19.5));
+  max-width: min(390px, calc((100vh - 130px) * 9 / 19.5));
+  max-width: min(390px, calc((100dvh - 130px) * 9 / 19.5));
 }
 /* change 13: below 1100px, sections 1 and 2 run the SAME phone size (gate
    75) — the largest device that clears the 28px-inset section mark above it
@@ -143,16 +145,16 @@ body {
    the device inside the same column. */
 @media (max-width: 1099.98px) {
   [data-section="call"] [data-phone-device] {
-    max-width: min(390px, calc((100vh - 180px) * 9 / 19.5));
-    max-width: min(390px, calc((100dvh - 180px) * 9 / 19.5));
+    max-width: min(390px, calc((100vh - 244px) * 9 / 19.5));
+    max-width: min(390px, calc((100dvh - 244px) * 9 / 19.5));
   }
 }
 /* change 17 review (WebKit 375x667): on short phones the reserve also
    clears the Replay control band. */
 @media (max-width: 1099.98px) and (max-height: 720px) {
   [data-section="call"] [data-phone-device] {
-    max-width: min(390px, calc((100vh - 260px) * 9 / 19.5));
-    max-width: min(390px, calc((100dvh - 260px) * 9 / 19.5));
+    max-width: min(390px, calc((100vh - 300px) * 9 / 19.5));
+    max-width: min(390px, calc((100dvh - 300px) * 9 / 19.5));
   }
 }
 
@@ -204,7 +206,7 @@ body {
    scales to FIT its column instead of stepping through the change-12 zoom
    ladder — laid out at a fixed 342px design width and (change 18) a 701px
    natural log height (change 19 added names, numbers, and the calendar line), then transform-scaled by whichever is tighter:
-   column height (720 divisor = natural + slack), column width, or 1.
+   column height (740 divisor = the change-26 ledger's 702px natural + slack), column width, or 1.
    transform, NOT zoom: WebKit's legacy zoom rounds small font sizes up
    and inflates the zoomed subtree (measured 2x its expected height at
    SE-class factors) — a geometric scale renders exactly height x factor
@@ -220,11 +222,20 @@ body {
   [data-save-stack] {
     position: absolute;
     top: 50%;
-    left: 50%;
+    left: 0;
     width: 342px;
-    transform: translate(-50%, -50%) scale(0.72);
-    transform: translate(-50%, -50%)
-      scale(min(calc(100cqh / 720px), calc(100cqw / 342px), 1));
+    /* change 26 (D1): left edge === headline edge — scale about the left
+       so the one margin holds; (D13) the spine sits 8px outside content. */
+    transform-origin: 0 50%;
+    transform: translateY(-50%) scale(0.8);
+    transform: translateY(-50%) scale(min(calc(100cqh / 652px), calc(100cqw / 342px), 1));
+    /* 652 = the stack's tallest natural height (632, salon) + slack for the
+       16px viewport floor (gate 95). The change-26 review lens caught the
+       stale 740 divisor scaling every panel to 0.71 when ~0.81 fits — dead
+       right margin, smaller type. */
+    border-left: 1px solid var(--color-line);
+    padding-left: 9px;
+    margin-left: -9px;
   }
 }
 
@@ -254,6 +265,59 @@ body {
    only rules and slabs. Newsreader keeps optical sizing on. */
 .font-display {
   font-optical-sizing: auto;
+}
+
+/* change 26 (G4): one focus language — 2px teal, 2px offset. Declared
+   here so no utility-ordering quirk can drop the color. */
+[data-pager-dot]:focus-visible,
+[data-panel-dot]:focus-visible,
+[data-top-cluster] button:focus-visible,
+[data-name-input]:focus-visible,
+[data-controls] button:focus-visible,
+[data-loop]:focus-visible,
+[data-rail-next]:focus-visible {
+  outline: 2px solid var(--color-teal);
+  outline-offset: 2px;
+  /* transition-colors includes outline-color in v4 — without this the ring
+     appears instantly but fades ink->teal for 150ms. Focus must snap. */
+  transition: none;
+}
+
+/* change 26 (G2): the double hairline — 1px line, 3px gap, 1px line. */
+.hairline2 {
+  height: 5px;
+  border-top: 1px solid var(--color-line);
+  border-bottom: 1px solid var(--color-line);
+}
+
+/* change 26 (B2/B3/B5): section-entry reveals. The hidden states are
+   applied CLIENT-side only (an [data-entered] flag lands on the section at
+   its first activation; SSR never hides anything) and the media query
+   keeps reduced-motion instant. Same precedent as the fonts fade: CSS
+   transitions are event-driven UI, not the demo timeline. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-entry-fx="pending"] [data-headline-line] {
+    clip-path: inset(0 100% 0 0);
+  }
+  /* run must set an INTERPOLABLE end value — inset -> none jump-cuts. */
+  [data-entry-fx="run"] [data-headline-line] {
+    clip-path: inset(0 0 0 0);
+  }
+  /* Transitions live on "run" ONLY: the pending state must land instantly
+     at hydration — with the transition on [data-entry-fx] the staggered
+     inline delays made SSR-visible ink FADE OUT over 1-1.5s instead. */
+  [data-entry-fx="run"] [data-headline-line] {
+    transition: clip-path 480ms ease;
+    transition-delay: var(--line-delay, 0ms);
+  }
+  [data-entry-fx="pending"] [data-ink] {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  [data-entry-fx="run"] [data-ink] {
+    transition: opacity 300ms ease, transform 300ms ease;
+    transition-delay: var(--ink-delay, 0ms);
+  }
 }
 
 

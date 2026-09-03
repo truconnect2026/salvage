@@ -34,14 +34,13 @@ export function ledgerDates(now: Date = new Date()): LedgerDates {
 
   /* The Date below is only a formatting vehicle for a (year, month, day) we
      already resolved in America/New_York — no timeZone option here, or the
-     host's offset would shift the day we just clamped. */
-  const fmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
-  const rows = [0, 3, 6, 10].map((minus) => fmt.format(new Date(y, m - 1, Math.max(1, day - minus)))) as [
-    string,
-    string,
-    string,
-    string,
-  ];
+     host's offset would shift the day we just clamped. change 26 (D11):
+     rows read "03 Sep" — two-digit day, short month, log style. */
+  const monthShort = new Intl.DateTimeFormat("en-US", { month: "short" });
+  const rows = [0, 3, 6, 10].map((minus) => {
+    const d = Math.max(1, day - minus);
+    return `${String(d).padStart(2, "0")} ${monthShort.format(new Date(y, m - 1, d))}`;
+  }) as [string, string, string, string];
 
   return { month, rows };
 }

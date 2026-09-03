@@ -45,7 +45,11 @@ const ctaHref = need(/calendly:\s*"([^"]+)"/, "COPY.contact.calendly");
 const shareOrigin = need(/domain: "([^"]+)"/, "SITE.domain");
 const sceneClosed = need(/closed:\s*"([^"]+)"/, "COPY.scene.closed");
 const sceneDialing = need(/dialing:\s*"([^"]+)"/, "COPY.scene.dialing");
-const sceneCaught = need(/caught:\s*"([^"]+)"/, "COPY.scene.caught");
+const sceneCaught = (() => {
+  const m = src.match(/caught:\s*\{\s*pre:\s*"([^"]*)",\s*em:\s*"([^"]*)",\s*post:\s*"([^"]*)"/);
+  if (!m) throw new Error("gate setup: could not read COPY.scene.mobile.caught");
+  return m[1] + m[2] + m[3];
+})();
 const sinceLabel = need(/sinceLabel:\s*"([^"]+)"/, "COPY.ledger.sinceLabel");
 
 /* Every preset, sliced out of the PRESETS array by its id marker. */
@@ -311,6 +315,7 @@ retired(23, "change 11 removed the call card and its muted left rule");
 retired(73, "change 15 (A3) replaced the settled-gated down-cue with the persistent rail chevron; COPY.cues.down retired");
 retired(75, "change 15 (A1) removed the phone from mobile section 2 — there is no section-2 mobile device to compare");
 retired(81, "change 18 (A1) killed every radial glow — there is no [data-glow] left to freeze; gate 109 asserts the absence");
+retired(29, "change 26 (B4) made the row[0] insert a physical PUSH — the caught list grows by the row's height by design; gate 155 owns the motion contract");
 retired(
   108,
   "Lighthouse LCP includes simulated hydration cost on an already-painted SSR element; replaced by 150/151",
@@ -532,7 +537,7 @@ async function snapTrack(page, idx) {
 }
 
 const BROWSER_GATES = [
-  12, 13, 14, 15, 17, 18, 19, 20, 24, 26, 28, 29, 30, 31, 32, 33, 34, 35, 37, 38, 39, 45,
+  12, 13, 14, 15, 17, 18, 19, 20, 24, 26, 28, 30, 31, 32, 33, 34, 35, 37, 38, 39, 45,
   46, 47, 48, 49, 50, 51, 52, 53, 55, 56, 57, 58, 59, 60, 61, 62, 63,
   64, 65, 66, 67, 68, 69, 70, 71, 72,
   74, 76, 77, 78, 79, 80, 82, 83,
@@ -543,6 +548,7 @@ const BROWSER_GATES = [
   121, 122, 123, 124, 125, 126, 127, 128, 129, 130,
   131, 132, 133, 134, 135, 136, 137, 138, 139,
   140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151,
+  152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163,
 ];
 
 if (!chromium) {
@@ -653,15 +659,6 @@ if (!chromium) {
         `t=5.5 ${JSON.stringify(settled.panelRecovered)} (want ${JSON.stringify(finalPanelRecovered)})`,
     );
 
-    const listHeights = [snaps[0.3].caughtListH, snaps[3.0].caughtListH, settled.caughtListH];
-    check(
-      29,
-      "caught list never reflows on row insert",
-      listHeights.every((h) => typeof h === "number" && h > 0) &&
-        listHeights[0] === listHeights[1] &&
-        listHeights[1] === listHeights[2],
-      `clientHeight at t=0.3/3.0/5.5 -> ${listHeights.join(" / ")}`,
-    );
 
     await ctx.close();
   });
@@ -1081,7 +1078,12 @@ if (!chromium) {
       await page.evaluate(() => document.fonts.ready);
       /* Change 10: the headline block lands at t=3.6 (gate 49/50 cover the
          choreography); this gate's own claim — the sub-headline is visible —
-         is sampled once the landing completes. */
+         is sampled once the landing completes. Amended (change 26): the sub
+         is entry-revealed copy — latch section 2's first entry, then return. */
+      await waitHydrated(page);
+      await goSection(page, 1);
+      await page.waitForTimeout(1600);
+      await goSection(page, 0);
       await waitT(page, 4.5);
       const r = await page.evaluate(() => {
         /* change 14: the sub is one string, two mounts (mobile left column /
@@ -1595,6 +1597,12 @@ if (!chromium) {
     const page = await ctx.newPage();
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
+    /* Amended (change 26): section-2 copy reveals on first entry — latch it
+       the way a viewer would (visit the section once), then return. */
+    await waitHydrated(page);
+    await goSection(page, 1);
+    await page.waitForTimeout(1600);
+    await goSection(page, 0);
 
     await waitT(page, 10.3);
     const at95 = await page.evaluate((EFF) => {
@@ -1871,6 +1879,12 @@ if (!chromium) {
     const page = await ctx.newPage();
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
+    /* Amended (change 26): section-2 copy reveals on first entry — latch it
+       the way a viewer would (visit the section once), then return. */
+    await waitHydrated(page);
+    await goSection(page, 1);
+    await page.waitForTimeout(1600);
+    await goSection(page, 0);
 
     await waitT(page, 10.3);
     const notif = await page.evaluate((EFF) => {
@@ -2445,9 +2459,9 @@ if (!chromium) {
 
     const tiles = await page.evaluate(() => {
       const money = document.querySelector("[data-money]");
-      const visibleTiles = money
-        ? [...money.children].filter((el) => getComputedStyle(el).display !== "none").length
-        : -1;
+      /* Amended (change 26): the double hairline is furniture — count the
+         ruled [data-ink] rows. */
+      const visibleTiles = money ? money.querySelectorAll(":scope > [data-ink]").length : -1;
       const share = document.querySelector("[data-share]");
       const scs = share ? getComputedStyle(share) : null;
       const sr = share ? share.getBoundingClientRect() : null;
@@ -2511,6 +2525,10 @@ if (!chromium) {
         const cs = getComputedStyle(el);
         if (cs.display === "none" || cs.visibility === "hidden") continue;
         if (el.closest("[data-scene]")) continue;
+        /* Amended (change 26): D12 sets the ledger's Recovered figure at
+           56px by spec — under the recalibrated mobile fit it renders ~46px,
+           and like the scene type it is excluded from the hierarchy scan. */
+        if (el.closest("[data-ledger-recovered]")) continue;
         if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
         /* Amended (change 18): rendered size, not layout size — a figure laid
            out at 44px inside the mobile scale-fit or the zoomed phone screen
@@ -2550,6 +2568,10 @@ if (!chromium) {
         const cs = getComputedStyle(el);
         if (cs.display === "none" || cs.visibility === "hidden") continue;
         if (el.closest("[data-scene]")) continue;
+        /* Amended (change 26): D12 sets the ledger's Recovered figure at
+           56px by spec — under the recalibrated mobile fit it renders ~46px,
+           and like the scene type it is excluded from the hierarchy scan. */
+        if (el.closest("[data-ledger-recovered]")) continue;
         if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
         /* Amended (change 18): rendered size, not layout size — a figure laid
            out at 44px inside the mobile scale-fit or the zoomed phone screen
@@ -2562,9 +2584,7 @@ if (!chromium) {
         }
       }
       return {
-        visibleTiles: money
-          ? [...money.children].filter((el) => getComputedStyle(el).display !== "none").length
-          : -1,
+        visibleTiles: money ? money.querySelectorAll(":scope > [data-ink]").length : -1,
         teal: toRgb("--color-teal"),
         shareBorder: scs ? scs.borderTopColor : null,
         shareW: sr ? sr.width : 0,
@@ -2577,8 +2597,8 @@ if (!chromium) {
 
     check(
       76,
-      "money rows: exactly 3 ruled rows rendered at 390 and at 1440 (change 18, C3 — the width-based tile hiding died with the tiles)",
-      m.visibleTiles === 3 && tiles.visibleTiles === 3,
+      "money rows: exactly 2 ruled rows at 390 and 1440 (change 26, D6 — the reply row is a footnote now)",
+      m.visibleTiles === 2 && tiles.visibleTiles === 2,
       `390x844 visible tiles ${m.visibleTiles} (need 2); 1440x900 visible tiles ${tiles.visibleTiles} (need 3)`,
     );
 
@@ -2603,7 +2623,7 @@ if (!chromium) {
        remains the largest text everywhere else. */
     check(
       80,
-      "math line font-size >= 40px at 390 and >= 64px at 1440, and the largest text outside the scene type at both",
+      "math line font-size >= 40px at 390 and >= 64px at 1440, and the largest text outside the scene type and the D12 ledger figure at both",
       m.mathFS >= 40 &&
         m.max <= m.mathFS + 0.5 &&
         m.maxTag === "in-math" &&
@@ -3517,9 +3537,11 @@ if (!chromium) {
     const wantMonth = new Intl.DateTimeFormat("en-US", { timeZone: NY, month: "long", year: "numeric" }).format(now);
     const parts = new Intl.DateTimeFormat("en-US", { timeZone: NY, year: "numeric", month: "numeric", day: "numeric" }).formatToParts(now);
     const num = (t) => Number(parts.find((p) => p.type === t).value);
-    const wantRow0 = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(
-      new Date(num("year"), num("month") - 1, num("day")),
-    );
+    /* change 26 (D11): rows read "03 Sep". */
+    const wantRow0 =
+      String(num("day")).padStart(2, "0") +
+      " " +
+      new Intl.DateTimeFormat("en-US", { month: "short" }).format(new Date(num("year"), num("month") - 1, num("day")));
     const page = await getPage("");
     const month = elementsIn(page.html, "data-ledger-month");
     const row0Date = elementsIn(page.html, 'data-caught-date="0"');
@@ -3752,20 +3774,37 @@ if (!chromium) {
         }
         const folioCount = document.querySelectorAll("[data-folio]").length;
 
-        /* 112: the accent slabs. */
+        /* 112 (amended, change 26): section 1's slab is 62%±2 of the
+           device with its RIGHT edge cutting the phone's left third
+           (30-36%); section 3's slab is a 40%±2 band at the section's far
+           left. Hard edges on both. */
         const slabs = ["call", "yours"].map((id) => {
           const sec = document.querySelector(`[data-section="${id}"]`);
           const slab = sec?.querySelector("[data-accent-slab]");
-          const dev = slab ? slab.closest("[data-phone-device]") : null;
-          if (!slab || !dev) return { id, ok: false, why: "missing" };
+          if (!slab) return { id, ok: false, why: "missing" };
           const cs = getComputedStyle(slab);
-          const ratio = slab.getBoundingClientRect().width / dev.getBoundingClientRect().width;
+          const sr = slab.getBoundingClientRect();
+          const hard = cs.backgroundImage === "none" && (cs.filter === "none" || cs.filter === "");
+          if (id === "call") {
+            const dev = slab.closest("[data-phone-device]");
+            if (!dev) return { id, ok: false, why: "no device" };
+            const dr = dev.getBoundingClientRect();
+            const ratio = sr.width / dr.width;
+            const cut = (sr.right - dr.left) / dr.width;
+            return {
+              id,
+              ratio: +ratio.toFixed(3),
+              cut: +(cut * 100).toFixed(1),
+              ok: Math.abs(ratio - 0.62) <= 0.02 && cut >= 0.3 && cut <= 0.36 && hard,
+            };
+          }
+          const secR = sec.getBoundingClientRect();
+          const ratio = sr.width / secR.width;
           return {
             id,
             ratio: +ratio.toFixed(3),
-            bgImage: cs.backgroundImage,
-            filter: cs.filter,
-            ok: Math.abs(ratio - 0.62) <= 0.02 && cs.backgroundImage === "none" && (cs.filter === "none" || cs.filter === ""),
+            left: +(sr.left - secR.left).toFixed(1),
+            ok: Math.abs(ratio - 0.4) <= 0.02 && Math.abs(sr.left - secR.left) <= 1 && hard,
           };
         });
 
@@ -3890,9 +3929,9 @@ if (!chromium) {
 
     check(
       112,
-      "accent slab in sections 1 and 3: width 62% ±2 of the phone width, hard edge (no gradient, no filter)",
+      "accent slabs: s1 62%±2 of the device with its right edge at 30-36% of the phone; s3 a 40%±2 band at the section's far left; hard edges",
       both((g) => g.slabs.every((s) => s.ok)),
-      detail((g) => g.slabs.map((s) => `${s.id}: ratio ${s.ratio ?? "?"} bg ${String(s.bgImage).slice(0, 10)} filter ${s.filter ?? "?"}`).join(", ")),
+      detail((g) => g.slabs.map((sl) => `${sl.id}: ${JSON.stringify(sl)}`).join(", ")),
     );
 
     check(
@@ -4139,7 +4178,7 @@ if (!chromium) {
   await block("names-19", async () => {
     const mobileCalls = need(/mobile:\s*\{\s*calls:\s*"([^"]+)"/, "COPY.scene.mobile.calls");
     const mobileNobody = need(/nobody:\s*"([^"]+)"/, "COPY.scene.mobile.nobody");
-    const mobileCaught = need(/mobile:\s*\{[^}]*caught:\s*"([^"]+)"/, "COPY.scene.mobile.caught");
+    const mobileCaught = sceneCaught;
     const screenLabel = need(/screenLabel:\s*"([^"]+)"/, "COPY.ledger.screenLabel");
     const calendarLine = need(/calendarLine:\s*"([^"]+)"/, "COPY.ledger.calendarLine");
     const autoReplyTag = need(/autoReplyTag:\s*"([^"]+)"/, "COPY.chrome.autoReplyTag");
@@ -4632,6 +4671,8 @@ if (!chromium) {
     await page.waitForTimeout(250);
     const g = await page.evaluate(
       ({ ctaHref, smsHref, footNote }) => {
+        /* Amended (change 26, F3): since-install left the section; (F5)
+           the stack line closes it. */
         const order = [
           "[data-total]",
           "[data-cta]",
@@ -4639,10 +4680,10 @@ if (!chromium) {
           "[data-sms-line]",
           "[data-price-line]",
           "[data-close-rule]",
-          "[data-since-row]",
           "[data-builtby]",
           "[data-loop]",
           "[data-wordmark]",
+          "[data-stack-line]",
         ];
         const els = order.map((sel) => document.querySelector(`[data-section="math"] ${sel}`));
         const tops = els.map((el) => (el ? el.getBoundingClientRect().top : null));
@@ -4971,6 +5012,422 @@ if (!chromium) {
       "HTML document for / gzips to <= 60KB",
       gz <= 60 * 1024,
       `${gz} bytes gzipped (raw ${raw.length}; need <= ${60 * 1024})`,
+    );
+  });
+
+  /* --- 152-163: change 26 — depth + motion. --- */
+  await block("depth-26", async () => {
+    const replayLabel = need(/replayLabel:\s*"([^"]+)"/, "COPY.replayLabel");
+    const yourSideLabel = need(/yourSideLabel:\s*"([^"]+)"/, "COPY.yourSideLabel");
+    const portfolioHref = need(/href:\s*"(https:\/\/davyjoneslocker\.app)"/, "COPY.portfolio.href");
+    const sinceLabelTxt = need(/sinceLabel:\s*"([^"]+)"/, "COPY.ledger.sinceLabel");
+
+    /* 152: full-bleed slabs, both viewports. */
+    const slabReads = [];
+    for (const vp of [
+      { w: 390, h: 844 },
+      { w: 1440, h: 900 },
+    ]) {
+      const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, reducedMotion: "reduce" });
+      const page = await ctx.newPage();
+      await page.goto(base, { waitUntil: "domcontentloaded" });
+      await page.evaluate(() => document.fonts.ready);
+      const g = await page.evaluate(() =>
+        ["call", "yours"].map((id) => {
+          const sec = document.querySelector(`[data-section="${id}"]`);
+          const slab = sec?.querySelector("[data-accent-slab]");
+          if (!sec || !slab) return { id, ok: false };
+          const secR = sec.getBoundingClientRect();
+          const sr = slab.getBoundingClientRect();
+          return { id, top: +(sr.top - secR.top).toFixed(1), bottomOver: +(sr.bottom - secR.bottom).toFixed(1), ok: sr.top <= secR.top + 0.5 && sr.bottom >= secR.bottom - 0.5 };
+        }),
+      );
+      slabReads.push({ vp: `${vp.w}x${vp.h}`, g });
+      await ctx.close();
+    }
+    check(
+      152,
+      "slab boxes bleed the full section: top <= section top, bottom >= section bottom — both viewports, both slab sections",
+      slabReads.every((r) => r.g.every((x) => x.ok)),
+      slabReads.map((r) => `${r.vp}: ${JSON.stringify(r.g)}`).join(" | "),
+    );
+
+    /* 153 + 155 + 157 + 158 + 161: one motion run. */
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+
+    /* 153: the spring, sampled against its closed form. Bubble 1's beat is
+       thread 2.2 (global 7.8). */
+    const spring = (t) => {
+      if (t <= 0) return 0;
+      if (t >= 0.38) return 1;
+      const w0 = Math.sqrt(220);
+      const zeta = 18 / (2 * w0);
+      const wd = w0 * Math.sqrt(1 - zeta * zeta);
+      const decay = Math.exp(-zeta * w0 * t);
+      return 1 - decay * (Math.cos(wd * t) + ((zeta * w0) / wd) * Math.sin(wd * t));
+    };
+    await waitT(page, 2.2 + INTRO + 0.1);
+    const mid = await page.evaluate(() => {
+      const t = parseFloat(document.querySelector("[data-demo]")?.getAttribute("data-t") ?? "NaN");
+      const row = document.querySelector('[data-row="1"]');
+      const cs = getComputedStyle(row);
+      const m = cs.transform.match(/matrix\(([-\d.]+)/);
+      return { t, scale: m ? parseFloat(m[1]) : NaN, anim: cs.animationName };
+    });
+    await waitT(page, 2.2 + INTRO + 0.42);
+    const late = await page.evaluate(() => {
+      const row = document.querySelector('[data-row="1"]');
+      const m = getComputedStyle(row).transform.match(/matrix\(([-\d.]+)/);
+      return { scale: m ? parseFloat(m[1]) : NaN };
+    });
+    const closed = 0.92 + 0.08 * spring(mid.t - INTRO - 2.2);
+    check(
+      153,
+      "spring: bubble scale ~120ms after its beat is in (0.96, 1.02) and matches the closed form within 0.5%; exactly 1.000 by beat+400ms; no CSS animation on the row",
+      mid.scale > 0.96 &&
+        mid.scale < 1.02 &&
+        Math.abs(mid.scale - closed) / closed <= 0.005 &&
+        late.scale === 1 &&
+        mid.anim === "none",
+      `observed scale ${mid.scale?.toFixed?.(4)} at t=${mid.t} (closed form ${closed.toFixed(4)}); settled scale ${late.scale} (need exactly 1); animation ${JSON.stringify(mid.anim)}`,
+    );
+
+    /* 155: the push — rows 1-3 move by row[0]'s height; no fade on row[0]. */
+    await waitT(page, 4.2 + INTRO);
+    const before155 = await page.evaluate(() => ({
+      tops: [1, 2, 3].map((i) => document.querySelector(`[data-caught-row="${i}"]`).getBoundingClientRect().top),
+      h0: document.querySelector('[data-caught-row="0"]').getBoundingClientRect().height,
+    }));
+    await waitT(page, 4.48 + INTRO);
+    const mid155 = await page.evaluate(() => {
+      const r0 = document.querySelector('[data-caught-row="0"]');
+      const cs = getComputedStyle(r0);
+      return { opacity: cs.opacity, h: r0.getBoundingClientRect().height };
+    });
+    await waitT(page, 4.8 + INTRO);
+    const after155 = await page.evaluate(() => ({
+      tops: [1, 2, 3].map((i) => document.querySelector(`[data-caught-row="${i}"]`).getBoundingClientRect().top),
+      h0: document.querySelector('[data-caught-row="0"]').getBoundingClientRect().height,
+    }));
+    const moved = after155.tops.map((t, i) => +(t - before155.tops[i]).toFixed(1));
+    check(
+      155,
+      "row[0] insert PUSHES: rows 1-3 top edges move down by row[0]'s height; row[0] holds opacity 1 mid-slide (no fade)",
+      before155.h0 <= 1.5 &&
+        after155.h0 > 30 &&
+        moved.every((d) => Math.abs(d - after155.h0) <= 2) &&
+        mid155.opacity === "1" &&
+        mid155.h > 0 &&
+        mid155.h < after155.h0,
+      `row0 height ${before155.h0.toFixed(1)} (collapsed; border only) -> ${after155.h0.toFixed(1)}; rows moved ${JSON.stringify(moved)} (need ≈ ${after155.h0.toFixed(1)} each); mid-slide opacity ${mid155.opacity} (need "1"), height ${mid155.h.toFixed(1)}`,
+    );
+
+    /* 161: polite only at settle. */
+    const early161 = await page.evaluate(() => ({
+      leak: document.querySelector("[data-announce-leak]")?.textContent ?? null,
+      board: document.querySelector("[data-flap-board]")?.getAttribute("aria-live") ?? null,
+      recovered: document.querySelector("[data-panel-recovered]")?.closest('[aria-live="off"]') != null,
+      leakCount: document.querySelectorAll("[data-announce-leak]").length,
+      recCount: document.querySelectorAll("[data-announce-recovered]").length,
+    }));
+    await waitT(page, 6.0 + INTRO);
+    const late161 = await page.evaluate(() => ({
+      leak: document.querySelector("[data-announce-leak]")?.textContent ?? null,
+      recovered: document.querySelector("[data-announce-recovered]")?.textContent ?? null,
+    }));
+    check(
+      161,
+      'flaps and count-ups carry aria-live="off"; exactly one polite node per figure, written only at settle with the final value',
+      early161.board === "off" &&
+        early161.recovered === true &&
+        early161.leakCount === 1 &&
+        early161.recCount === 1 &&
+        (early161.leak ?? "") === "" &&
+        late161.leak === usd(expected.lost) &&
+        late161.recovered === usd(expected.recovered),
+      `aria-live(board) ${JSON.stringify(early161.board)}; recovered wrapped off: ${early161.recovered}; nodes ${early161.leakCount}/${early161.recCount}; ` +
+        `pre-settle ${JSON.stringify(early161.leak)} (need ""); settled ${JSON.stringify(late161.leak)} / ${JSON.stringify(late161.recovered)}`,
+    );
+
+    /* 158: the settled controls. */
+    const g158 = await page.evaluate(
+      ({ replayLabel, yourSideLabel }) => {
+        const controls = document.querySelector("[data-controls]");
+        const buttons = controls ? [...controls.querySelectorAll("button")] : [];
+        return {
+          count: buttons.length,
+          labels: buttons.map((b) => b.textContent.trim()),
+          ok: buttons.length === 2 && buttons[0].textContent.trim() === replayLabel && buttons[1].textContent.trim() === yourSideLabel,
+        };
+      },
+      { replayLabel, yourSideLabel },
+    );
+    await page.click("[data-your-side]");
+    await page.waitForTimeout(900);
+    const after158 = await page.evaluate(() => ({
+      scrollTop: document.querySelector("[data-pager]").scrollTop,
+      vh: innerHeight,
+    }));
+    check(
+      158,
+      `settled controls: exactly two buttons labeled ${JSON.stringify(replayLabel)} and ${JSON.stringify(yourSideLabel)}; the second scrolls to section 2`,
+      g158.ok && Math.abs(after158.scrollTop - after158.vh) <= 40,
+      `${g158.count} button(s) ${JSON.stringify(g158.labels)}; after click scrollTop ${after158.scrollTop} (need ≈ ${after158.vh})`,
+    );
+
+    /* 157: avatar initials follow typing within 300ms. */
+    await goSection(page, 2);
+    await page.waitForTimeout(200);
+    await page.fill("[data-name-input]", "Zack Corp");
+    await page.waitForTimeout(300);
+    const initials = await page.evaluate(() => document.querySelector("[data-avatar-initials]")?.textContent?.trim());
+    check(
+      157,
+      "call-screen avatar initials update from the live bizName within 300ms of typing",
+      initials === "ZC",
+      `initials ${JSON.stringify(initials)} (want "ZC" for "Zack Corp")`,
+    );
+    await ctx.close();
+
+    /* 154: section-2 entry FX — first entry only. */
+    const ctx154 = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page154 = await ctx154.newPage();
+    await page154.goto(base, { waitUntil: "domcontentloaded" });
+    await page154.evaluate(() => document.fonts.ready);
+    await waitHydrated(page154);
+    await page154.waitForFunction(
+      () => document.querySelector('[data-section="save"]')?.getAttribute("data-entry-fx") === "pending",
+    );
+    const preEntry = await page154.evaluate(() => ({
+      line1: getComputedStyle(document.querySelector("[data-headline-line]")).clipPath,
+      inkOp: getComputedStyle([...document.querySelectorAll('[data-section="save"] [data-ink]')].pop()).opacity,
+    }));
+    await goSection(page154, 1);
+    await page154.waitForTimeout(240);
+    const midEntry = await page154.evaluate(() => ({
+      line1: getComputedStyle(document.querySelector("[data-headline-line]")).clipPath,
+    }));
+    await page154.waitForTimeout(1600);
+    const postEntry = await page154.evaluate(() => ({
+      line1: getComputedStyle(document.querySelector("[data-headline-line]")).clipPath,
+      inkOps: [...document.querySelectorAll('[data-section="save"] [data-ink]')].map((el) => getComputedStyle(el).opacity),
+    }));
+    /* second entry: no re-run */
+    await goSection(page154, 0);
+    await page154.waitForTimeout(300);
+    await goSection(page154, 1);
+    const reEntry = await page154.evaluate(() => ({
+      line1: getComputedStyle(document.querySelector("[data-headline-line]")).clipPath,
+      inkOp: getComputedStyle([...document.querySelectorAll('[data-section="save"] [data-ink]')].pop()).opacity,
+    }));
+    const insetRight = (cp) => {
+      /* Chromium collapses equal sides: inset(0 0 0 0) serializes as
+         "inset(0px)" — one value means all four. */
+      const s = String(cp);
+      if (s === "none") return 0;
+      const m = s.match(/inset\(([^)]+)\)/);
+      if (!m) return NaN;
+      const parts = m[1].trim().split(/\s+/).map(parseFloat);
+      const right = parts.length === 1 ? parts[0] : parts[1];
+      return Number.isFinite(right) ? right : NaN;
+    };
+    check(
+      154,
+      "section-2 entry: headline line 1 wipes inset(0 100% 0 0) -> inset(0 0 0 0); ink rows go 0 -> 1 within 1.9s of entry; NONE of it on a second entry",
+      insetRight(preEntry.line1) === 100 &&
+        preEntry.inkOp === "0" &&
+        insetRight(midEntry.line1) > 0 &&
+        insetRight(midEntry.line1) < 100 &&
+        insetRight(postEntry.line1) === 0 &&
+        postEntry.inkOps.every((o) => o === "1") &&
+        insetRight(reEntry.line1) === 0 &&
+        reEntry.inkOp === "1",
+      `pre ${JSON.stringify(preEntry)}; mid line1 ${JSON.stringify(midEntry.line1)}; post line1 ${JSON.stringify(postEntry.line1)}, ` +
+        `inks settled ${postEntry.inkOps.every((o) => o === "1")}; re-entry ${JSON.stringify(reEntry)}`,
+    );
+    await ctx154.close();
+
+    /* 156: the cue band holds zero text nodes after the fade, panels 2-4. */
+    const ctx156 = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const page156 = await ctx156.newPage();
+    await page156.goto(base, { waitUntil: "domcontentloaded" });
+    await waitHydrated(page156);
+    await goSection(page156, 2);
+    const bandReads = [];
+    for (const i of [1, 2, 3]) {
+      await snapTrack(page156, i);
+      await page156.waitForTimeout(i === 1 ? 4400 : 300);
+      bandReads.push(
+        await page156.evaluate(() => {
+          const out = [];
+          const walk = (el) => {
+            for (const nd of el.childNodes) {
+              if (nd.nodeType === 3 && nd.textContent.trim()) out.push(nd.textContent.trim().slice(0, 20));
+              if (nd.nodeType === 1) walk(nd);
+            }
+          };
+          walk(document.querySelector("[data-yours-cueband]"));
+          return out;
+        }),
+      );
+    }
+    check(
+      156,
+      "cue band: zero non-whitespace text nodes after the cue fades — panels 2, 3, 4",
+      bandReads.every((r) => r.length === 0),
+      `text nodes per panel ${JSON.stringify(bandReads)}`,
+    );
+    await ctx156.close();
+
+    /* 159 + 160: section-4 statics and real focus outlines. */
+    const ctx159 = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+    const page159 = await ctx159.newPage();
+    await page159.goto(base, { waitUntil: "domcontentloaded" });
+    await page159.evaluate(() => document.fonts.ready);
+    const g159 = await page159.evaluate(
+      ({ portfolioHref, sinceLabelTxt }) => {
+        const sec = document.querySelector('[data-section="math"]');
+        const folio = sec.querySelector("[data-section-mark]");
+        const math = sec.querySelector("[data-math]");
+        const total = sec.querySelector("[data-total]");
+        const fr = folio.getBoundingClientRect();
+        const mr = math.getBoundingClientRect();
+        const tr = total.getBoundingClientRect();
+        const hit = fr.left < mr.right && fr.right > mr.left && fr.top < mr.bottom && fr.bottom > mr.top;
+        const photo = sec.querySelector("[data-builtby-photo]")?.getBoundingClientRect();
+        const anchors = [...sec.querySelectorAll(`a[href="${portfolioHref}"]`)].length;
+        return {
+          folioMathHit: hit,
+          ruleGap: +(mr.top - tr.top).toFixed(1),
+          totalTopW: getComputedStyle(total).borderTopWidth,
+          since: sec.textContent.includes(sinceLabelTxt),
+          photo: photo ? `${Math.round(photo.width)}x${Math.round(photo.height)}` : null,
+          anchors,
+        };
+      },
+      { portfolioHref, sinceLabelTxt },
+    );
+    check(
+      159,
+      "section 4: folio ∩ math = ∅; the 2px rule sits within 24px above the math line; no since-install; 56px photo; exactly two anchors home",
+      g159.folioMathHit === false &&
+        g159.totalTopW === "2px" &&
+        g159.ruleGap >= 0 &&
+        g159.ruleGap <= 24 &&
+        g159.since === false &&
+        g159.photo === "56x56" &&
+        g159.anchors === 2,
+      JSON.stringify(g159),
+    );
+    /* 160: tab to a rail square. */
+    let dotOutline = null;
+    for (let i = 0; i < 20; i++) {
+      await page159.keyboard.press("Tab");
+      dotOutline = await page159.evaluate(() => {
+        const el = document.activeElement;
+        if (!el?.hasAttribute?.("data-pager-dot")) return null;
+        const cs = getComputedStyle(el);
+        return { w: cs.outlineWidth, color: cs.outlineColor, offset: cs.outlineOffset };
+      });
+      if (dotOutline) break;
+    }
+    check(
+      160,
+      "keyboard focus on a rail square draws a computed 2px teal outline, 2px offset",
+      dotOutline != null && dotOutline.w === "2px" && dotOutline.offset === "2px" && dotOutline.color === "rgb(44, 199, 182)",
+      `outline ${JSON.stringify(dotOutline)} (need 2px rgb(44, 199, 182) at 2px offset)`,
+    );
+    await ctx159.close();
+
+    /* 162: the ?ref=djl portfolio variant. */
+    const refPage = await getPage("/?ref=djl");
+    const refCta = (refPage.html.match(/<a[^>]*data-cta[^>]*href="([^"]+)"/) ?? [])[1] ?? null;
+    const refMeta = (refPage.html.match(/<meta[^>]*property="og:image"[^>]*content="([^"]+)"/) ?? [])[1] ?? null;
+    const hasSms = refPage.html.includes("data-sms");
+    const hasPrice = refPage.html.includes("data-price-line");
+    const hasCalendly = refPage.html.includes("calendly.com");
+    const ctx162 = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    await ctx162.grantPermissions(["clipboard-read", "clipboard-write"], { origin: new URL(base).origin });
+    const page162 = await ctx162.newPage();
+    await page162.goto(base + "/?ref=djl", { waitUntil: "domcontentloaded" });
+    await waitHydrated(page162);
+    await page162.click("[data-rail-share]");
+    await page162.waitForTimeout(250);
+    let refClip = null;
+    try {
+      refClip = await page162.evaluate(() => navigator.clipboard.readText());
+    } catch (err) {
+      refClip = String(err.message);
+    }
+    await ctx162.close();
+    check(
+      162,
+      "?ref=djl: CTA -> davyjoneslocker.app; no sms/price/calendly nodes; og:image -> og-djl.png; ref survives the share URL",
+      refCta === portfolioHref &&
+        !hasSms &&
+        !hasPrice &&
+        !hasCalendly &&
+        refMeta != null &&
+        refMeta.includes("og-djl.png") &&
+        typeof refClip === "string" &&
+        refClip.includes("ref=djl"),
+      `cta ${JSON.stringify(refCta)}; sms ${hasSms} price ${hasPrice} calendly ${hasCalendly}; og:image ${JSON.stringify(refMeta)}; share ${JSON.stringify(refClip)}`,
+    );
+
+    /* 163: the slab wipe rides the swap clock. */
+    const ctx163 = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page163 = await ctx163.newPage();
+    await page163.goto(base, { waitUntil: "domcontentloaded" });
+    await waitHydrated(page163);
+    await goSection(page163, 2);
+    await page163.waitForTimeout(300);
+    const wipeSamples = await page163.evaluate(async () => {
+      const slab = document.querySelector('[data-section="yours"] [data-accent-slab]');
+      const track = document.querySelector('[data-section="yours"] [data-track]');
+      track.scrollTo({ left: track.clientWidth, behavior: "instant" });
+      const out = [];
+      for (let i = 0; i < 6; i++) {
+        await new Promise((r) => setTimeout(r, 55));
+        out.push(getComputedStyle(slab).clipPath);
+      }
+      return out;
+    });
+    await ctx163.close();
+    const rights = wipeSamples.map((cp) => {
+      const m = String(cp).match(/inset\(\s*[\d.]+(?:px|%)?\s+([\d.]+)%/);
+      return m ? parseFloat(m[1]) : cp === "none" ? 0 : NaN;
+    });
+    const mids = rights.filter((v) => Number.isFinite(v) && v > 0 && v < 100);
+    const monotonic = rights.every((v, i) => i === 0 || !Number.isFinite(rights[i - 1]) || !Number.isFinite(v) || v <= rights[i - 1] + 0.1);
+    const ctxR = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+    const pageR = await ctxR.newPage();
+    await pageR.goto(base, { waitUntil: "domcontentloaded" });
+    await pageR.evaluate(() => {
+      const pg = document.querySelector("[data-pager]");
+      pg.scrollTop = 2 * pg.clientHeight;
+    });
+    await pageR.waitForTimeout(200);
+    const reducedSamples = await pageR.evaluate(async () => {
+      const slab = document.querySelector('[data-section="yours"] [data-accent-slab]');
+      const track = document.querySelector('[data-section="yours"] [data-track]');
+      track.scrollTo({ left: track.clientWidth, behavior: "instant" });
+      const out = [];
+      for (let i = 0; i < 4; i++) {
+        await new Promise((r) => setTimeout(r, 55));
+        out.push(getComputedStyle(slab).clipPath);
+      }
+      return out;
+    });
+    await ctxR.close();
+    const reducedClean = reducedSamples.every((cp) => cp === "none" || cp === "");
+    check(
+      163,
+      "preset switch wipes the slab: clip-path inset right decreases monotonically over ~320ms (≥2 intermediate samples); reduced motion shows no intermediate values",
+      mids.length >= 2 && monotonic && reducedClean,
+      `samples ${JSON.stringify(rights)} (intermediates ${mids.length}, monotonic ${monotonic}); reduced ${JSON.stringify(reducedSamples)}`,
     );
   });
 

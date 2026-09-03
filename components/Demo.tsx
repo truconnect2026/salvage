@@ -58,6 +58,20 @@ const CALL_STEMS = {
   ringing: COPY.call.ringingLabel.replace(/…$/, ""),
 };
 
+/* change 26 (B1): the closed-form entry spring — underdamped, k=220,
+   c=18, m=1 (zeta ~0.607, wd ~11.78 rad/s). Pure function of the seconds
+   since the beat; snaps to exactly 1 past the 380ms settle. */
+const SPRING_SETTLE = 0.38;
+function springAt(t: number): number {
+  if (t <= 0) return 0;
+  if (t >= SPRING_SETTLE) return 1;
+  const w0 = Math.sqrt(220);
+  const zeta = 18 / (2 * w0);
+  const wd = w0 * Math.sqrt(1 - zeta * zeta);
+  const decay = Math.exp(-zeta * w0 * t);
+  return 1 - decay * (Math.cos(wd * t) + ((zeta * w0) / wd) * Math.sin(wd * t));
+}
+
 /* Section order IS the pager order (change 12, A1). */
 const SECTIONS = [
   { id: "call", ...COPY.sections.call },
@@ -110,6 +124,13 @@ type Nodes = {
      against. */
   sonarRings: SVGCircleElement[];
   sonarH: number;
+  /* change 26: row[0]'s push geometry, the wipeable slabs, and the
+     settle announcers. */
+  row0Inner: HTMLElement | null;
+  row0H: number;
+  slabs: HTMLElement[];
+  announceLeak: HTMLElement | null;
+  announceRecovered: HTMLElement | null;
   flapCells: { el: HTMLElement; face: HTMLElement; digit: boolean }[];
   stamp: HTMLElement | null;
 };
@@ -248,6 +269,8 @@ type Ctx = {
      like setPresetId; never a second clock. */
   caretLatched: boolean;
   setCaretBob: (on: boolean) => void;
+  /* change 26 (G5): one polite announcement per settle. */
+  announced: boolean;
   toastLatched: boolean;
   fireToast: () => void;
 };
@@ -325,6 +348,20 @@ function collect(root: HTMLElement): Nodes {
       digit: el.dataset.flap === "digit",
     })),
     stamp: q("[data-stamp]"),
+    row0Inner: q("[data-row0-inner]"),
+    row0H: (() => {
+      const outer = q('[data-caught-row="0"]');
+      if (!outer) return 0;
+      /* Measure the natural height with any engine-set height cleared. */
+      const prev = outer.style.height;
+      outer.style.height = "";
+      const h = outer.offsetHeight;
+      outer.style.height = prev;
+      return h;
+    })(),
+    slabs: Array.from(root.querySelectorAll<HTMLElement>("[data-accent-slab]")),
+    announceLeak: q("[data-announce-leak]"),
+    announceRecovered: q("[data-announce-recovered]"),
   };
 }
 
@@ -430,9 +467,13 @@ function paintScene(ctx: Ctx, t: number) {
       return;
     }
     row.style.display = "flex";
-    const p = easeOut(clamp01((tt - beat) / BUBBLE_ENTER));
-    row.style.opacity = String(p);
-    row.style.transform = `translateY(${(1 - p) * BUBBLE_RISE}px)`;
+    /* change 26 (B1): spring entry — scale 0.92 -> 1 with an 8px rise,
+       settled exactly at 1 within 380ms (gate 153 recomputes this closed
+       form from the observed phase). */
+    const se = tt - beat;
+    const sp = springAt(se);
+    row.style.opacity = String(clamp01(se / 0.15));
+    row.style.transform = `translateY(${(8 * (1 - sp)).toFixed(2)}px) scale(${(0.92 + 0.08 * sp).toFixed(4)})`;
   });
 
   TYPING.forEach((spec) => {
@@ -442,20 +483,28 @@ function paintScene(ctx: Ctx, t: number) {
     el.style.display = on ? "flex" : "none";
     if (!on) return;
     el.querySelectorAll<HTMLElement>("[data-dot]").forEach((dot, d) => {
-      const ph = (((tt * 1.5 - d * 0.16) % 1) + 1) % 1;
+      const ph = (((tt * 1.5 - d * 0.12) % 1) + 1) % 1;
       dot.style.opacity = String(0.3 + 0.7 * (0.5 - 0.5 * Math.cos(ph * Math.PI * 2)));
     });
   });
 
   if (n.delivered) n.delivered.style.display = tt >= DELIVERED_AT ? "block" : "none";
 
-  /* The owner-side caught row. It never toggles display: it always occupies
-     its slot in the list (so the list's height is reserved from t=0 and never
-     reflows), only opacity/transform animate as it "slides in". */
-  if (n.caughtRow0) {
-    const p = caughtRowProgress(tt);
-    n.caughtRow0.style.opacity = String(p);
-    n.caughtRow0.style.transform = `translateY(${(1 - p) * CAUGHT_ROW_RISE}px)`;
+  /* change 26 (B4): row [0] PUSHES — the outer's height grows from 0 to
+     its natural height (rows 1-3 move down by exactly that height) while
+     the inner slides down within the clip. No opacity animation (gate
+     155); pre-insert it is geometry-hidden, not faded. */
+  if (n.caughtRow0 && n.row0Inner && n.row0H > 0) {
+    const p = easeOut(clamp01((tt - CAUGHT_ROW_AT) / 0.32));
+    if (p >= 1) {
+      n.caughtRow0.style.height = "";
+      n.caughtRow0.style.visibility = "";
+      n.row0Inner.style.transform = "";
+    } else {
+      n.caughtRow0.style.height = `${(p * n.row0H).toFixed(1)}px`;
+      n.caughtRow0.style.visibility = p === 0 ? "hidden" : "";
+      n.row0Inner.style.transform = `translateY(${((p - 1) * 100).toFixed(2)}%)`;
+    }
   }
 
   /* Replay (section 1, bottom-left) lands on the settled beat —
@@ -507,7 +556,8 @@ function paintScene(ctx: Ctx, t: number) {
 
   /* --- The SALVAGED stamp (change 18, D3): lands with the row insert,
          120ms fade on the same clock. --- */
-  if (n.stamp) n.stamp.style.opacity = String(clamp01((tt - CAUGHT_ROW_AT) / STAMP_IN));
+  /* change 26 (B4): the stamp lands 120ms after the slide settles. */
+  if (n.stamp) n.stamp.style.opacity = String(clamp01((tt - (CAUGHT_ROW_AT + 0.32 + 0.12)) / STAMP_IN));
 }
 
 function schedule(ctx: Ctx) {
@@ -531,6 +581,13 @@ function park(ctx: Ctx) {
     panelRecoveredAt(-THREAD_START, ctx.preset.recovered, ctx.preset.caught[0].amount),
   );
   paintFlaps(ctx, -THREAD_START, (q) => leakAt(q, ctx.preset.lost));
+  ctx.nodes.slabs.forEach((sl) => {
+    sl.style.clipPath = "";
+  });
+  /* change 26 (G5): announcements clear until the next settle. */
+  ctx.announced = false;
+  if (ctx.nodes.announceLeak) ctx.nodes.announceLeak.textContent = "";
+  if (ctx.nodes.announceRecovered) ctx.nodes.announceRecovered.textContent = "";
   ctx.root.dataset.t = "0.000";
 }
 
@@ -561,6 +618,12 @@ function tick(ctx: Ctx, now: number) {
     }
 
     if (e < SWAP_ROLL) {
+      /* change 26 (A4): the slab wipes in from the left over 320ms while
+         the accent surfaces crossfade (the CSS 220ms transition). */
+      const wp = clamp01(e / 0.32);
+      ctx.nodes.slabs.forEach((sl) => {
+        sl.style.clipPath = wp >= 1 ? "" : `inset(0 ${((1 - wp) * 100).toFixed(1)}% 0 0)`;
+      });
       paintFade(ctx, e < half ? 1 - e / half : e < SWAP_FADE ? (e - half) / half : 1);
       const rp = easeOut(clamp01(e / SWAP_ROLL));
       paintNumbers(
@@ -580,6 +643,9 @@ function tick(ctx: Ctx, now: number) {
     }
 
     ctx.transition = null;
+    ctx.nodes.slabs.forEach((sl) => {
+      sl.style.clipPath = "";
+    });
 
     /* A snap that landed mid-swap was queued, not dropped: chain straight
        into the next roll so the page lands wherever the track rests. */
@@ -623,6 +689,13 @@ function tick(ctx: Ctx, now: number) {
   paintFlaps(ctx, tt, (q) => leakAt(q, p.lost));
   ctx.root.dataset.t = t.toFixed(3);
 
+  /* change 26 (G5): announce the settled figures ONCE, politely. */
+  if (!ctx.announced && tt >= 5.5) {
+    ctx.announced = true;
+    if (ctx.nodes.announceLeak) ctx.nodes.announceLeak.textContent = usd(p.lost);
+    if (ctx.nodes.announceRecovered) ctx.nodes.announceRecovered.textContent = usd(p.recovered);
+  }
+
   /* change 20 (E1/E2): settle + toast latches, on the same phase. */
   if (!ctx.caretLatched && t >= 11) {
     ctx.caretLatched = true;
@@ -654,14 +727,20 @@ const beatZeroTotals = (p: Preset): Totals => ({
   panelRecovered: panelRecoveredAt(0, p.recovered, p.caught[0].amount),
 });
 
+/* change 26 (C7): the accent twin of the ghost button. */
+const ghostAccent =
+  "rounded-[2px] border border-[var(--accent,#2CC7B6)] px-5 py-2.5 text-[13px] font-medium text-[var(--accent,#74E9DC)] " +
+  "transition-colors hover:bg-white/5 outline-none " +
+  "focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2";
+
 /* change 18 (A4): square-corner — the CTA keeps the page's one pill. */
 const ghost =
   "rounded-[2px] border border-teal px-5 py-2.5 text-[13px] font-medium text-teal-bright " +
   "transition-colors hover:bg-teal/10 outline-none " +
-  "focus-visible:ring-2 focus-visible:ring-teal-bright focus-visible:ring-offset-2 focus-visible:ring-offset-abyss";
+  "focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2";
 
-const buildQuery = (biz: string, name: string) =>
-  `?biz=${encodeURIComponent(biz)}${name ? `&name=${encodeURIComponent(name)}` : ""}`;
+const buildQuery = (biz: string, name: string, refDjl = false) =>
+  `?biz=${encodeURIComponent(biz)}${name ? `&name=${encodeURIComponent(name)}` : ""}${refDjl ? "&ref=djl" : ""}`;
 
 /* Wayfinding, not headlines (change 13, G3): kicker 12px tracked, title
    Fraunces 28px, muted, 32px inset. Below 1100px the title runs 20px — at
@@ -673,7 +752,7 @@ const buildQuery = (biz: string, name: string) =>
 function SectionMark({ kicker, title }: { kicker: string; title: string }) {
   return (
     <div data-section-mark className="pointer-events-none absolute left-8 top-8 z-20">
-      <p data-folio data-figure className="text-[12px] uppercase tracking-[0.04em] text-muted">
+      <p data-folio data-figure data-ink className="text-[13px] uppercase tracking-[0.04em] text-muted" style={{ transitionDuration: "200ms" }}>
         {kicker} — {title}
       </p>
     </div>
@@ -753,6 +832,7 @@ export default function Demo({
   initialName = "",
   dates,
   hasPhoto = false,
+  refDjl = false,
 }: {
   /* change 24 (lever 2): only the requested preset arrives as props/markup;
      the other three hydrate from the #salvage-presets JSON script tag. */
@@ -763,6 +843,8 @@ export default function Demo({
   dates?: LedgerDates;
   /* change 21 (B): server-checked existence of the PLACEHOLDER photo. */
   hasPhoto?: boolean;
+  /* change 26 (G6): the ?ref=djl portfolio flag, server-read. */
+  refDjl?: boolean;
 }) {
   const [presetId, setPresetId] = useState(initialPreset.id);
   const [presetList, setPresetList] = useState<Preset[]>([initialPreset]);
@@ -786,10 +868,17 @@ export default function Demo({
      sound toast shows once per session at t=0.5. */
   const [caretBob, setCaretBob] = useState(false);
   const [toastOn, setToastOn] = useState(false);
+  /* change 26 (B2/B3/B5): section-entry reveals — armed client-side only
+     (SSR never hides), latched per section, skipped under reduced motion. */
+  const [fxReady, setFxReady] = useState(false);
+  const [entered, setEntered] = useState<boolean[]>([true, false, false, false]);
 
   const preset = presetList.find((p) => p.id === presetId) ?? presetList[0];
   const bizName = name || preset.bizName;
-  const shareUrl = `${SHARE_ORIGIN}/${buildQuery(preset.id, name)}`;
+  /* change 26 (E3): the section-3 phone mirrors keystrokes INSTANTLY —
+     display-only; the debounced `name` still drives everything else. */
+  const liveName = resolveName(nameInput) || bizName;
+  const shareUrl = `${SHARE_ORIGIN}/${buildQuery(preset.id, name, refDjl)}`;
 
   const rootRef = useRef<HTMLElement>(null);
   const ctxRef = useRef<Ctx | null>(null);
@@ -905,6 +994,7 @@ export default function Demo({
       setPresetId,
       caretLatched: false,
       setCaretBob,
+      announced: false,
       toastLatched: false,
       fireToast: () => {
         let seen = false;
@@ -953,7 +1043,9 @@ export default function Demo({
     const fontFade = [
       ...root.querySelectorAll<HTMLElement>("[data-scene]"),
       ...root.querySelectorAll<HTMLElement>("[data-scene-mobile]"),
-      ...root.querySelectorAll<HTMLElement>("[data-section-mark]"),
+      /* change 26 (B5): only section 1's folio rides the fonts fade — the
+         others ink in on their section's first entry. */
+      ...root.querySelectorAll<HTMLElement>('[data-section="call"] [data-section-mark]'),
       ...root.querySelectorAll<HTMLElement>("h1"),
     ];
     /* Hide INSTANTLY (this layout effect runs before the hydration paint,
@@ -970,6 +1062,18 @@ export default function Demo({
 
     park(ctx);
 
+    /* change 26 (B2/B3): arm the entry reveals (client-only, motion-only)
+       and hand each save-section ink element its stagger slot — DOM order
+       is the visual order (column heads precede rows). */
+    setFxReady(true);
+    /* A custom property, NOT transition-delay: a bare inline delay rides the
+       default transition-property:all and defers EVERY style change (the
+       pending->hidden flip included) by up to 1.2s. Only the "run" rule
+       consumes the var. */
+    root.querySelectorAll<HTMLElement>('[data-section="save"] [data-ink]').forEach((el, i) => {
+      el.style.setProperty("--ink-delay", `${700 + i * 40}ms`);
+    });
+
     return () => {
       if (ctx.raf != null) cancelAnimationFrame(ctx.raf);
       ctx.raf = null;
@@ -982,7 +1086,7 @@ export default function Demo({
     window.history.replaceState(
       null,
       "",
-      `${window.location.pathname}${buildQuery(biz, committedName)}${window.location.hash}`,
+      `${window.location.pathname}${buildQuery(biz, committedName, refDjl)}${window.location.hash}`,
     );
   };
 
@@ -1049,7 +1153,10 @@ export default function Demo({
           const idx = sections.indexOf(e.target as HTMLElement);
           if (idx < 0) return;
           const on = e.intersectionRatio >= 0.6;
-          if (on) setActiveSection(idx);
+          if (on) {
+            setActiveSection(idx);
+            setEntered((prev) => (prev[idx] ? prev : prev.map((v, i) => (i === idx ? true : v))));
+          }
           if (sections[idx].dataset.section === "call") {
             const ctx = ctxRef.current;
             if (ctx) {
@@ -1390,7 +1497,7 @@ export default function Demo({
     const bizId = ctx?.pendingPresetId ?? ctx?.transition?.to.id ?? preset.id;
     /* change 21 (C): the URL comes from SITE.domain — never location.origin,
        never the vercel host. */
-    const url = `${SHARE_ORIGIN}/${buildQuery(bizId, committed)}`;
+    const url = `${SHARE_ORIGIN}/${buildQuery(bizId, committed, refDjl)}`;
     syncUrl(bizId, committed);
 
     /* change 21 (C): a coarse-pointer device with the native share sheet
@@ -1457,12 +1564,12 @@ export default function Demo({
   /* change 18 (C6/A4): dots are 6px teal-stroke SQUARES now — the rail and
      the panel switcher speak the same 1px-rule language as the log. */
   const pagerDot = (active: boolean) =>
-    `h-1.5 w-1.5 rounded-[2px] border border-teal transition-colors outline-none focus-visible:ring-2 focus-visible:ring-teal-bright ${
+    `h-1.5 w-1.5 rounded-[2px] border border-teal transition-colors outline-none focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
       active ? "bg-teal" : "bg-transparent opacity-60"
     }`;
 
   const panelDot = (active: boolean) =>
-    `h-1.5 w-1.5 rounded-[2px] border border-teal transition-opacity outline-none focus-visible:ring-2 focus-visible:ring-teal-bright ${
+    `h-1.5 w-1.5 rounded-[2px] border border-teal transition-opacity outline-none focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
       active ? "bg-teal opacity-100" : "bg-transparent opacity-60"
     }`;
 
@@ -1501,24 +1608,26 @@ export default function Demo({
             <div className="relative mt-5 h-[80px]">
               <p
                 data-scene-line="closed"
-                className="absolute inset-x-0 top-0 font-caption text-[30px] font-normal italic leading-[30px] text-muted"
+                className="absolute inset-x-0 top-0 font-caption text-[30px] font-normal italic leading-[30px] text-ink"
                 style={{ opacity: 0 }}
               >
                 {COPY.scene.closed}
               </p>
               <p
                 data-scene-line="dialing"
-                className="absolute inset-x-0 top-0 font-caption text-[30px] font-normal italic leading-[30px] text-muted"
+                className="absolute inset-x-0 top-0 font-caption text-[30px] font-normal italic leading-[30px] text-ink"
                 style={{ opacity: 0 }}
               >
                 {COPY.scene.dialing}
               </p>
               <p
                 data-scene-line="caught"
-                className="absolute inset-x-0 top-0 font-caption text-[30px] font-normal italic leading-[30px] text-[var(--accent,#8AA0B4)]"
+                className="absolute inset-x-0 top-0 font-caption text-[30px] font-normal italic leading-[30px] text-ink"
                 style={{ opacity: 1 }}
               >
-                {COPY.scene.caught}
+                {COPY.scene.mobile.caught.pre}
+                <span style={{ color: "var(--accent, #8AA0B4)" }}>{COPY.scene.mobile.caught.em}</span>
+                {COPY.scene.mobile.caught.post}
               </p>
             </div>
           </div>
@@ -1531,36 +1640,41 @@ export default function Demo({
             <div data-scene-mobile data-client-world className="relative mx-auto mb-2 h-[30px] text-center min-[1100px]:hidden">
               <p
                 data-scene-line="closed"
-                className="absolute inset-x-0 top-0 font-caption text-[22px] font-normal italic leading-[30px] text-muted"
+                className="absolute inset-x-0 top-0 font-caption text-[22px] font-normal italic leading-[30px] text-ink"
                 style={{ opacity: 0 }}
               >
                 {COPY.scene.mobile.calls}
               </p>
               <p
                 data-scene-line="dialing"
-                className="absolute inset-x-0 top-0 font-caption text-[22px] font-normal italic leading-[30px] text-muted"
+                className="absolute inset-x-0 top-0 font-caption text-[22px] font-normal italic leading-[30px] text-ink"
                 style={{ opacity: 0 }}
               >
                 {COPY.scene.mobile.nobody}
               </p>
               <p
                 data-scene-line="caught"
-                className="absolute inset-x-0 top-0 font-caption text-[22px] font-normal italic leading-[30px] text-[var(--accent,#8AA0B4)]"
+                className="absolute inset-x-0 top-0 font-caption text-[22px] font-normal italic leading-[30px] text-ink"
                 style={{ opacity: 1 }}
               >
-                {COPY.scene.mobile.caught}
+                {COPY.scene.mobile.caught.pre}
+                <span style={{ color: "var(--accent, #8AA0B4)" }}>{COPY.scene.mobile.caught.em}</span>
+                {COPY.scene.mobile.caught.post}
               </p>
             </div>
             <Phone preset={preset} bizName={bizName} typingBefore={[2]} slab sonar />
+            {/* change 26 (C7): the settled pair — centered under the
+                phone, 24px below the bezel, 12px apart. The engine lands
+                them at settle. */}
+            <div data-controls className="mt-6 flex justify-center gap-3">
+              <button data-replay type="button" onClick={onReplay} className={ghost}>
+                {COPY.replayLabel}
+              </button>
+              <button data-your-side data-client-world type="button" onClick={() => goSection(1)} className={ghostAccent}>
+                {COPY.yourSideLabel}
+              </button>
+            </div>
           </div>
-        </div>
-
-        {/* Replay: one ghost button, bottom-left, lands settled (engine).
-            The down affordance lives on the rail now (A3). */}
-        <div data-controls className="absolute bottom-6 left-5 z-20 min-[1100px]:left-10">
-          <button data-replay type="button" onClick={onReplay} className={ghost}>
-            {COPY.replayLabel}
-          </button>
         </div>
       </section>
 
@@ -1568,32 +1682,43 @@ export default function Demo({
            OWNER'S SIDE ONLY — headline, docked card, ledger; no track, no
            phone (the visitor just watched it in section 1). Desktop keeps
            change 14's contained two-up. ---- */}
-      <section data-section="save">
+      <section data-section="save" data-entry-fx={fxReady ? (entered[1] ? "run" : "pending") : undefined}>
         <SectionMark {...COPY.sections.save} />
 
         <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pb-8 pl-6 pr-14 pt-[112px] min-[1100px]:px-10 min-[1100px]:pb-6 min-[1100px]:pt-6">
           <div
             data-save-grid
-            className="flex min-h-0 w-full flex-1 flex-col min-[1100px]:grid min-[1100px]:grid-cols-[2fr_3fr] min-[1100px]:grid-rows-[100%] min-[1100px]:items-start min-[1100px]:gap-x-12"
+            className="flex min-h-0 w-full flex-1 flex-col min-[1100px]:grid min-[1100px]:grid-cols-[2fr_3fr] min-[1100px]:grid-rows-[auto_minmax(0,1fr)] min-[1100px]:items-start min-[1100px]:gap-x-12"
           >
-            <div className="min-[1100px]:flex min-[1100px]:h-full min-[1100px]:min-h-0 min-[1100px]:flex-col">
-              <header data-headline className="shrink-0">
+              {/* change 26 (D1): the headline lives in the LEDGER's column
+                  on desktop — one left edge for headline, sub, note, card,
+                  and table; the phone owns the left column alone. */}
+              <header data-headline className="shrink-0 min-[1100px]:col-start-2 min-[1100px]:row-start-1">
                 {/* change 14: 30px on desktop — at 44px the h1 runs four
                     lines in the 40% column and the >=340px phone cannot be
                     contained (availH = 852 - headline). */}
                 {/* change 16 (B6): 26px at 390, <= 3 lines (gate 98).
                     change 18 (B1/B6): Newsreader 500, -0.01em, lh 1.02;
                     desktop <= 2 lines. */}
-                <h1 className="max-w-3xl font-display font-medium leading-[1.02] tracking-[-0.01em] text-ink text-[26px] min-[1100px]:text-[26px]">
-                  {COPY.headline}
+                <h1 className="max-w-3xl font-display font-medium leading-[1.08] tracking-[-0.01em] text-ink text-[26px] min-[1100px]:text-[26px]">
+                  {COPY.headline.split(/(?<=\.)\s+/).map((line, i) => (
+                    <span
+                      key={line}
+                      data-headline-line
+                      className="block"
+                      style={{ "--line-delay": `${i * 90}ms` } as React.CSSProperties}
+                    >
+                      {line}
+                    </span>
+                  ))}
                 </h1>
                 {/* Mobile keeps the sub here; on desktop it lives in the
                     right column (change 14 — see data-save-stack below). */}
-                <p data-sub className="mt-2 max-w-xl text-[14px] leading-relaxed text-muted min-[1100px]:hidden">
+                <p data-sub data-ink className="mt-2 max-w-xl text-[14px] leading-relaxed text-muted min-[1100px]:hidden">
                   {COPY.sub}
                 </p>
-                {/* change 19 (B6): the honesty line. */}
-                <p data-fictional className="mt-1 text-[13px] text-muted min-[1100px]:hidden">
+                {/* change 19 (B6) / change 26 (D2): the honesty line. */}
+                <p data-fictional data-ink className="mt-1 font-caption text-[12px] italic text-muted min-[1100px]:hidden">
                   {COPY.fictionalNote}
                 </p>
               </header>
@@ -1603,11 +1728,10 @@ export default function Demo({
                   fully contained (change 14; gates 30/34/74/83). */}
               <div
                 data-save-phone-fit
-                className="mt-0 hidden w-full max-w-[390px] min-[1100px]:block min-[1100px]:min-h-0 min-[1100px]:flex-1"
+                className="mt-0 hidden w-full max-w-[390px] min-[1100px]:col-start-1 min-[1100px]:row-start-1 min-[1100px]:row-span-2 min-[1100px]:block min-[1100px]:h-full min-[1100px]:min-h-0 min-[1100px]:pt-16"
               >
                 <Phone preset={preset} bizName={bizName} variant="static" />
               </div>
-            </div>
 
             {/* No justify-center: auto margins center the stack when it fits
                 and clamp to the reachable top edge when it doesn't (change 12
@@ -1616,21 +1740,21 @@ export default function Demo({
                 container the stack zooms against — the ladder of fixed zoom
                 steps is gone; the stack fits whatever height the headline
                 leaves. */}
-            <div data-save-fit className="mt-4 flex min-h-0 flex-1 flex-col min-[1100px]:mt-0 min-[1100px]:h-full">
+            <div data-save-fit className="mt-4 flex min-h-0 flex-1 flex-col min-[1100px]:col-start-2 min-[1100px]:row-start-2 min-[1100px]:mt-2 min-[1100px]:h-full">
               <div data-save-stack className="relative mx-auto my-auto w-full min-[1100px]:my-0">
                 {/* The sub-headline, desktop only (change 14): moved out of
                     the left column so the phone's height budget closes at a
                     >=340px width. Gate 33 accepts whichever [data-sub] is
                     visible. */}
-                <p data-sub className="hidden text-[16px] leading-relaxed text-muted min-[1100px]:block">
+                <p data-sub data-ink className="hidden text-[16px] leading-relaxed text-muted min-[1100px]:block">
                   {COPY.sub}
                 </p>
-                <p data-fictional className="mb-3 mt-0.5 hidden text-[13px] text-muted min-[1100px]:block">
+                <p data-fictional data-ink className="mb-3 mt-0.5 hidden font-caption text-[12px] italic text-muted min-[1100px]:block">
                   {COPY.fictionalNote}
                 </p>
                 {/* The owner card: DOCKED statically in flow, 12px above the
                     panel at every width. */}
-                <div data-notify-ledger className="z-30 mb-2 w-full">
+                <div data-notify-ledger data-ink className="z-30 mb-2 w-full">
                   <NotifyCard bizName={bizName} entry={preset.caught[0]} />
                 </div>
                 <div data-ledger-panel className="w-full">
@@ -1660,7 +1784,14 @@ export default function Demo({
            bottom-anchored with a deliberate ~55% bleed on mobile. The track
            carries label + tiles per preset and stays the page-wide
            switcher; dots + cue sit ABOVE the phone on mobile. ---- */}
-      <section data-section="yours">
+      <section data-section="yours" data-entry-fx={fxReady ? (entered[2] ? "run" : "pending") : undefined}>
+        {/* change 26 (A3): the slab is a 40% band at the section's far
+            left — labels sit on it, rules cross it, figures clear it. */}
+        <div
+          aria-hidden="true"
+          data-accent-slab
+          className="absolute inset-y-0 left-0 z-0 w-2/5 bg-[var(--accent-soft,#0F1E33)]"
+        />
         <SectionMark {...COPY.sections.yours} />
 
         <div
@@ -1670,23 +1801,47 @@ export default function Demo({
         >
           <div className="shrink-0 max-w-md min-[1100px]:max-w-[520px]">
             <label className="block">
-              {/* change 18 (A3): micro-label de-capped — body case, no
-                  tracking; only folios stay uppercase. */}
               <span className="text-[13px] text-muted">{COPY.name.label}</span>
-              <input
-                data-name-input
-                type="text"
-                value={nameInput}
-                onChange={(e) => onNameChange(e.target.value)}
-                onFocus={onNameFocus}
-                onBlur={onNameBlur}
-                placeholder={COPY.name.placeholder}
-                maxLength={MAX_NAME_LEN}
-                autoComplete="off"
-                className="mt-2 block w-full border-x-0 border-b border-t-0 border-solid border-line bg-transparent pb-1.5 font-display font-medium text-[22px] text-ink outline-none transition-colors placeholder:text-muted/50 focus:border-teal"
-              />
+              {/* change 26 (E3/E4): pencil glyph before the placeholder;
+                  the placeholder IS the active preset's name (ink; italic
+                  secondary for "Something else"); secondary underline at
+                  rest, teal underline + caret on focus. */}
+              <span className="relative block">
+                {!nameInput && (
+                  <svg
+                    aria-hidden="true"
+                    className="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 text-muted"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 14 14"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M9.7 1.6l2.7 2.7L4.6 12l-3.3.6.6-3.3zM8.4 2.9l2.7 2.7" />
+                  </svg>
+                )}
+                <input
+                  data-name-input
+                  type="text"
+                  value={nameInput}
+                  onChange={(e) => onNameChange(e.target.value)}
+                  onFocus={onNameFocus}
+                  onBlur={onNameBlur}
+                  placeholder={preset.bizName}
+                  maxLength={MAX_NAME_LEN}
+                  autoComplete="off"
+                  className={`mt-2 block w-full border-x-0 border-b border-t-0 border-solid border-muted bg-transparent pb-1.5 font-display font-medium text-[22px] text-ink caret-teal outline-none transition-colors focus:border-teal focus-visible:outline-none ${
+                    nameInput ? "" : "pl-5"
+                  } ${preset.id === "other" ? "placeholder:font-normal placeholder:italic placeholder:text-muted" : "placeholder:text-ink"}`}
+                />
+              </span>
             </label>
             <p className="mt-1.5 text-[12px] text-muted">{COPY.yours.hint}</p>
+            {/* change 26 (E5): the rule between hint and preset label. */}
+            <div className="mt-3 border-t border-line" />
           </div>
 
           <div className="mt-2 flex min-h-0 w-full flex-1 flex-col min-[1100px]:mt-3 min-[1100px]:grid min-[1100px]:grid-cols-2 min-[1100px]:grid-rows-[100%] min-[1100px]:items-start min-[1100px]:gap-x-12">
@@ -1702,7 +1857,14 @@ export default function Demo({
               data-yours-phone-fit
               className="order-3 mx-auto mt-2 min-h-0 w-full max-w-[390px] flex-1 min-[1100px]:order-none min-[1100px]:mx-0 min-[1100px]:mt-0 min-[1100px]:h-full min-[1100px]:flex-none"
             >
-              <Phone preset={preset} bizName={bizName} variant="static" staticId={preset.id} skinThread slab />
+              <Phone
+                preset={preset}
+                bizName={liveName}
+                variant="static"
+                staticId={preset.id}
+                skinThread
+                headerGhost={preset.id === "other" && !nameInput.trim()}
+              />
             </div>
 
             {/* The switcher IS the track: label + tiles per preset. */}
@@ -1720,25 +1882,28 @@ export default function Demo({
                     <p data-panel-label className="font-display text-[28px] font-medium leading-[1.02] tracking-[-0.01em] text-[var(--accent,#E9EEF4)]">{p.label}</p>
                     {/* change 19 (B9): the fourth preset explains itself. */}
                     {p.tagline && <p className="mt-0.5 text-[13px] text-muted">{p.tagline}</p>}
-                    {/* change 18 (C2): the tiles are a ruled two-column
-                        table now — label left in body, figure right in
-                        mono. Ticket stays the one gold element per panel
-                        (gates 79/82). */}
-                    <div className="mt-2 border-t border-[var(--accent-soft,#22384F)] min-[1100px]:mt-5">
+                    {/* change 26 (E1): a ruled mono head over the double
+                        hairline, then labeled rows. Ticket stays the one
+                        gold element per panel (gates 79/82). */}
+                    <div className="mt-2 min-[1100px]:mt-5">
+                      <p data-figure className="pb-1 text-[11px] tracking-[0.04em] text-muted">
+                        {COPY.yours.rowsHead}
+                      </p>
+                      <div className="hairline2" aria-hidden="true" style={{ borderColor: "var(--accent-soft, #22384F)" }} />
                       <div data-tile="ticket" className="flex items-baseline justify-between gap-3 border-b border-[var(--accent-soft,#22384F)] py-2 min-[1100px]:py-3">
-                        <span className="text-[13px] text-ink min-[1100px]:text-[17px]">{COPY.yours.ticketSuffix}</span>
+                        <span className="text-[13px] text-ink min-[1100px]:text-[17px]">{COPY.yours.rows.ticket}</span>
                         <span data-ticket data-tile-value data-figure className="font-medium leading-none text-gold text-[32px] min-[1100px]:text-[56px]">
                           ${p.ticket}
                         </span>
                       </div>
                       <div data-tile="missed" className="flex items-baseline justify-between gap-3 border-b border-[var(--accent-soft,#22384F)] py-2 min-[1100px]:py-3">
-                        <span className="text-[13px] text-ink min-[1100px]:text-[17px]">{COPY.yours.missedSuffix}</span>
+                        <span className="text-[13px] text-ink min-[1100px]:text-[17px]">{COPY.yours.rows.missed}</span>
                         <span data-tile-value data-figure className="font-medium leading-none text-ink text-[32px] min-[1100px]:text-[56px]">
                           {p.missedPerMonth}
                         </span>
                       </div>
                       <div data-tile="lost" className="flex items-baseline justify-between gap-3 border-b border-[var(--accent-soft,#22384F)] py-2 min-[1100px]:py-3">
-                        <span className="text-[13px] text-muted min-[1100px]:text-[17px]">{COPY.yours.lostSuffix}</span>
+                        <span className="text-[13px] text-muted min-[1100px]:text-[17px]">{COPY.yours.rows.lost}</span>
                         <span data-tile-value data-figure className="font-medium leading-none text-muted text-[32px] min-[1100px]:text-[56px]">
                           {usd(p.lost)}
                         </span>
@@ -1753,15 +1918,11 @@ export default function Demo({
                 (change 16, B4) so the phone's top edge is deterministic. */}
             <div
               data-yours-cueband
-              className="order-2 mt-2 flex h-14 shrink-0 flex-col items-center justify-center gap-1 min-[1100px]:hidden"
+              className="order-2 mt-2 flex h-9 shrink-0 flex-col items-center justify-center gap-1 min-[1100px]:hidden"
             >
-              <p
-                className={`text-[12px] text-muted transition-opacity duration-500 ${
-                  yoursCueGone ? "opacity-0" : "opacity-100"
-                }`}
-              >
-                {COPY.cues.presets}
-              </p>
+              {/* change 26 (E2 / gate 156): the cue LEAVES the DOM when
+                  dismissed — a faded ghost is still a text node. */}
+              {!yoursCueGone && <p className="text-[12px] text-muted">{COPY.cues.presets}</p>}
               <div className="flex justify-center gap-2.5">
                 {presetList.map((p, i) => (
                   <button
@@ -1775,24 +1936,20 @@ export default function Demo({
                   />
                 ))}
               </div>
-              {/* change 19 (B7): the payoff pointer, live with the active or
-                  typed name. */}
-              <p data-scroll-up className="text-[12px] text-muted">
-                {COPY.yours.scrollUp.replace("{bizName}", bizName)}
-              </p>
             </div>
+            {/* change 19 (B7): the payoff pointer — its own line below the
+                band. */}
+            <p data-scroll-up className="order-2 mt-1 shrink-0 text-center text-[12px] text-muted min-[1100px]:hidden">
+              {COPY.yours.scrollUp.replace("{bizName}", bizName)}
+            </p>
           </div>
 
           {/* Desktop: dots + cue at the section's bottom center. */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-12 z-20 hidden justify-center min-[1100px]:flex">
-            <p
-              className={`text-[12px] text-muted transition-opacity duration-500 ${
-                yoursCueGone ? "opacity-0" : "opacity-100"
-              }`}
-            >
-              {COPY.cues.presets}
-            </p>
-          </div>
+          {!yoursCueGone && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-12 z-20 hidden justify-center min-[1100px]:flex">
+              <p className="text-[12px] text-muted">{COPY.cues.presets}</p>
+            </div>
+          )}
           <div className="absolute inset-x-0 bottom-6 z-20 hidden flex-col items-center gap-1.5 min-[1100px]:flex">
             <div className="flex justify-center gap-2.5">
               {presetList.map((p, i) => (
@@ -1820,13 +1977,13 @@ export default function Demo({
       {/* change 16 (B8): section 4 stands on the SAME ground as sections
           1-3 — the surface band read as a different page bolted on. The
           border-t stays: a rule is structure, not ground. */}
-      <section data-section="math" data-bottom-band className="border-t border-line">
+      <section data-section="math" data-bottom-band data-entry-fx={fxReady ? (entered[3] ? "run" : "pending") : undefined} className="border-t border-line">
         <SectionMark {...COPY.sections.math} />
 
         <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col items-center justify-center gap-10 pl-6 pr-14 text-center min-[1100px]:gap-12 min-[1100px]:px-6">
           {/* change 18 (C5): the math line is the ledger's TOTAL — a 2px
               rule above, 1px below, numerals in mono at display size. */}
-          <div data-total className="w-full border-b border-t-2 border-line py-8 min-[1100px]:py-10">
+          <div data-total className="w-full border-b border-t-2 border-line py-4">
             {name ? (
               /* change 19 (B8): the personal line — the approved template
                  split on its placeholders, the typed name in ink, numerals
@@ -1866,69 +2023,90 @@ export default function Demo({
             )}
           </div>
 
-          {/* change 21 (B): the close, in exactly this order — CTA, sub,
-              text line, price, rule, since-install row, builtBy, loop,
-              wordmark. Nothing else. */}
+          {/* change 21 (B): the close. change 26 (F3) drops since-install
+              from this section; (G6) the ?ref=djl portfolio variant swaps
+              the conversion block for the portfolio pitch — price, sms,
+              and Calendly hidden. */}
           <div className="flex w-full max-w-md flex-col items-center gap-2.5">
-            <a
-              data-cta
-              href={COPY.contact.calendly}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => track("cta_calendly", { preset: preset.id })}
-              className="inline-block rounded-full bg-gold px-8 py-4 text-[15px] font-semibold text-abyss outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-abyss"
-            >
-              {COPY.close.ctaLabel}
-            </a>
-            <p data-cta-sub className="text-[14px] text-muted">
-              {COPY.close.ctaSub}
-            </p>
-            <p data-sms-line className="text-[14px] text-muted">
-              {COPY.close.textLead}{" "}
-              <a
-                data-sms
-                data-figure
-                href={COPY.contact.smsHref}
-                onClick={() => track("cta_sms", { preset: preset.id })}
-                className="text-teal-bright underline decoration-teal underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-teal-bright"
-              >
-                {COPY.contact.phone}
-              </a>
-            </p>
-            <p data-price-line data-figure className="text-[15px] text-ink">
-              {COPY.close.priceLine}
-            </p>
+            {refDjl ? (
+              <>
+                <a
+                  data-cta
+                  href={COPY.portfolio.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block rounded-full bg-gold px-8 py-4 text-[15px] font-semibold text-abyss outline-none focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2"
+                >
+                  {COPY.portfolio.cta}
+                </a>
+                <p data-cta-sub className="text-[14px] text-muted">
+                  {COPY.portfolio.sub}
+                </p>
+              </>
+            ) : (
+              <>
+                <a
+                  data-cta
+                  href={COPY.contact.calendly}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => track("cta_calendly", { preset: preset.id })}
+                  className="inline-block rounded-full bg-gold px-8 py-4 text-[15px] font-semibold text-abyss outline-none focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2"
+                >
+                  {COPY.close.ctaLabel}
+                </a>
+                <p data-cta-sub className="text-[14px] text-muted">
+                  {COPY.close.ctaSub}
+                </p>
+                <p data-sms-line className="text-[14px] text-muted">
+                  {COPY.close.textLead}{" "}
+                  <a
+                    data-sms
+                    data-figure
+                    href={COPY.contact.smsHref}
+                    onClick={() => track("cta_sms", { preset: preset.id })}
+                    className="text-teal-bright underline decoration-teal underline-offset-2 outline-none focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2"
+                  >
+                    {COPY.contact.phone}
+                  </a>
+                </p>
+                <p data-price-line data-figure className="text-[15px] text-ink">
+                  {COPY.close.priceLine}
+                </p>
+              </>
+            )}
 
             <div data-close-rule className="mt-2 w-full border-t border-line" />
 
-            <div data-since-row className="flex w-full items-baseline justify-between gap-3 border-b border-line py-2">
-              <p className="text-[12px] text-muted">{COPY.ledger.sinceLabel}</p>
-              <p className="text-[13px] text-muted">
-                <span data-figure>{preset.sinceCalls}</span> calls caught ·{" "}
-                <span data-figure className="font-medium text-ink">{usd(preset.sinceRecovered)}</span> recovered
-              </p>
-            </div>
-
-            <div data-builtby className="mt-1.5 flex items-center gap-2.5">
+            {/* change 26 (F4): 56px portrait; the name and the wordmark both
+                link home. */}
+            <div data-builtby className="mt-1.5 flex items-center gap-3">
               {hasPhoto ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
                   data-builtby-photo
                   src={COPY.contact.photo}
                   alt=""
-                  width={40}
-                  height={40}
-                  className="h-10 w-10 rounded-full object-cover"
+                  width={56}
+                  height={56}
+                  className="h-14 w-14 rounded-full object-cover"
                 />
               ) : (
                 <span
                   data-builtby-photo
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-teal"
+                  className="flex h-14 w-14 items-center justify-center rounded-full bg-teal"
                 >
-                  <span className="font-display text-[20px] font-semibold leading-none text-abyss">S</span>
+                  <span className="font-display text-[24px] font-semibold leading-none text-abyss">S</span>
                 </span>
               )}
-              <span className="text-[13px] text-muted">{COPY.close.builtBy}</span>
+              <a
+                href={COPY.portfolio.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[13px] text-muted underline decoration-line underline-offset-2 outline-none hover:text-ink focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2"
+              >
+                {COPY.close.builtBy}
+              </a>
             </div>
 
             <button data-loop type="button" onClick={onLoop} className={`mt-1 ${ghost}`}>
@@ -1936,8 +2114,19 @@ export default function Demo({
             </button>
 
             <p data-wordmark className="mt-2 text-[11px] uppercase text-muted">
-              <span className="font-figures">{COPY.chrome.og.wordmark}</span>
+              <a
+                href={COPY.portfolio.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-figures outline-none hover:text-ink focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2"
+              >
+                {COPY.chrome.og.wordmark}
+              </a>
               <span className="normal-case"> · {COPY.footNote}</span>
+            </p>
+            {/* change 26 (F5). */}
+            <p data-stack-line data-figure className="text-[11px] text-muted">
+              {COPY.close.stack}
             </p>
           </div>
         </div>
@@ -1957,8 +2146,8 @@ export default function Demo({
           onClick={onShare}
           title={COPY.shareLabel}
           aria-label={COPY.a11y.share}
-          className={`flex h-7 w-7 items-center justify-center rounded-[2px] border border-teal outline-none transition-colors focus-visible:ring-2 focus-visible:ring-teal-bright focus-visible:ring-offset-2 focus-visible:ring-offset-abyss ${
-            share === "copied" ? "bg-teal text-abyss" : "bg-transparent text-teal-bright hover:bg-teal/10"
+          className={`flex h-7 w-7 items-center justify-center rounded-[2px] border border-teal bg-transparent text-teal-bright outline-none transition-opacity hover:opacity-100 focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
+            share === "copied" ? "opacity-100" : "opacity-70"
           }`}
         >
           <ShareGlyph />
@@ -1972,8 +2161,8 @@ export default function Demo({
           title={soundOn ? COPY.a11y.soundOn : COPY.a11y.soundOff}
           aria-label={soundOn ? COPY.a11y.soundOn : COPY.a11y.soundOff}
           aria-pressed={soundOn}
-          className={`flex h-7 w-7 items-center justify-center rounded-[2px] border border-teal outline-none transition-colors focus-visible:ring-2 focus-visible:ring-teal-bright focus-visible:ring-offset-2 focus-visible:ring-offset-abyss ${
-            soundOn ? "bg-teal text-abyss" : "bg-transparent text-teal-bright hover:bg-teal/10"
+          className={`flex h-7 w-7 items-center justify-center rounded-[2px] border border-teal outline-none transition-colors focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
+            soundOn ? "bg-teal text-abyss" : "bg-transparent text-teal-bright opacity-70 hover:opacity-100"
           }`}
         >
           <SpeakerGlyph on={soundOn} />

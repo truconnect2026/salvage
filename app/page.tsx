@@ -1,8 +1,10 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
+import type { Metadata } from "next";
+
 import Demo from "@/components/Demo";
-import { COPY, PRESETS, resolveName, resolvePreset } from "@/lib/client.config";
+import { COPY, META, PRESETS, resolveName, resolvePreset } from "@/lib/client.config";
 import { ledgerDates } from "@/lib/dates";
 
 /*
@@ -18,6 +20,33 @@ import { ledgerDates } from "@/lib/dates";
  * page's one vertical scroller and its wiring (observers, keyboard, dots)
  * is client-side, so the server component only frames it.
  */
+/* change 26 (G6): the ?ref=djl portfolio flag selects the DJL OG image —
+   per-request metadata layered over the layout's. */
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}): Promise<Metadata> {
+  const sp = await searchParams;
+  if (sp.ref !== "djl") return {};
+  return {
+    openGraph: {
+      title: COPY.portfolio.ogHeadline,
+      description: META.description,
+      url: "/?ref=djl",
+      siteName: "Salvage",
+      type: "website",
+      images: [{ url: "/og-djl.png", width: 1200, height: 630, alt: META.description }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: COPY.portfolio.ogHeadline,
+      description: META.description,
+      images: ["/og-djl.png"],
+    },
+  };
+}
+
 export default async function Home({
   searchParams,
 }: {
@@ -30,6 +59,8 @@ export default async function Home({
      here — the one server component — and passed down so the client
      hydrates the same strings. */
   const dates = ledgerDates();
+  /* change 26 (G6): the portfolio flag, server-read. */
+  const refDjl = (Array.isArray(sp.ref) ? sp.ref[0] : sp.ref) === "djl";
   /* change 21 (B): /andy.jpg is a PLACEHOLDER path — until Andy drops the
      photo in public/, the builtBy row renders the teal S mark. Checked on
      the server so the client never 404-flashes a broken image. */
@@ -69,7 +100,7 @@ export default async function Home({
         <p className="text-[15px] text-ink">{COPY.rotatePrompt}</p>
       </div>
 
-      <Demo initialPreset={preset} activeIndex={activeIndex} initialName={initialName} dates={dates} hasPhoto={hasPhoto} />
+      <Demo initialPreset={preset} activeIndex={activeIndex} initialName={initialName} dates={dates} hasPhoto={hasPhoto} refDjl={refDjl} />
       <script
         type="application/json"
         id="salvage-presets"

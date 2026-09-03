@@ -27,7 +27,9 @@ export const COPY = {
   productName: "Salvage",
   headline: "The phone rang. Nobody answered. They called someone else.",
   sub: "Salvage catches the call you missed and books it before they move on.",
-  replayLabel: "Watch it again",
+  // change 26 (C7, APPROVED): the settled pair under the phone.
+  replayLabel: "Watch again",
+  yourSideLabel: "Your side ↓",
   shareLabel: "Send this to someone",
   shareCopied: "Link copied",
   mathLead: "Miss",
@@ -51,6 +53,15 @@ export const COPY = {
     priceLine: "$1,000 setup · $200 a month",
     builtBy: "Built by Andy Jones · Chesterfield, VA",
     loopLabel: "Watch it again",
+    // change 26 (F5, APPROVED).
+    stack: "Next.js · Twilio · Vercel · built in Chesterfield",
+  },
+  // change 26 (G6, APPROVED): the ?ref=djl portfolio variant.
+  portfolio: {
+    cta: "Want one for your business? →",
+    sub: "Salvage is a Davy Jones' Locker build. Two-sided web systems for local businesses.",
+    ogHeadline: "Salvage — a Davy Jones' Locker build",
+    href: "https://davyjoneslocker.app",
   },
   // change 21 (A): contact endpoints. PLACEHOLDERS marked — Andy replaces
   // phone, smsHref, and photo; gates assert shape, never values.
@@ -71,9 +82,10 @@ export const COPY = {
     // statusLabel retired with its pill (change 18 A4 / change 19 B2).
     recoveredLabel: "Recovered",
     lostLabel: "Still lost",
-    replyLabel: "Reply time",
-    replyValue: "18s",
-    replyCaption: "average",
+    // change 26 (D4/D6, APPROVED): the table's column heads and the reply
+    // footnote; the old Reply time money row retired with its strings.
+    cols: { name: "Name", booking: "Booking", amount: "Amount", date: "Date" },
+    replyFoot: "Average reply 18s",
     caughtLabel: "Caught this month",
     reviewNote: "Review requests sent automatically after each visit.",
     sinceLabel: "Since install",
@@ -143,14 +155,16 @@ export const COPY = {
   // Desktop section-1 scene type (change 15, A2). Approved copy.
   // change 19 (A/B1, APPROVED): the mobile caption runs its own three
   // lines on the same beats (0 / 3.6 / 5.6).
+  // change 26 (C6, APPROVED): the caught line is structured — only the em
+  // word takes the accent. Desktop and mobile share it; the old flat
+  // scene.caught string retired.
   scene: {
     closed: "Closed since 6.",
     dialing: "She's already dialing the next one.",
-    caught: "Not this time.",
     mobile: {
       calls: "A customer calls you.",
       nobody: "Nobody answers.",
-      caught: "Not this time.",
+      caught: { pre: "Not ", em: "this", post: " time." },
     },
   },
 
@@ -158,9 +172,10 @@ export const COPY = {
   // the preset, the suffixes complete the lines ("$340 a job", "12 missed a
   // month", "$4,080 still lost").
   yours: {
-    ticketSuffix: "a job",
-    missedSuffix: "missed a month",
-    lostSuffix: "still lost",
+    // change 26 (E1, APPROVED): labeled rows under a ruled head; the three
+    // *Suffix strings retired.
+    rowsHead: "Typical for this trade",
+    rows: { ticket: "Per job", missed: "Missed per month", lost: "Lost per month" },
     // change 19 (A/B7, APPROVED).
     hint: "Your name lands on the phone.",
     scrollUp: "Scroll up to watch it as {bizName}.",
@@ -172,6 +187,8 @@ export const COPY = {
     todayPrefix: "Today ",
     // change 19 (A/B5, APPROVED): under the first business bubble only.
     autoReplyTag: "Salvage · auto-reply",
+    // change 26 (C1, APPROVED).
+    composePlaceholder: "Text Message",
     phone: {
       statusTime: "8:47",
       // change 17 (D1, APPROVED): March 14, 2026 is a Saturday; the

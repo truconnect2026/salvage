@@ -284,7 +284,7 @@ function CallScreen({ preset, bizName }: { preset: Preset; bizName: string }) {
           (A2): flat avatar, system-stack semibold initials, no gradient. */}
       <div className="flex w-full flex-col items-center pt-20">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--accent-soft,#162A44)]">
-          <span className="text-[22px] font-semibold text-[var(--accent,#8AA0B4)]">{initialsOf(bizName)}</span>
+          <span data-avatar-initials className="text-[22px] font-semibold text-[var(--accent,#8AA0B4)]">{initialsOf(bizName)}</span>
         </div>
         <div data-call-biz className="mt-4 text-[26px] font-medium leading-tight text-ink">
           {bizName}
@@ -294,10 +294,13 @@ function CallScreen({ preset, bizName }: { preset: Preset; bizName: string }) {
           <span data-call-dots>…</span>
         </div>
 
-        {/* change 17 (A1): the six-button iOS in-call grid. Scenery — it
-            never takes a tap; the demo's one live control on this screen
-            stays the (equally decorative) End button. */}
-        <div data-call-grid className="pointer-events-none mt-14 grid grid-cols-3 gap-x-9 gap-y-5">
+      </div>
+
+      {/* change 17 (A1): the six-button iOS in-call grid. Scenery — it
+          never takes a tap. change 26 (C2): anchored so its bottom row sits
+          120px above the End circle; the name block owns the top third. */}
+      <div className="absolute inset-x-0 bottom-[238px] flex justify-center">
+        <div data-call-grid className="pointer-events-none grid grid-cols-3 gap-x-9 gap-y-5">
           {COPY.call.grid.map((label) => (
             <div key={label} data-call-grid-btn className="flex w-[72px] flex-col items-center gap-1.5">
               <span className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-white/20 text-white">
@@ -383,6 +386,7 @@ export default function Phone({
   skinThread = false,
   slab = false,
   sonar = false,
+  headerGhost = false,
 }: {
   preset: Preset;
   /* The effective business name (custom or preset default). Falls back to the
@@ -415,6 +419,9 @@ export default function Phone({
      zooms and travels with the phone; painted before the bezel, so the
      phone breaks its edge. */
   slab?: boolean;
+  /* change 26 (E3): the "Something else" preset with no typed name shows
+     its contact name as an italic secondary placeholder. */
+  headerGhost?: boolean;
   /* change 18 (D1): the sonar ring pair, centered on the screen center,
      behind the phone. Pure engine-driven SVG — no CSS animation. */
   sonar?: boolean;
@@ -435,9 +442,10 @@ export default function Phone({
   const skinText = (t: string) =>
     skinThread && !live ? t.replace(preset.bizName, effectiveBizName) : t;
 
+  /* change 26 (C4): one grounded shadow on every instance — the inner
+     specular line lives on the masked border element, not here. */
   const bezelShadow: CSSProperties = {
-    boxShadow:
-      "inset 0 1px 0 0 rgba(255,255,255,0.08), 0 44px 90px -28px rgba(0,0,0,0.9), 0 8px 28px -12px rgba(0,0,0,0.7)",
+    boxShadow: "0 40px 60px rgba(0,0,0,0.35), 0 4px 6px rgba(0,0,0,0.6)",
   };
 
   const screenContent = (
@@ -462,7 +470,7 @@ export default function Phone({
       <div className="shrink-0 border-b border-line bg-surface-2 px-6 pb-3 pt-2 text-center">
         <div
           {...(live ? { "data-biz-name": true } : staticId ? { "data-crop-biz": staticId } : {})}
-          className="text-[15px] font-semibold leading-tight text-ink"
+          className={`text-[15px] leading-tight ${headerGhost ? "font-normal italic text-muted" : "font-semibold text-ink"}`}
         >
           {effectiveBizName}
         </div>
@@ -544,7 +552,11 @@ export default function Phone({
                           {skinText(b.text)}
                         </div>
                         {i === 0 && (
-                          <div data-auto-reply className="mt-0.5 pl-2 text-[10px] text-muted">
+                          <div
+                            data-auto-reply
+                            className="mt-0.5 pl-2 text-[12px]"
+                            style={{ color: "color-mix(in srgb, var(--accent, #8AA0B4) 60%, transparent)" }}
+                          >
                             {COPY.chrome.autoReplyTag}
                           </div>
                         )}
@@ -559,6 +571,23 @@ export default function Phone({
               {COPY.chrome.phone.deliveredLabel}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* change 26 (C1): the iOS compose bar — 36px field, camera left,
+          mic in the field's right end. Scenery; the call screen overlays
+          it during the open. */}
+      <div data-compose className="flex shrink-0 items-center gap-2.5 px-3 pb-8 pt-1.5 font-phone">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8AA0B4" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M3 8.5a2 2 0 0 1 2-2h1.6l1.2-1.8a1.5 1.5 0 0 1 1.25-.7h5.9a1.5 1.5 0 0 1 1.25.7l1.2 1.8H19a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+          <circle cx="12" cy="12.6" r="3.4" />
+        </svg>
+        <div className="relative flex h-9 min-w-0 flex-1 items-center rounded-[18px] border border-line bg-surface-2 pl-3.5 pr-9">
+          <span className="truncate text-[16px] text-ink opacity-60">{COPY.chrome.composePlaceholder}</span>
+          <svg className="absolute right-2.5" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#8AA0B4" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
+            <rect x="6.6" y="1.5" width="4.8" height="9" rx="2.4" fill="#8AA0B4" stroke="none" />
+            <path d="M3.5 8.5a5.5 5.5 0 0 0 11 0M9 14v2.5M6.5 16.5h5" />
+          </svg>
         </div>
       </div>
 
@@ -664,11 +693,14 @@ export default function Phone({
           and rings escape BEHIND the section's content — a flex `order`ed
           sibling would otherwise paint the full-height band over the
           section's text (change 18 review, lens 1 finding 1). */}
+      {/* change 26 (A2): the slab's right edge lands at 33% of the device
+          width — the band sits mostly LEFT of the phone and the phone
+          breaks its edge through its left third. */}
       {slab && (
         <div
           aria-hidden="true"
           data-accent-slab
-          className="absolute left-[1%] -z-1 w-[62%] bg-[var(--accent-soft,#0F1E33)]"
+          className="absolute -left-[29%] -z-1 w-[62%] bg-[var(--accent-soft,#0F1E33)]"
           style={{ top: "-150vh", bottom: "-150vh" }}
         />
       )}
