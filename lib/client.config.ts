@@ -58,7 +58,7 @@ export const COPY = {
     phone: "(757) 807-3318",
     smsHref: "sms:+17578073318",
     calendly: "https://calendly.com/andy-davyjoneslocker/30min",
-    photo: "/andy.jpg", // PLACEHOLDER — fallback: teal S mark
+    photo: "/andy.png",
   },
 
   ledger: {
