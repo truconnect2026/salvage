@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import Demo from "@/components/Demo";
-import { COPY, resolveName, resolvePreset } from "@/lib/client.config";
+import { COPY, PRESETS, resolveName, resolvePreset } from "@/lib/client.config";
 import { ledgerDates } from "@/lib/dates";
 
 /*
@@ -34,6 +34,13 @@ export default async function Home({
      photo in public/, the builtBy row renders the teal S mark. Checked on
      the server so the client never 404-flashes a broken image. */
   const hasPhoto = existsSync(join(process.cwd(), "public", COPY.contact.photo));
+  /* change 24 (lever 2): only the REQUESTED preset renders as markup; the
+     other three travel as data in a JSON script tag (end of body — zero
+     depth before the LCP element) and hydrate into the track client-side.
+     ?biz=X coherence is untouched: the requested preset is the one fully
+     rendered. */
+  const activeIndex = Math.max(0, PRESETS.findIndex((p) => p.id === preset.id));
+  const otherPresets = PRESETS.filter((p) => p.id !== preset.id);
 
   return (
     <>
@@ -62,7 +69,12 @@ export default async function Home({
         <p className="text-[15px] text-ink">{COPY.rotatePrompt}</p>
       </div>
 
-      <Demo initialPresetId={preset.id} initialName={initialName} dates={dates} hasPhoto={hasPhoto} />
+      <Demo initialPreset={preset} activeIndex={activeIndex} initialName={initialName} dates={dates} hasPhoto={hasPhoto} />
+      <script
+        type="application/json"
+        id="salvage-presets"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(otherPresets).replace(/</g, "\\u003c") }}
+      />
     </>
   );
 }

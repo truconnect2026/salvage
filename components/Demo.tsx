@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from
 
 import Ledger from "@/components/Ledger";
 import Phone, { NotifyCard } from "@/components/Phone";
-import { COPY, MAX_NAME_LEN, META, PRESETS, SHARE_ORIGIN, resolveName, type Preset } from "@/lib/client.config";
+import { COPY, MAX_NAME_LEN, META, SHARE_ORIGIN, resolveName, type Preset } from "@/lib/client.config";
 import { track } from "@/lib/track";
 import { type LedgerDates } from "@/lib/dates";
 import { usd } from "@/lib/format";
@@ -239,6 +239,9 @@ type Ctx = {
      physical position, and the page must land wherever the track rests. */
   pendingPresetId: string | null;
   audio: AudioState;
+  /* change 24 (lever 2): the full preset list — [initialPreset] until the
+     JSON script tag hydrates the other three in. */
+  presets: Preset[];
   setPresetId: (id: string) => void;
   /* change 20 (E1/E2): one-shot latches the engine fires on beat crossings —
      the caret bob at settle, the sound toast at t=0.5. React state writers,
@@ -583,7 +586,7 @@ function tick(ctx: Ctx, now: number) {
     const pending = ctx.pendingPresetId;
     ctx.pendingPresetId = null;
     if (pending && pending !== tr.to.id) {
-      const next = PRESETS.find((p) => p.id === pending);
+      const next = ctx.presets.find((p) => p.id === pending);
       if (next) {
         ctx.transition = {
           at: null,
@@ -745,19 +748,24 @@ function ChevronGlyph() {
 }
 
 export default function Demo({
-  initialPresetId,
+  initialPreset,
+  activeIndex,
   initialName = "",
   dates,
   hasPhoto = false,
 }: {
-  initialPresetId: string;
+  /* change 24 (lever 2): only the requested preset arrives as props/markup;
+     the other three hydrate from the #salvage-presets JSON script tag. */
+  initialPreset: Preset;
+  activeIndex: number;
   initialName?: string;
   /* change 17 (D2): request-time ledger dates, computed server-side. */
   dates?: LedgerDates;
   /* change 21 (B): server-checked existence of the PLACEHOLDER photo. */
   hasPhoto?: boolean;
 }) {
-  const [presetId, setPresetId] = useState(initialPresetId);
+  const [presetId, setPresetId] = useState(initialPreset.id);
+  const [presetList, setPresetList] = useState<Preset[]>([initialPreset]);
   const [share, setShare] = useState<"idle" | "copied" | "manual">("idle");
   /* nameInput is the raw field; name is the committed (debounced, trimmed)
      value that re-skins the page. SSR seeds both from &name=, so a shared
@@ -767,9 +775,7 @@ export default function Demo({
   /* Wayfinding state: the active section (rail dots) and the preset track's
      active panel. Driven by IntersectionObservers, not scroll math. */
   const [activeSection, setActiveSection] = useState(0);
-  const [yoursPanel, setYoursPanel] = useState(() =>
-    Math.max(0, PRESETS.findIndex((p) => p.id === initialPresetId)),
-  );
+  const [yoursPanel, setYoursPanel] = useState(activeIndex);
   /* One-shot swipe cue: shown when section 3 first becomes active, dismissed
      by the first horizontal scroll or a 4s timeout. */
   const [yoursCueGone, setYoursCueGone] = useState(false);
@@ -781,7 +787,7 @@ export default function Demo({
   const [caretBob, setCaretBob] = useState(false);
   const [toastOn, setToastOn] = useState(false);
 
-  const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[0];
+  const preset = presetList.find((p) => p.id === presetId) ?? presetList[0];
   const bizName = name || preset.bizName;
   const shareUrl = `${SHARE_ORIGIN}/${buildQuery(preset.id, name)}`;
 
@@ -805,6 +811,37 @@ export default function Demo({
     trackedSection.current = activeSection;
     track("section_reached", { section: activeSection + 1 });
   }, [activeSection]);
+
+  /* change 24 (lever 2): pull the other three presets out of the JSON
+     script tag on mount — SSR and the first client render agree on ONE
+     panel; the track fills before paint of the second commit. */
+  useLayoutEffect(() => {
+    try {
+      const el = document.getElementById("salvage-presets");
+      if (!el?.textContent) return;
+      const others = JSON.parse(el.textContent) as Preset[];
+      if (!Array.isArray(others) || others.length === 0) return;
+      const full = [...others];
+      full.splice(Math.min(activeIndex, full.length), 0, initialPreset);
+      setPresetList(full);
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* The engine and the deep-linked track both need the FULL list: sync ctx,
+     then re-assert the resting panel (the change-12 deep-link contract,
+     moved here from mount — at mount the track had one panel). */
+  const positionedRef = useRef(false);
+  useLayoutEffect(() => {
+    const ctx = ctxRef.current;
+    if (ctx) ctx.presets = presetList;
+    if (positionedRef.current || presetList.length < 2) return;
+    positionedRef.current = true;
+    const track = yoursTrackRef.current;
+    const idx = presetList.findIndex((p) => p.id === presetId);
+    if (track && idx > 0) track.scrollLeft = idx * track.clientWidth;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presetList]);
 
   /* Re-bind to the DOM whenever React swaps the preset markup. Runs before
      paint, so the incoming preset never flashes at full opacity or final totals. */
@@ -864,6 +901,7 @@ export default function Demo({
       callSectionVisible: false,
       pendingPresetId: null,
       audio: { actx: null, enabled: false, lastT: -1 },
+      presets: [initialPreset],
       setPresetId,
       caretLatched: false,
       setCaretBob,
@@ -898,12 +936,8 @@ export default function Demo({
       }
     }
 
-    /* A deep-linked preset starts with section 3's track already resting on
-       its panel — the track, the URL, and the rendered preset must never
-       disagree, including at t=0. Instant, before the observers attach. */
-    const track = yoursTrackRef.current;
-    const idx = PRESETS.findIndex((p) => p.id === ctx.preset.id);
-    if (track && idx > 0) track.scrollLeft = idx * track.clientWidth;
+    /* Deep-link track positioning moved to the presetList effect above
+       (change 24): at mount the track holds only the SSR panel. */
 
     if (ctx.reduced) {
       root.dataset.t = "settled";
@@ -961,7 +995,7 @@ export default function Demo({
     if (!ctx) return;
     const current = ctx.transition?.to.id ?? ctx.preset.id;
     if (id === current && !ctx.pendingPresetId) return;
-    const next = PRESETS.find((p) => p.id === id);
+    const next = ctxRef.current?.presets.find((p) => p.id === id);
     if (!next) return;
     track("preset_change", { preset: id });
 
@@ -1093,7 +1127,7 @@ export default function Demo({
       const track = yoursTrackRef.current;
       if (!ctx || !track) return;
       const id = ctx.pendingPresetId ?? ctx.transition?.to.id ?? ctx.preset.id;
-      const i = PRESETS.findIndex((p) => p.id === id);
+      const i = (ctxRef.current?.presets ?? []).findIndex((p) => p.id === id);
       if (i >= 0) track.scrollTo({ left: i * track.clientWidth, behavior: "auto" });
     };
     window.addEventListener("resize", onResize);
@@ -1169,7 +1203,10 @@ export default function Demo({
       window.removeEventListener("resize", onResize);
       window.removeEventListener("keydown", onKey);
     };
-  }, []);
+    /* change 24: the panels (and their IntersectionObservers) exist per
+       presetList render — re-attach when the JSON hydration fills the
+       track. */
+  }, [presetList]);
 
   /* Toast dismissal (change 20, E2): 3s or the first tap — UI plumbing. */
   useEffect(() => {
@@ -1671,7 +1708,7 @@ export default function Demo({
             {/* The switcher IS the track: label + tiles per preset. */}
             <div className="order-1 flex min-h-0 flex-col min-[1100px]:order-none min-[1100px]:h-full">
               <div ref={yoursTrackRef} data-track className="min-h-0 w-full flex-1">
-                {PRESETS.map((p) => (
+                {presetList.map((p) => (
                   <div
                     key={p.id}
                     data-panel
@@ -1726,7 +1763,7 @@ export default function Demo({
                 {COPY.cues.presets}
               </p>
               <div className="flex justify-center gap-2.5">
-                {PRESETS.map((p, i) => (
+                {presetList.map((p, i) => (
                   <button
                     key={p.id}
                     type="button"
@@ -1758,7 +1795,7 @@ export default function Demo({
           </div>
           <div className="absolute inset-x-0 bottom-6 z-20 hidden flex-col items-center gap-1.5 min-[1100px]:flex">
             <div className="flex justify-center gap-2.5">
-              {PRESETS.map((p, i) => (
+              {presetList.map((p, i) => (
                 <button
                   key={p.id}
                   type="button"
