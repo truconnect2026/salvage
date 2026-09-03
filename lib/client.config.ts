@@ -6,6 +6,12 @@ export type Preset = {
   customerName: string;
   /* change 19 (B9): the "other" preset's one-line tagline; empty elsewhere. */
   tagline?: string;
+  /* change 20 (A): the vertical's accent triplet — recolors the CLIENT's
+     world (bubbles, slab, sonar, stamp, labels); DJL chrome stays teal.
+     accent/accentInk measure >= 4.5:1 for all four (gate 135). */
+  accent: string;
+  accentSoft: string;
+  accentInk: string;
   ticket: number; missedPerMonth: number; callsCaught: number; recovered: number; lost: number;
   sinceCalls: number; sinceRecovered: number;
   caught: CaughtEntry[];
@@ -112,6 +118,8 @@ export const COPY = {
     next: "Next section",
     soundOn: "Sound on",
     soundOff: "Sound off",
+    // change 20 (E2, APPROVED): the once-per-session sound toast.
+    tapForSound: "Tap for sound",
   },
 
   // Desktop section-1 scene type (change 15, A2). Approved copy.
@@ -164,6 +172,7 @@ export const PRESETS: Preset[] = [
   {
     id: "salon", label: "Salon and Spa", bizName: "Harbor Row Aesthetics",
     customerName: "Danielle R.",
+    accent: "#E8A0B4", accentSoft: "#3A2230", accentInk: "#1A0C12",
     ticket: 340, missedPerMonth: 12, callsCaught: 4, recovered: 1360, lost: 4080,
     sinceCalls: 31, sinceRecovered: 9240,
     // Entry [0] is this thread's own booking. Sum of all 4 amounts === recovered.
@@ -183,6 +192,7 @@ export const PRESETS: Preset[] = [
   {
     id: "home", label: "Home Services", bizName: "Ridgeline Plumbing",
     customerName: "Mark T.",
+    accent: "#F0A044", accentSoft: "#3A2A14", accentInk: "#1A1206",
     ticket: 850, missedPerMonth: 15, callsCaught: 5, recovered: 4250, lost: 12750,
     sinceCalls: 24, sinceRecovered: 18700,
     caught: [
@@ -201,6 +211,7 @@ export const PRESETS: Preset[] = [
   {
     id: "dental", label: "Dental", bizName: "Fairfield Dental",
     customerName: "Priya S.",
+    accent: "#7CC4E8", accentSoft: "#16324A", accentInk: "#08161F",
     ticket: 600, missedPerMonth: 9, callsCaught: 3, recovered: 1800, lost: 5400,
     sinceCalls: 19, sinceRecovered: 9800,
     caught: [
@@ -221,6 +232,7 @@ export const PRESETS: Preset[] = [
   {
     id: "other", label: "Something else", bizName: "Your business",
     customerName: "Jordan M.",
+    accent: "#9BB0C4", accentSoft: "#1E2C3A", accentInk: "#0B131B",
     tagline: "Any business that takes calls.",
     ticket: 250, missedPerMonth: 10, callsCaught: 3, recovered: 750, lost: 2500,
     sinceCalls: 22, sinceRecovered: 5500,

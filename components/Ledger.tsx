@@ -193,8 +193,9 @@ function CaughtRow({
   return (
     <div
       data-caught-row={index}
+      {...(isFirst ? { "data-client-world": true } : {})}
       className={`flex items-start gap-3 border-b border-line py-1.5 ${compact ? "" : "min-[500px]:py-2"} ${
-        isFirst ? "border-l-2 border-l-teal bg-surface pl-2" : ""
+        isFirst ? "border-l-2 border-l-[var(--accent,#2CC7B6)] bg-surface pl-2" : ""
       }`}
     >
       <span className="mt-0.5 shrink-0 text-muted">
@@ -218,7 +219,7 @@ function CaughtRow({
             <span
               data-stamp
               data-figure
-              className="shrink-0 rounded-[4px] border border-teal px-1.5 text-[11px] tracking-[0.12em] text-teal-bright"
+              className="shrink-0 rounded-[4px] border border-[var(--accent,#2CC7B6)] px-1.5 text-[11px] tracking-[0.12em] text-[var(--accent,#74E9DC)]"
               style={{ transform: "rotate(-3deg)", opacity: 1 }}
             >
               {COPY.ledger.stamp}

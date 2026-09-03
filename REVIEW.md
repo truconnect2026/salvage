@@ -173,6 +173,31 @@ legitimately compose ". ·"), and the "other" preset's three phone numbers
 were invented to fill B3's third line — same fictional (804) 555-01XX
 scheme as the approved rows; veto welcome.
 
+## Change 20 — adversarial review (1 lens)
+
+Lens: any teal inside the client's world? any accent leaking into DJL
+chrome? The first half is mechanized by gate 134 (six computed color
+properties scanned under every [data-client-world] subtree, all four
+presets — the probe proves the detector by planting a teal share square
+inside one). The second half was walked on the 4x5 contact sheet and the
+desktop-s2 set: rail squares, caret, top-right cluster, focus rings, replay
+border, the Salvage S mark, folio marks, gold money, and ember flaps all
+hold their DJL colors under every preset. The accent vars are CONSUMED only
+by client-world selectors, so a leak would need a markup change, and gate
+120's census would flag accent-colored text outside a client-world subtree.
+
+Teal moved out of the client's world (D): customer bubbles bg-teal →
+iOS #34C759 (text white); the typing indicator's outgoing variant bg-teal →
+#34C759 (dots white/60); sonar ring stroke teal → --accent; SALVAGED stamp
+border/text teal/teal-bright → --accent; ledger row[0] left rule teal →
+--accent. The name input's focus border, rail, cluster, and S mark were
+already outside [data-client-world] and stay teal.
+
+Contrast finals (gate 135, measured on rendered bubbles): salon
+#E8A0B4/#1A0C12 9.16:1 · home #F0A044/#1A1206 8.66:1 · dental
+#7CC4E8/#08161F 9.54:1 · other #9BB0C4/#0B131B 8.37:1 — all clear 4.5:1,
+no accentInk darkening needed.
+
 ## Change 15 — adversarial review (1 lens)
 
 Lens: is there ANY code path where audio is scheduled from a clock other

@@ -233,14 +233,14 @@ function TypingRow({ index, right }: { index: number; right: boolean }) {
     <div data-typing={index} className={`mt-2 hidden ${right ? "justify-end" : "justify-start"}`}>
       <div
         className={`flex items-center gap-[5px] rounded-[20px] px-3.5 py-3 ${
-          right ? "bg-teal" : "bg-surface-3"
+          right ? "bg-[#34C759]" : "bg-[var(--accent,#1E3A5C)]"
         }`}
       >
         {[0, 1, 2].map((d) => (
           <span
             key={d}
             data-dot={d}
-            className={`h-[7px] w-[7px] rounded-full ${right ? "bg-abyss/60" : "bg-muted"}`}
+            className={`h-[7px] w-[7px] rounded-full ${right ? "bg-white/60" : "bg-[var(--accent-ink,#8AA0B4)]/60"}`}
           />
         ))}
       </div>
@@ -283,8 +283,8 @@ function CallScreen({ preset, bizName }: { preset: Preset; bizName: string }) {
       {/* Upper third: who she's calling, and how it's going. change 17
           (A2): flat avatar, system-stack semibold initials, no gradient. */}
       <div className="flex w-full flex-col items-center pt-20">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-surface-2">
-          <span className="text-[22px] font-semibold text-muted">{initialsOf(bizName)}</span>
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--accent-soft,#162A44)]">
+          <span className="text-[22px] font-semibold text-[var(--accent,#8AA0B4)]">{initialsOf(bizName)}</span>
         </div>
         <div data-call-biz className="mt-4 text-[26px] font-medium leading-tight text-ink">
           {bizName}
@@ -526,7 +526,7 @@ export default function Phone({
                       <div className="flex justify-end">
                         <div
                           {...markEither("data-bubble", "data-s-bubble", "customer")}
-                          className={`max-w-[72%] rounded-[20px] bg-teal px-[14px] py-2 text-[17px] leading-[1.29] text-abyss ${
+                          className={`max-w-[72%] rounded-[20px] bg-[#34C759] px-[14px] py-2 text-[17px] leading-[1.29] text-white ${
                             runEnd ? "rounded-br-[6px]" : ""
                           }`}
                         >
@@ -537,7 +537,7 @@ export default function Phone({
                       <div className="flex flex-col items-start">
                         <div
                           {...markEither("data-bubble", "data-s-bubble", "business")}
-                          className={`max-w-[72%] rounded-[20px] bg-surface-3 px-[14px] py-2 text-[17px] leading-[1.29] text-ink ${
+                          className={`max-w-[72%] rounded-[20px] bg-[var(--accent,#1E3A5C)] px-[14px] py-2 text-[17px] leading-[1.29] text-[var(--accent-ink,#E9EEF4)] ${
                             runEnd ? "rounded-bl-[6px]" : ""
                           }`}
                         >
@@ -634,7 +634,7 @@ export default function Phone({
     /* OG crop mode: fixed rendered screen height, device cropped by the
        canvas — the design height is that height mapped back to design px. */
     return (
-      <div data-phone-device className="w-[390px] max-w-full shrink-0">
+      <div data-phone-device data-client-world className="w-[390px] max-w-full shrink-0">
         <div className="relative rounded-[56px] bg-[#05090F] p-3 ring-1 ring-inset ring-line/60" style={bezelShadow}>
           <div data-screen-fit>
             <div
@@ -656,6 +656,7 @@ export default function Phone({
   return (
     <div
       data-phone-device
+      data-client-world
       {...(live ? {} : { "data-phone-static": true })}
       className="relative mx-auto aspect-[9/19.5] w-full max-w-[390px] shrink-0"
     >
@@ -667,7 +668,7 @@ export default function Phone({
         <div
           aria-hidden="true"
           data-accent-slab
-          className="absolute left-[1%] -z-1 w-[62%] bg-surface"
+          className="absolute left-[1%] -z-1 w-[62%] bg-[var(--accent-soft,#0F1E33)]"
           style={{ top: "-150vh", bottom: "-150vh" }}
         />
       )}
@@ -680,8 +681,8 @@ export default function Phone({
           height="2800"
           viewBox="0 0 2800 2800"
         >
-          <circle data-sonar-ring="0" cx="1400" cy="1400" r="0" fill="none" stroke="var(--color-teal)" strokeWidth="1" opacity="0" />
-          <circle data-sonar-ring="1" cx="1400" cy="1400" r="0" fill="none" stroke="var(--color-teal)" strokeWidth="1" opacity="0" />
+          <circle data-sonar-ring="0" cx="1400" cy="1400" r="0" fill="none" stroke="var(--accent, var(--color-teal))" strokeWidth="1" opacity="0" />
+          <circle data-sonar-ring="1" cx="1400" cy="1400" r="0" fill="none" stroke="var(--accent, var(--color-teal))" strokeWidth="1" opacity="0" />
         </svg>
       )}
       {/* change 17 (B1): hardware nubs — two volume (44px, 14px gap) left,

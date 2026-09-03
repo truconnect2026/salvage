@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 
 import Ledger from "@/components/Ledger";
 import Phone, { NotifyCard } from "@/components/Phone";
@@ -239,6 +239,13 @@ type Ctx = {
   pendingPresetId: string | null;
   audio: AudioState;
   setPresetId: (id: string) => void;
+  /* change 20 (E1/E2): one-shot latches the engine fires on beat crossings —
+     the caret bob at settle, the sound toast at t=0.5. React state writers,
+     like setPresetId; never a second clock. */
+  caretLatched: boolean;
+  setCaretBob: (on: boolean) => void;
+  toastLatched: boolean;
+  fireToast: () => void;
 };
 
 /* Beat crossings -> Web Audio schedules, on the rAF phase and nothing else.
@@ -510,6 +517,8 @@ function park(ctx: Ctx) {
   ctx.armed = true;
   ctx.start = null;
   ctx.audio.lastT = -1;
+  ctx.caretLatched = false;
+  ctx.setCaretBob(false);
   paintScene(ctx, 0);
   paintFade(ctx, 1);
   paintNumbers(
@@ -526,6 +535,8 @@ function beginPlayback(ctx: Ctx) {
   ctx.armed = false;
   ctx.start = null;
   ctx.audio.lastT = -1;
+  ctx.caretLatched = false;
+  ctx.setCaretBob(false);
   schedule(ctx);
 }
 
@@ -607,6 +618,16 @@ function tick(ctx: Ctx, now: number) {
   paintNumbers(ctx, leakAt(tt, p.lost), panelRecoveredAt(tt, p.recovered, p.caught[0].amount));
   paintFlaps(ctx, tt, (q) => leakAt(q, p.lost));
   ctx.root.dataset.t = t.toFixed(3);
+
+  /* change 20 (E1/E2): settle + toast latches, on the same phase. */
+  if (!ctx.caretLatched && t >= 11) {
+    ctx.caretLatched = true;
+    ctx.setCaretBob(true);
+  }
+  if (!ctx.toastLatched && t >= 0.5) {
+    ctx.toastLatched = true;
+    ctx.fireToast();
+  }
 
   /* Sound rides the same phase value this frame just painted with. */
   scheduleAudio(ctx, ctx.audio.lastT, t);
@@ -751,6 +772,10 @@ export default function Demo({
   /* Sound (change 15, B2): off until the rail toggle's tap. Restored from
      sessionStorage in the mount effect — never under reduced motion. */
   const [soundOn, setSoundOn] = useState(false);
+  /* change 20 (E1/E2): the caret bobs only once a section settles; the
+     sound toast shows once per session at t=0.5. */
+  const [caretBob, setCaretBob] = useState(false);
+  const [toastOn, setToastOn] = useState(false);
 
   const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[0];
   const bizName = name || preset.bizName;
@@ -827,6 +852,20 @@ export default function Demo({
       pendingPresetId: null,
       audio: { actx: null, enabled: false, lastT: -1 },
       setPresetId,
+      caretLatched: false,
+      setCaretBob,
+      toastLatched: false,
+      fireToast: () => {
+        let seen = false;
+        try {
+          seen = window.sessionStorage.getItem("salvage:toast") === "1";
+        } catch {}
+        if (seen) return;
+        try {
+          window.sessionStorage.setItem("salvage:toast", "1");
+        } catch {}
+        setToastOn(true);
+      },
     };
     ctxRef.current = ctx;
 
@@ -1116,6 +1155,32 @@ export default function Demo({
     };
   }, []);
 
+  /* Toast dismissal (change 20, E2): 3s or the first tap — UI plumbing. */
+  useEffect(() => {
+    if (!toastOn) return;
+    const t = window.setTimeout(() => setToastOn(false), 3000);
+    const dismiss = () => setToastOn(false);
+    window.addEventListener("pointerdown", dismiss, { once: true });
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener("pointerdown", dismiss);
+    };
+  }, [toastOn]);
+
+  /* Caret settle for sections 2-4 (change 20, E1): entry + 800ms; section 1
+     hands the job to the engine's t>=11 latch (restored directly when
+     returning to an already-settled run). */
+  useEffect(() => {
+    if (activeSection === 0) {
+      const t = parseFloat(rootRef.current?.dataset.t ?? "");
+      setCaretBob(Number.isFinite(t) && t >= 11);
+      return;
+    }
+    setCaretBob(false);
+    const timer = window.setTimeout(() => setCaretBob(true), 800);
+    return () => window.clearTimeout(timer);
+  }, [activeSection]);
+
   /* Cue timer: the swipe cue starts its 4s dismissal when section 3 first
      becomes active. UI plumbing (React state), not an animation clock. */
   useEffect(() => {
@@ -1199,6 +1264,8 @@ export default function Demo({
     ctx.armed = false;
     ctx.start = null;
     ctx.audio.lastT = -1;
+    ctx.caretLatched = false;
+    setCaretBob(false);
     schedule(ctx);
   };
 
@@ -1227,6 +1294,17 @@ export default function Demo({
           sharedMasterGain.gain.setTargetAtTime(1, actx.currentTime, 0.01);
         }
         if (actx.state === "suspended") void actx.resume();
+      }
+      /* change 20 (E2): sound enabled while the OPEN is still playing
+         (t < 3.6) restarts the run from 0 WITH sound — the rings deserve
+         their audio. Later than the miss, no restart. */
+      const t = parseFloat(ctx.root.dataset.t ?? "");
+      if (Number.isFinite(t) && t > 0 && t < 3.6 && !ctx.armed && !ctx.transition) {
+        ctx.start = null;
+        ctx.audio.lastT = -1;
+        ctx.caretLatched = false;
+        setCaretBob(false);
+        schedule(ctx);
       }
     } else if (ctx.audio.actx) {
       const actx = ctx.audio.actx;
@@ -1310,7 +1388,9 @@ export default function Demo({
       data-t="settled"
       data-pager
       data-app-root
+      data-preset={preset.id}
       aria-label={COPY.a11y.pager}
+      style={{ "--accent": preset.accent, "--accent-soft": preset.accentSoft, "--accent-ink": preset.accentInk } as CSSProperties}
     >
       {/* ---- SECTION 1 — the call. The phone; at >=1100px the scene type
            sits left of it (change 15, A2), all three lines on the one clock. ---- */}
@@ -1322,7 +1402,7 @@ export default function Demo({
             section mark's block — content starts >= 32px below its
             baseline, so the phone can never ride up into the mark. */}
         <div className="relative z-10 flex h-full w-full items-center justify-center gap-16 pb-6 pl-6 pr-14 pt-[112px] min-[1100px]:p-6">
-          <div data-scene className="hidden max-w-[30ch] shrink-0 min-[1100px]:block">
+          <div data-scene data-client-world className="hidden max-w-[30ch] shrink-0 min-[1100px]:block">
             {/* change 18 (B4): the clock is a timestamp — it runs in mono
                 like every figure on the page. */}
             <p data-figure className="text-[96px] font-medium leading-none text-ink">
@@ -1348,7 +1428,7 @@ export default function Demo({
               </p>
               <p
                 data-scene-line="caught"
-                className="absolute inset-x-0 top-0 font-display text-[30px] font-normal italic leading-[30px] text-muted"
+                className="absolute inset-x-0 top-0 font-display text-[30px] font-normal italic leading-[30px] text-[var(--accent,#8AA0B4)]"
                 style={{ opacity: 1 }}
               >
                 {COPY.scene.caught}
@@ -1361,7 +1441,7 @@ export default function Demo({
                 centered above the phone, height reserved, riding the same
                 three beats as the desktop scene type (same slots, one
                 clock). SSR seeds the settled "caught" line. */}
-            <div data-scene-mobile className="relative mx-auto mb-2 h-[30px] text-center min-[1100px]:hidden">
+            <div data-scene-mobile data-client-world className="relative mx-auto mb-2 h-[30px] text-center min-[1100px]:hidden">
               <p
                 data-scene-line="closed"
                 className="absolute inset-x-0 top-0 font-display text-[22px] font-normal italic leading-[30px] text-muted"
@@ -1378,7 +1458,7 @@ export default function Demo({
               </p>
               <p
                 data-scene-line="caught"
-                className="absolute inset-x-0 top-0 font-display text-[22px] font-normal italic leading-[30px] text-muted"
+                className="absolute inset-x-0 top-0 font-display text-[22px] font-normal italic leading-[30px] text-[var(--accent,#8AA0B4)]"
                 style={{ opacity: 1 }}
               >
                 {COPY.scene.mobile.caught}
@@ -1546,29 +1626,31 @@ export default function Demo({
                     key={p.id}
                     data-panel
                     data-preset={p.id}
+                    data-client-world
                     className="flex min-h-0 flex-col justify-start min-[1100px]:px-2"
+                    style={{ "--accent": p.accent, "--accent-soft": p.accentSoft, "--accent-ink": p.accentInk } as CSSProperties}
                   >
-                    <p className="font-display text-[28px] font-medium leading-[1.02] tracking-[-0.01em] text-ink">{p.label}</p>
+                    <p data-panel-label className="font-display text-[28px] font-medium leading-[1.02] tracking-[-0.01em] text-[var(--accent,#E9EEF4)]">{p.label}</p>
                     {/* change 19 (B9): the fourth preset explains itself. */}
                     {p.tagline && <p className="mt-0.5 text-[13px] text-muted">{p.tagline}</p>}
                     {/* change 18 (C2): the tiles are a ruled two-column
                         table now — label left in body, figure right in
                         mono. Ticket stays the one gold element per panel
                         (gates 79/82). */}
-                    <div className="mt-2 border-t border-line min-[1100px]:mt-5">
-                      <div data-tile="ticket" className="flex items-baseline justify-between gap-3 border-b border-line py-2 min-[1100px]:py-3">
+                    <div className="mt-2 border-t border-[var(--accent-soft,#22384F)] min-[1100px]:mt-5">
+                      <div data-tile="ticket" className="flex items-baseline justify-between gap-3 border-b border-[var(--accent-soft,#22384F)] py-2 min-[1100px]:py-3">
                         <span className="text-[13px] text-ink min-[1100px]:text-[17px]">{COPY.yours.ticketSuffix}</span>
                         <span data-ticket data-tile-value data-figure className="font-medium leading-none text-gold text-[32px] min-[1100px]:text-[56px]">
                           ${p.ticket}
                         </span>
                       </div>
-                      <div data-tile="missed" className="flex items-baseline justify-between gap-3 border-b border-line py-2 min-[1100px]:py-3">
+                      <div data-tile="missed" className="flex items-baseline justify-between gap-3 border-b border-[var(--accent-soft,#22384F)] py-2 min-[1100px]:py-3">
                         <span className="text-[13px] text-ink min-[1100px]:text-[17px]">{COPY.yours.missedSuffix}</span>
                         <span data-tile-value data-figure className="font-medium leading-none text-ink text-[32px] min-[1100px]:text-[56px]">
                           {p.missedPerMonth}
                         </span>
                       </div>
-                      <div data-tile="lost" className="flex items-baseline justify-between gap-3 border-b border-line py-2 min-[1100px]:py-3">
+                      <div data-tile="lost" className="flex items-baseline justify-between gap-3 border-b border-[var(--accent-soft,#22384F)] py-2 min-[1100px]:py-3">
                         <span className="text-[13px] text-muted min-[1100px]:text-[17px]">{COPY.yours.lostSuffix}</span>
                         <span data-tile-value data-figure className="font-medium leading-none text-muted text-[32px] min-[1100px]:text-[56px]">
                           {usd(p.lost)}
@@ -1764,6 +1846,15 @@ export default function Demo({
         </button>
       </div>
 
+      {toastOn && (
+        <div
+          data-sound-toast
+          className="fixed right-1 top-11 z-40 text-[12px] text-muted min-[1100px]:right-6 min-[1100px]:top-16"
+        >
+          {COPY.a11y.tapForSound}
+        </div>
+      )}
+
       <div
         data-rail
         className="fixed right-0.5 top-1/2 z-40 flex -translate-y-1/2 flex-col items-center gap-3 min-[1100px]:right-6 min-[1100px]:gap-4"
@@ -1791,7 +1882,7 @@ export default function Demo({
             activeSection >= SECTIONS.length - 1 ? "hidden" : ""
           }`}
         >
-          <span className="rail-bob">
+          <span className={caretBob ? "rail-bob" : ""}>
             <ChevronGlyph />
           </span>
         </button>

@@ -63,6 +63,9 @@ const presets = (() => {
       id: mark.id,
       bizName: pick(/bizName:\s*"([^"]+)"/, "bizName"),
       customerName: pick(/customerName:\s*"([^"]+)"/, "customerName"),
+      accent: pick(/accent:\s*"(#[0-9A-Fa-f]{6})"/, "accent"),
+      accentSoft: pick(/accentSoft:\s*"(#[0-9A-Fa-f]{6})"/, "accentSoft"),
+      accentInk: pick(/accentInk:\s*"(#[0-9A-Fa-f]{6})"/, "accentInk"),
       // First text: in the block is thread[0].text (caught entries carry
       // detail:, not text:). Gate 58 asserts the banner quotes it.
       firstText: pick(/text:\s*"([^"]+)"/, "thread[0].text"),
@@ -530,6 +533,7 @@ const BROWSER_GATES = [
   101, 102, 103, 104, 105, 106, 107, 108,
   109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120,
   121, 122, 123, 124, 125, 126, 127, 128, 129, 130,
+  131, 132, 133, 134, 135, 136, 137, 138, 139,
 ];
 
 if (!chromium) {
@@ -1273,7 +1277,8 @@ if (!chromium) {
     );
   });
 
-  /* --- 39: caught row [0] carries the teal left rule and a background
+  /* --- 39: caught row [0] carries the ACCENT left rule (amended, change
+   * 20 — the rule was teal before the verticals took it) and a background
    * distinct from rows 1-3, which must carry neither. */
   await block("caught-row0-highlight", async () => {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -1282,39 +1287,35 @@ if (!chromium) {
     await page.evaluate(() => document.fonts.ready);
     await waitT(page, 6.0 + INTRO);
 
-    const g = await page.evaluate(() => {
-      const root = getComputedStyle(document.documentElement);
-      const toRgb = (name) => {
-        const h = root.getPropertyValue(name).trim().replace("#", "");
-        if (h.length < 6) return null;
-        return `rgb(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)})`;
-      };
+    const g = await page.evaluate((accentHex) => {
+      const h = accentHex.replace("#", "");
+      const accent = `rgb(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)})`;
       const rows = [0, 1, 2, 3].map((i) => document.querySelector(`[data-caught-row="${i}"]`));
       if (rows.some((r) => !r)) return null;
       const styles = rows.map((r) => getComputedStyle(r));
       return {
-        teal: toRgb("--color-teal"),
+        accent,
         ruleColors: styles.map((s) => s.borderLeftColor),
         ruleWidths: styles.map((s) => s.borderLeftWidth),
         bgColors: styles.map((s) => s.backgroundColor),
       };
-    });
+    }, expected.accent);
 
-    const row0RuleOk = g != null && g.ruleColors[0] === g.teal && parseFloat(g.ruleWidths[0]) >= 2;
+    const row0RuleOk = g != null && g.ruleColors[0] === g.accent && parseFloat(g.ruleWidths[0]) >= 2;
     const restNoRuleOk =
       g != null &&
-      g.ruleColors.slice(1).every((c, i) => !(c === g.teal && parseFloat(g.ruleWidths[i + 1]) > 0));
+      g.ruleColors.slice(1).every((c, i) => !(c === g.accent && parseFloat(g.ruleWidths[i + 1]) > 0));
     const restBgMatchOk = g != null && g.bgColors[1] === g.bgColors[2] && g.bgColors[2] === g.bgColors[3];
     const row0BgDiffersOk = g != null && g.bgColors[0] != null && g.bgColors[0] !== g.bgColors[1];
 
     check(
       39,
-      "row[0] left rule is teal (rows 1-3 have none), row[0] background differs from rows 1-3",
+      "row[0] left rule is the preset accent (rows 1-3 have none), row[0] background differs from rows 1-3",
       row0RuleOk && restNoRuleOk && restBgMatchOk && row0BgDiffersOk,
       g == null
         ? "one or more caught rows not found"
         : `rule colours ${JSON.stringify(g.ruleColors)} @ widths ${JSON.stringify(g.ruleWidths)} ` +
-          `(row0 must equal teal ${g.teal} at >=2px; rows 1-3 must not), ` +
+          `(row0 must equal accent ${g.accent} at >=2px; rows 1-3 must not), ` +
           `bg colours ${JSON.stringify(g.bgColors)} (rows 1-3 must match each other, row0 must differ)`,
     );
 
@@ -3741,12 +3742,26 @@ if (!chromium) {
           ["--color-ink", "--color-muted", "--color-gold", "--color-teal", "--color-teal-bright", "--color-ember", "--color-abyss"].map(toRgb),
         );
         const colorHits = [];
+        const hexToRgb = (hex) => {
+          const h = hex.trim().replace("#", "");
+          if (h.length < 6) return null;
+          return `rgb(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)})`;
+        };
         for (const el of document.querySelectorAll("body *")) {
           if (el.closest("[data-phone-screen]")) continue;
           if (!vis(el)) continue;
           if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
           const c = getComputedStyle(el).color;
-          if (!allowed.has(c)) colorHits.push(`${el.tagName}:${(el.textContent || "").trim().slice(0, 16)}=${c}`);
+          if (allowed.has(c)) continue;
+          /* change 20: inside the client's world the resolved accent (and
+             its ink) are sanctioned — the vertical speaks its own color. */
+          if (el.closest("[data-client-world]")) {
+            const cs = getComputedStyle(el);
+            const acc = hexToRgb(cs.getPropertyValue("--accent"));
+            const accInk = hexToRgb(cs.getPropertyValue("--accent-ink"));
+            if (c === acc || c === accInk) continue;
+          }
+          colorHits.push(`${el.tagName}:${(el.textContent || "").trim().slice(0, 16)}=${c}`);
         }
 
         return {
@@ -4291,6 +4306,224 @@ if (!chromium) {
         s2 != null &&
         s2.includes("Test Co"),
       `at rest ${JSON.stringify(s0)}; after snap ${JSON.stringify(s1)}; after typing ${JSON.stringify(s2)}`,
+    );
+  });
+
+  /* --- 131-136: change 20 — vertical theming, all four presets. --- */
+  await block("theming-20", async () => {
+    const hexToRgb = (hex) => {
+      const h = hex.replace("#", "");
+      return `rgb(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)})`;
+    };
+    const rows = [];
+    for (const p of presets) {
+      const ctx = await browser.newContext({
+        viewport: { width: 1440, height: 900 },
+        reducedMotion: "reduce",
+      });
+      const page = await ctx.newPage();
+      await page.goto(`${base}/?biz=${p.id}`, { waitUntil: "domcontentloaded" });
+      await page.evaluate(() => document.fonts.ready);
+      const g = await page.evaluate((presetId) => {
+        const sec1 = document.querySelector('[data-section="call"]');
+        const biz = sec1?.querySelector('[data-bubble="business"]');
+        const cust = sec1?.querySelector('[data-bubble="customer"]');
+        const slab = sec1?.querySelector("[data-accent-slab]");
+        const ring = sec1?.querySelector("[data-sonar-ring]");
+        const stamp = document.querySelector("[data-stamp]");
+        const row0 = document.querySelector('[data-caught-row="0"]');
+        /* The ACTIVE preset's panel — every panel previews its own vertical. */
+        const activePanel = document.querySelector(`[data-panel][data-preset="${presetId}"] [data-panel-label]`);
+        const flap = document.querySelector("[data-flap]");
+        const recovered = document.querySelector("[data-panel-recovered]");
+        /* Teal census inside every client-world subtree. */
+        const root = getComputedStyle(document.documentElement);
+        const toRgb = (name) => {
+          const h = root.getPropertyValue(name).trim().replace("#", "");
+          if (h.length < 6) return null;
+          return `rgb(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)})`;
+        };
+        const teals = new Set([toRgb("--color-teal"), toRgb("--color-teal-bright")]);
+        const tealHits = [];
+        for (const world of document.querySelectorAll("[data-client-world]")) {
+          for (const el of [world, ...world.querySelectorAll("*")]) {
+            const cs = getComputedStyle(el);
+            for (const prop of ["color", "backgroundColor", "borderTopColor", "borderLeftColor", "stroke", "fill"]) {
+              const v = cs[prop];
+              if (teals.has(v)) {
+                const r = el.getBoundingClientRect();
+                if (r.width > 0 || el.tagName === "circle")
+                  tealHits.push(`${el.tagName}.${String(el.className?.baseVal ?? el.className).slice(0, 24)}:${prop}`);
+              }
+            }
+          }
+        }
+        return {
+          bizBubble: biz ? getComputedStyle(biz).backgroundColor : null,
+          bizInk: biz ? getComputedStyle(biz).color : null,
+          custBubble: cust ? getComputedStyle(cust).backgroundColor : null,
+          slabBg: slab ? getComputedStyle(slab).backgroundColor : null,
+          ringStroke: ring ? getComputedStyle(ring).stroke : null,
+          stampColor: stamp ? getComputedStyle(stamp).color : null,
+          row0Rule: row0 ? getComputedStyle(row0).borderLeftColor : null,
+          labelColor: activePanel ? getComputedStyle(activePanel).color : null,
+          flapColor: flap ? getComputedStyle(flap).color : null,
+          recoveredColor: recovered ? getComputedStyle(recovered).color : null,
+          gold: toRgb("--color-gold"),
+          tealHits: tealHits.slice(0, 6),
+        };
+      }, p.id);
+      rows.push({ id: p.id, p, g });
+      await ctx.close();
+    }
+
+    const per = (fn) => rows.map((r) => `${r.id}: ${fn(r)}`).join(" | ");
+    check(
+      131,
+      "business bubble bg === accent (text accent-ink); customer bubble bg === #34C759 — all four presets",
+      rows.every(
+        (r) =>
+          r.g.bizBubble === hexToRgb(r.p.accent) &&
+          r.g.bizInk === hexToRgb(r.p.accentInk) &&
+          r.g.custBubble === "rgb(52, 199, 89)",
+      ),
+      per((r) => `biz ${r.g.bizBubble} (want ${hexToRgb(r.p.accent)}), cust ${r.g.custBubble}`),
+    );
+    check(
+      132,
+      "slab bg === accentSoft; sonar stroke === accent; stamp color === accent — all four presets",
+      rows.every(
+        (r) =>
+          r.g.slabBg === hexToRgb(r.p.accentSoft) &&
+          r.g.ringStroke === hexToRgb(r.p.accent) &&
+          r.g.stampColor === hexToRgb(r.p.accent),
+      ),
+      per((r) => `slab ${r.g.slabBg} ring ${r.g.ringStroke} stamp ${r.g.stampColor} (accent ${hexToRgb(r.p.accent)}, soft ${hexToRgb(r.p.accentSoft)})`),
+    );
+    check(
+      133,
+      "row[0] rule === accent; section-3 preset label === accent — all four presets",
+      rows.every((r) => r.g.row0Rule === hexToRgb(r.p.accent) && r.g.labelColor === hexToRgb(r.p.accent)),
+      per((r) => `rule ${r.g.row0Rule} label ${r.g.labelColor} (want ${hexToRgb(r.p.accent)})`),
+    );
+    check(
+      134,
+      "zero elements inside [data-client-world] with teal in any computed color property — all four presets",
+      rows.every((r) => r.g.tealHits.length === 0),
+      per((r) => `teal hits ${JSON.stringify(r.g.tealHits)}`),
+    );
+    const lum = (rgb) => {
+      const m = rgb.match(/\d+/g).map(Number);
+      const f = (v) => {
+        const s = v / 255;
+        return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+      };
+      return 0.2126 * f(m[0]) + 0.7152 * f(m[1]) + 0.0722 * f(m[2]);
+    };
+    const contrast = (a, b) => {
+      const la = lum(a);
+      const lb = lum(b);
+      return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+    };
+    check(
+      135,
+      "accent / accentInk contrast >= 4.5:1, measured on the rendered bubble — all four presets (final hex reported)",
+      rows.every((r) => r.g.bizBubble && r.g.bizInk && contrast(r.g.bizBubble, r.g.bizInk) >= 4.5),
+      per(
+        (r) =>
+          `${r.p.accent}/${r.p.accentInk} -> ${r.g.bizBubble && r.g.bizInk ? contrast(r.g.bizBubble, r.g.bizInk).toFixed(2) : "?"}:1`,
+      ),
+    );
+    check(
+      136,
+      "still-lost flap glyphs === ember #C4785A; the gold census is untouched (recovered still gold) — all four presets",
+      rows.every((r) => r.g.flapColor === "rgb(196, 120, 90)" && r.g.recoveredColor === r.g.gold),
+      per((r) => `flap ${r.g.flapColor} recovered ${r.g.recoveredColor} (gold ${r.g.gold})`),
+    );
+  });
+
+  /* --- 137-139: change 20 — rail motion + sound UX. --- */
+  await block("railsound-20", async () => {
+    const tapForSound = need(/tapForSound:\s*"([^"]+)"/, "COPY.a11y.tapForSound");
+
+    /* 137 + 138: one motion-on load. */
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+    await waitT(page, 0.5);
+    const early = await page.evaluate((EFF) => {
+      const vis = eval(EFF);
+      const toast = document.querySelector("[data-sound-toast]");
+      const caret = document.querySelector("[data-rail-next] span");
+      const share = document.querySelector("[data-rail-share]");
+      return {
+        toast: toast ? vis(toast) > 0.5 : false,
+        toastText: toast?.textContent?.trim() ?? null,
+        caretAnim: caret ? getComputedStyle(caret).animationName : null,
+        shareBorder: share ? getComputedStyle(share).borderTopColor : null,
+      };
+    }, EFF);
+    await waitT(page, 11.3);
+    const late = await page.evaluate(() => {
+      const caret = document.querySelector("[data-rail-next] span");
+      return { caretAnim: caret ? getComputedStyle(caret).animationName : null };
+    });
+    /* Reload in the SAME context: sessionStorage survives. */
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await waitT(page, 0.6);
+    const reload = await page.evaluate(() => ({
+      toast: document.querySelector("[data-sound-toast]") != null,
+    }));
+    const teal = await page.evaluate(() => {
+      const root = getComputedStyle(document.documentElement);
+      const h = root.getPropertyValue("--color-teal").trim().replace("#", "");
+      return `rgb(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)})`;
+    });
+    await ctx.close();
+
+    check(
+      137,
+      'rail share border stays teal; caret animation-name "none" before settle, NOT "none" after',
+      early.shareBorder === teal && early.caretAnim === "none" && late.caretAnim !== "none" && late.caretAnim != null,
+      `share border ${early.shareBorder} (teal ${teal}); caret at t=0.5 ${JSON.stringify(early.caretAnim)} (need "none"), ` +
+        `at t=11.3 ${JSON.stringify(late.caretAnim)} (need not "none")`,
+    );
+    check(
+      138,
+      `sound toast ${JSON.stringify(tapForSound)} present at t=0.5 on first load; absent after reload (sessionStorage)`,
+      early.toast === true && early.toastText === tapForSound && reload.toast === false,
+      `first load: present ${early.toast} text ${JSON.stringify(early.toastText)}; after reload: present ${reload.toast} (need false)`,
+    );
+
+    /* 139: enabling sound mid-open restarts; after the miss it does not. */
+    const ctxA = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const pageA = await ctxA.newPage();
+    await pageA.goto(base, { waitUntil: "domcontentloaded" });
+    await waitT(pageA, 2.0);
+    await pageA.click("[data-sound-toggle]");
+    await pageA.waitForTimeout(200);
+    const afterEarly = await pageA.evaluate(() =>
+      parseFloat(document.querySelector("[data-demo]")?.getAttribute("data-t") ?? "NaN"),
+    );
+    await ctxA.close();
+
+    const ctxB = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const pageB = await ctxB.newPage();
+    await pageB.goto(base, { waitUntil: "domcontentloaded" });
+    await waitT(pageB, 5.0);
+    await pageB.click("[data-sound-toggle]");
+    await pageB.waitForTimeout(300);
+    const afterLate = await pageB.evaluate(() =>
+      parseFloat(document.querySelector("[data-demo]")?.getAttribute("data-t") ?? "NaN"),
+    );
+    await ctxB.close();
+
+    check(
+      139,
+      "sound enabled at t=2.0 -> the phase resets (reads < 1.0 within 200ms); enabled at t=5.0 -> no reset (reads >= 5.0)",
+      Number.isFinite(afterEarly) && afterEarly < 1.0 && Number.isFinite(afterLate) && afterLate >= 5.0,
+      `after enable at 2.0 -> t=${afterEarly} (need < 1.0); after enable at 5.0 -> t=${afterLate} (need >= 5.0)`,
     );
   });
 

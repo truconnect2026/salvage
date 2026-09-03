@@ -20,7 +20,19 @@ export default function OgFrame() {
   const settledTail = { ...base, thread: base.thread.slice(-2) };
 
   return (
-    <div className="relative h-[630px] w-[1200px] overflow-hidden">
+    /* change 20: the OG composition carries the default preset's accent
+       triplet — the same vars Demo's <main> propagates. */
+    <div
+      className="relative h-[630px] w-[1200px] overflow-hidden"
+      data-preset={base.id}
+      style={
+        {
+          "--accent": base.accent,
+          "--accent-soft": base.accentSoft,
+          "--accent-ink": base.accentInk,
+        } as React.CSSProperties
+      }
+    >
       {/* Headline band */}
       <div className="absolute inset-x-16 top-8">
         <span aria-hidden="true" className="block h-px w-14 bg-gold" />

@@ -169,6 +169,23 @@ body {
   zoom: calc(100cqw / 390px);
 }
 
+/* change 20 (A): the vertical crossfade — themed surfaces swap accents
+   over 220ms when the active preset changes. Color properties only: the
+   engine owns opacity and transform on all of these. */
+[data-bubble],
+[data-s-bubble],
+[data-typing] > div,
+[data-accent-slab],
+[data-stamp],
+[data-caught-row="0"],
+[data-scene-line="caught"],
+[data-panel-label] {
+  transition: background-color 220ms ease, color 220ms ease, border-color 220ms ease;
+}
+[data-sonar-ring] {
+  transition: stroke 220ms ease;
+}
+
 /* change 17 (C2): the live thread fades out under the contact header the
    way a scrolled Messages thread does — a 40px mask ramp at the top of the
    thread container. */
