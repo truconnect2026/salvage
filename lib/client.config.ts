@@ -40,7 +40,9 @@ export const COPY = {
     caughtLabel: "Caught this month",
     reviewNote: "Review requests sent automatically after each visit.",
     sinceLabel: "Since install",
-    justNow: "Just now",
+    // change 18 (D3, APPROVED): the row[0] stamp; replaces justNow (retired
+    // with the pill it decorated).
+    stamp: "SALVAGED",
   },
 
   // The customer's outgoing call (change 11). Approved copy; do not reword.
@@ -74,11 +76,13 @@ export const COPY = {
 
   // The snap pager (change 12, A4). Approved copy. Kicker + title are
   // wayfinding, not headlines — small, top-left of each section.
+  // change 18 (B5, APPROVED): folio kickers — "No. 1 — The call" reads as a
+  // log page mark, not a dashboard step counter.
   sections: {
-    call: { kicker: "01", title: "The call" },
-    save: { kicker: "02", title: "The save" },
-    yours: { kicker: "03", title: "Make it yours" },
-    math: { kicker: "04", title: "The math" },
+    call: { kicker: "No. 1", title: "The call" },
+    save: { kicker: "No. 2", title: "The save" },
+    yours: { kicker: "No. 3", title: "Make it yours" },
+    math: { kicker: "No. 4", title: "The math" },
   },
   // change 15 (A3/A1): cues.down retired — the rail chevron is the standing
   // affordance; cues.right retired with the mobile section-2 track it

@@ -87,6 +87,23 @@ export const LOOP_UNTIL = 13.8;
    beat; the landing tone rides the in-phone confirmation card. ---- */
 export const RING_BEATS = [0.2, 1.4, 2.6];
 export const RING_BURST_DUR = 0.8;
+
+/* change 18 (D1): the sonar rings ride the SAME ring beats as the sound —
+   each ring lives RING_DUR seconds, growing to 1.6x the phone height as its
+   opacity falls 0.7 -> 0, both ease-out. Pure coordinates; the engine
+   derives radius and opacity from (phase - birthBeat) every frame. */
+export const RING_DUR = 1.4;
+export const RING_MAX_FACTOR = 1.6;
+export const RING_MAX_OPACITY = 0.7;
+
+/* change 18 (D3): the SALVAGED stamp fades in over 120ms with the row
+   insert. */
+export const STAMP_IN = 0.12;
+
+/* change 18 (D2): split-flap mechanics — 80ms per flap step, 40ms stagger
+   per flap from the left. */
+export const FLAP_STEP = 0.08;
+export const FLAP_STAGGER = 0.04;
 export const CHIME_AT = BANNER_AT; // 4.4
 export const LAND_AT = NOTIFY_AT; // 10.0
 

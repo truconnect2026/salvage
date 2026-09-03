@@ -302,6 +302,11 @@ retired(22, "change 11 removed the call card; there is no node whose identity co
 retired(23, "change 11 removed the call card and its muted left rule");
 retired(73, "change 15 (A3) replaced the settled-gated down-cue with the persistent rail chevron; COPY.cues.down retired");
 retired(75, "change 15 (A1) removed the phone from mobile section 2 — there is no section-2 mobile device to compare");
+retired(81, "change 18 (A1) killed every radial glow — there is no [data-glow] left to freeze; gate 109 asserts the absence");
+retired(
+  87,
+  "change 18 (C1/C2) put the accent slab behind the section-3 phone and rebuilt the tiles as a ruled table — the change-15 tile/phone geometry this froze no longer describes the layout; gates 79 and 94 carry the surviving claims",
+);
 
 /* 25 + 27: the owner ledger panel is server-rendered — the no-JS floor covers
    the owner side too, not just the phone. Pure fetch, no browser needed: SSR
@@ -531,10 +536,11 @@ const BROWSER_GATES = [
   12, 13, 14, 15, 17, 18, 19, 20, 24, 26, 28, 29, 30, 31, 32, 33, 34, 35, 37, 38, 39, 45,
   46, 47, 48, 49, 50, 51, 52, 53, 55, 56, 57, 58, 59, 60, 61, 62, 63,
   64, 65, 66, 67, 68, 69, 70, 71, 72,
-  74, 76, 77, 78, 79, 80, 81, 82, 83,
-  84, 85, 86, 87, 88, 89, 90,
+  74, 76, 77, 78, 79, 80, 82, 83,
+  84, 85, 86, 88, 89, 90,
   91, 92, 93, 94, 95, 96, 97, 98, 99, 100,
   101, 102, 103, 104, 105, 106, 107, 108,
+  109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120,
 ];
 
 if (!chromium) {
@@ -1189,21 +1195,24 @@ if (!chromium) {
       };
       const els = [...document.querySelectorAll("[data-leak-lost]")];
       const panel = document.querySelector("[data-ledger-panel]");
+      /* Amended (change 18, D2/D): the figure renders as the flap board —
+         the money going the wrong way reads in EMBER glyphs, never gold. */
+      const glyph = els.length === 1 ? (els[0].querySelector("[data-flap]") ?? els[0]) : null;
       return {
         count: els.length,
         insidePanel: els.length === 1 && panel ? panel.contains(els[0]) : false,
-        color: els.length === 1 ? getComputedStyle(els[0]).color : null,
-        muted: toRgb("--color-muted"),
+        color: glyph ? getComputedStyle(glyph).color : null,
+        ember: toRgb("--color-ember"),
         gold: toRgb("--color-gold"),
       };
     });
 
     check(
       35,
-      "exactly one data-leak-lost on the page, inside the owner panel, muted not gold",
-      g.count === 1 && g.count > 0 && g.insidePanel && g.color === g.muted && g.color !== g.gold,
+      "exactly one data-leak-lost on the page, inside the owner panel, ember glyphs not gold (amended, change 18)",
+      g.count === 1 && g.count > 0 && g.insidePanel && g.color === g.ember && g.color !== g.gold,
       `${g.count} element(s) with data-leak-lost (need exactly 1, > 0), inside panel: ${g.insidePanel}, ` +
-        `color ${g.color} (need muted ${g.muted}, must not be gold ${g.gold})`,
+        `glyph color ${g.color} (need ember ${g.ember}, must not be gold ${g.gold})`,
     );
 
     await ctx.close();
@@ -1425,10 +1434,10 @@ if (!chromium) {
       (g.screenFont.includes("-apple-system") || g.screenFont.includes("Segoe UI")) &&
       !g.screenFont.includes("Inter") &&
       g.headlineFont != null &&
-      g.headlineFont.includes("Fraunces");
+      g.headlineFont.includes("Newsreader");
     check(
       47,
-      "screen font resolves to the system stack (not Inter); headline resolves to Fraunces",
+      "screen font resolves to the system stack; headline resolves to Newsreader (change 18 FONTS block)",
       rows.length === 2 && rows.every((r) => fontsOk(r.g)),
       rows
         .map(
@@ -2498,7 +2507,11 @@ if (!chromium) {
         if (cs.display === "none" || cs.visibility === "hidden") continue;
         if (el.closest("[data-scene]")) continue;
         if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
-        const fs = parseFloat(cs.fontSize);
+        /* Amended (change 18): rendered size, not layout size — a figure laid
+           out at 44px inside the mobile scale-fit or the zoomed phone screen
+           renders smaller than it computes. */
+        const scale = el.offsetWidth > 0 ? el.getBoundingClientRect().width / el.offsetWidth : 1;
+        const fs = parseFloat(cs.fontSize) * scale;
         if (fs > max) {
           max = fs;
           maxTag = math.contains(el) || el === math ? "in-math" : el.tagName + (el.dataset ? JSON.stringify({ ...el.dataset }) : "");
@@ -2507,24 +2520,6 @@ if (!chromium) {
       return { mathFS: parseFloat(getComputedStyle(math).fontSize), max, maxTag };
     });
 
-    const glows = await page.evaluate(() => {
-      const sections = [...document.querySelectorAll("[data-section]")];
-      return sections.map((sec) => {
-        const g = sec.querySelectorAll("[data-glow]");
-        return {
-          id: sec.dataset.section,
-          count: g.length,
-          animation: g[0] ? getComputedStyle(g[0]).animationName : null,
-        };
-      });
-    });
-
-    check(
-      81,
-      'each section has exactly one [data-glow], and its computed animation-name is "none"',
-      glows.length === 4 && glows.every((g) => g.count === 1 && g.animation === "none"),
-      glows.map((g) => `${g.id}: ${g.count} glow(s), animation ${JSON.stringify(g.animation)}`).join(" | "),
-    );
 
     /* --- 75-77, 80: mobile pass. --- */
     const ctxM = await browser.newContext({ viewport: { width: 390, height: 844 } });
@@ -2551,7 +2546,11 @@ if (!chromium) {
         if (cs.display === "none" || cs.visibility === "hidden") continue;
         if (el.closest("[data-scene]")) continue;
         if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
-        const fs = parseFloat(cs.fontSize);
+        /* Amended (change 18): rendered size, not layout size — a figure laid
+           out at 44px inside the mobile scale-fit or the zoomed phone screen
+           renders smaller than it computes. */
+        const scale = el.offsetWidth > 0 ? el.getBoundingClientRect().width / el.offsetWidth : 1;
+        const fs = parseFloat(cs.fontSize) * scale;
         if (fs > max) {
           max = fs;
           maxTag = math && (math.contains(el) || el === math) ? "in-math" : el.tagName;
@@ -2573,8 +2572,8 @@ if (!chromium) {
 
     check(
       76,
-      "metric tiles: exactly 2 rendered below 600px, 3 at desktop",
-      m.visibleTiles === 2 && tiles.visibleTiles === 3,
+      "money rows: exactly 3 ruled rows rendered at 390 and at 1440 (change 18, C3 — the width-based tile hiding died with the tiles)",
+      m.visibleTiles === 3 && tiles.visibleTiles === 3,
       `390x844 visible tiles ${m.visibleTiles} (need 2); 1440x900 visible tiles ${tiles.visibleTiles} (need 3)`,
     );
 
@@ -2582,16 +2581,16 @@ if (!chromium) {
        circle now — the section-2 fill button it replaced is gone. */
     check(
       77,
-      "rail share control: teal outline circle >= 36px, present at 390x844 and 1440x900",
+      "share control: 28px teal 1px-stroke square in the top-right cluster, present at 390x844 and 1440x900 (change 18, C6)",
       m.shareBorder === m.teal &&
-        m.shareW >= 36 &&
+        Math.abs(m.shareW - 28) <= 1 &&
         Math.abs(m.shareW - m.shareH) <= 1 &&
         tiles.shareBorder === tiles.teal &&
-        tiles.shareW >= 36 &&
+        Math.abs(tiles.shareW - 28) <= 1 &&
         Math.abs(tiles.shareW - tiles.shareH) <= 1,
       `390: border ${m.shareBorder}, ${m.shareW.toFixed(1)}x${m.shareH.toFixed(1)}px; ` +
         `1440: border ${tiles.shareBorder}, ${tiles.shareW.toFixed(1)}x${tiles.shareH.toFixed(1)}px ` +
-        `(need teal ${m.teal} border, circular, >= 36px)`,
+        `(need teal ${m.teal} 1px border, square, 28px)`,
     );
 
     /* 80 (amended, change 15): the desktop scene type's 96px clock line is
@@ -2652,66 +2651,6 @@ if (!chromium) {
         ? "save section not found"
         : `phone rendered ${g84.phoneRendered} (need false), track present ${g84.trackPresent} (need false), ` +
           `card inside ${g84.cardInside}, ledger inside ${g84.ledgerInside} (both need true)`,
-    );
-
-    const g87m = await page.evaluate(() => {
-      const yours = document.querySelector('[data-section="yours"]');
-      if (!yours) return null;
-      const yr = yours.getBoundingClientRect();
-      const dev = yours.querySelector("[data-phone-device]");
-      const track = yours.querySelector("[data-track]");
-      const tiles = [...yours.querySelectorAll("[data-panel] [data-tile]")];
-      const header = yours.querySelector("[data-crop-biz]");
-      const bubble = yours.querySelector("[data-s-bubble]");
-      if (!dev || !track || tiles.length < 3 || !header || !bubble) return null;
-      const dr = dev.getBoundingClientRect();
-      const tr = track.getBoundingClientRect();
-      const third = tiles[2].getBoundingClientRect();
-      const hr = header.getBoundingClientRect();
-      const br = bubble.getBoundingClientRect();
-      return {
-        devTopVsThirdTile: dr.top - third.bottom,
-        devBottomVsPanel: dr.bottom - tr.bottom,
-        headerInside: hr.top >= yr.top - 1 && hr.bottom <= yr.bottom + 1,
-        bubbleInside: br.top >= yr.top - 1 && br.bottom <= yr.bottom + 1,
-        visiblePct: ((yr.bottom - dr.top) / dr.height) * 100,
-      };
-    });
-
-    /* Desktop half of 87. */
-    const ctxD = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-    const pageD = await ctxD.newPage();
-    await pageD.goto(base, { waitUntil: "domcontentloaded" });
-    await pageD.evaluate(() => document.fonts.ready);
-    const g87d = await pageD.evaluate(() => {
-      const yours = document.querySelector('[data-section="yours"]');
-      const dev = yours?.querySelector("[data-phone-device]");
-      const input = document.querySelector("[data-name-input]");
-      if (!yours || !dev || !input) return null;
-      const yr = yours.getBoundingClientRect();
-      const dr = dev.getBoundingClientRect();
-      const ir = input.getBoundingClientRect();
-      return {
-        clearance: yr.bottom - dr.bottom,
-        inputGap: dr.top - ir.bottom,
-        devW: dr.width,
-      };
-    });
-
-    check(
-      87,
-      "section 3 — desktop: phone contained (clearance >= 24) with the name input within 40px above it; mobile: phone below the third tile, bleeding past the panel bottom, header + thread[0] visible",
-      g87d != null &&
-        g87d.clearance >= 24 &&
-        g87d.inputGap >= 0 &&
-        g87d.inputGap <= 40 &&
-        g87m != null &&
-        g87m.devTopVsThirdTile > 0 &&
-        g87m.devBottomVsPanel > 0 &&
-        g87m.headerInside === true &&
-        g87m.bubbleInside === true,
-      `desktop: ${g87d == null ? "nodes missing" : `clearance ${g87d.clearance.toFixed(1)}px (need >= 24), input->phone gap ${g87d.inputGap.toFixed(1)}px (need 0..40), width ${g87d.devW.toFixed(1)}px`}; ` +
-        `mobile: ${g87m == null ? "nodes missing" : `top ${g87m.devTopVsThirdTile.toFixed(1)}px below third tile (need > 0), bottom ${g87m.devBottomVsPanel.toFixed(1)}px past panel (need > 0), header inside ${g87m.headerInside}, thread[0] inside ${g87m.bubbleInside}, ~${g87m.visiblePct.toFixed(0)}% visible`}`,
     );
 
     await ctxD.close();
@@ -3218,6 +3157,7 @@ if (!chromium) {
         const bad = [];
         for (const el of sec.querySelectorAll("*")) {
           if (rail.contains(el)) continue;
+          if (el.getAttribute("aria-hidden") === "true" || el.closest('[aria-hidden="true"]')) continue;
           const hasText = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
           const isBox =
             hasText || el.tagName === "svg" || el.tagName === "IMG" || el.hasAttribute("data-phone-device");
@@ -3672,6 +3612,446 @@ if (!chromium) {
     } finally {
       await chrome.kill();
     }
+  });
+
+  /* --- 109-113 + 117 + 118 + 120: change 18 — the Salvage Log's statics.
+         One reduced-motion load per viewport. --- */
+  await block("log-18", async () => {
+    const reads = [];
+    for (const vp of [
+      { w: 390, h: 844 },
+      { w: 1440, h: 900 },
+    ]) {
+      const ctx = await browser.newContext({
+        viewport: { width: vp.w, height: vp.h },
+        reducedMotion: "reduce",
+      });
+      const page = await ctx.newPage();
+      await page.goto(base, { waitUntil: "domcontentloaded" });
+      await page.evaluate(() => document.fonts.ready);
+      const g = await page.evaluate((ctaHref) => {
+        const vis = (el) => {
+          let n = el;
+          while (n && n.nodeType === 1) {
+            const cs = getComputedStyle(n);
+            if (cs.display === "none" || cs.visibility === "hidden") return false;
+            n = n.parentElement;
+          }
+          return true;
+        };
+        const root = getComputedStyle(document.documentElement);
+        const toRgb = (name) => {
+          const h = root.getPropertyValue(name).trim().replace("#", "");
+          if (h.length < 6) return null;
+          return `rgb(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)})`;
+        };
+
+        /* 109: no glows; radius scan. */
+        const glows = document.querySelectorAll("[data-glow]").length;
+        const radiusHits = [];
+        for (const el of document.querySelectorAll("body *")) {
+          if (el.closest("[data-phone-device]")) continue;
+          if (el.tagName === "A" && el.getAttribute("href") === ctaHref) continue;
+          if (!vis(el)) continue;
+          const r = el.getBoundingClientRect();
+          if (r.width === 0 || r.height === 0) continue;
+          const cs = getComputedStyle(el);
+          const radii = [cs.borderTopLeftRadius, cs.borderTopRightRadius, cs.borderBottomLeftRadius, cs.borderBottomRightRadius].map(parseFloat);
+          if (radii.some((x) => Number.isFinite(x) && x > 8))
+            radiusHits.push(`${el.tagName}.${String(el.className).slice(0, 30)}@${radii.map((x) => Math.round(x)).join("/")}`);
+        }
+
+        /* 110: the [data-figure] contract. */
+        const figures = [...document.querySelectorAll("[data-figure]")];
+        const badFigures = figures
+          .filter((el) => {
+            const cs = getComputedStyle(el);
+            return !cs.fontFamily.includes("IBM Plex Mono") || !(cs.fontVariantNumeric || "").includes("tabular-nums");
+          })
+          .map((el) => `${el.tagName}:${(el.textContent || "").slice(0, 12)}`);
+        const displayFont = document.querySelector("h1") ? getComputedStyle(document.querySelector("h1")).fontFamily : null;
+
+        /* 111: uppercase-tracked census — all hits must be folios. */
+        const upperHits = [];
+        for (const el of document.querySelectorAll("body *")) {
+          if (!vis(el)) continue;
+          if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
+          const cs = getComputedStyle(el);
+          if (cs.textTransform !== "uppercase") continue;
+          const ls = parseFloat(cs.letterSpacing);
+          const fs = parseFloat(cs.fontSize);
+          if (!Number.isFinite(ls) || !(ls / fs > 0.03)) continue;
+          if (!el.hasAttribute("data-folio") && !el.closest("[data-folio]"))
+            upperHits.push(`${el.tagName}:${(el.textContent || "").trim().slice(0, 20)}`);
+        }
+        const folioCount = document.querySelectorAll("[data-folio]").length;
+
+        /* 112: the accent slabs. */
+        const slabs = ["call", "yours"].map((id) => {
+          const sec = document.querySelector(`[data-section="${id}"]`);
+          const slab = sec?.querySelector("[data-accent-slab]");
+          const dev = slab ? slab.closest("[data-phone-device]") : null;
+          if (!slab || !dev) return { id, ok: false, why: "missing" };
+          const cs = getComputedStyle(slab);
+          const ratio = slab.getBoundingClientRect().width / dev.getBoundingClientRect().width;
+          return {
+            id,
+            ratio: +ratio.toFixed(3),
+            bgImage: cs.backgroundImage,
+            filter: cs.filter,
+            ok: Math.abs(ratio - 0.62) <= 0.02 && cs.backgroundImage === "none" && (cs.filter === "none" || cs.filter === ""),
+          };
+        });
+
+        /* 113: ruled caught rows, shared amount edge. */
+        const rows = [0, 1, 2, 3].map((i) => document.querySelector(`[data-caught-row="${i}"]`));
+        const rowBorders = rows.map((r) => {
+          if (!r) return null;
+          const cs = getComputedStyle(r);
+          return {
+            bottom: cs.borderBottomWidth,
+            left: cs.borderLeftWidth,
+            right: cs.borderRightWidth,
+          };
+        });
+        const amountRights = [0, 1, 2, 3].map((i) => {
+          const el = document.querySelector(`[data-caught-amount="${i}"]`);
+          if (!el || !el.firstChild) return null;
+          /* The TEXT's right edge, not the box's — a left-aligned figure
+             keeps its cell box but breaks the shared column edge. */
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          return range.getBoundingClientRect().right;
+        });
+        const edgeSpread =
+          amountRights.every((x) => x != null) ? Math.max(...amountRights) - Math.min(...amountRights) : null;
+
+        /* 117: the TOTAL rules. */
+        const total = document.querySelector("[data-total]");
+        const totalCs = total ? getComputedStyle(total) : null;
+
+        /* 118: rail = squares + caret; cluster = two 28px squares. */
+        const rail = document.querySelector("[data-rail]");
+        const dots = rail ? [...rail.querySelectorAll("[data-pager-dot]")] : [];
+        const dotBoxes = dots.map((d) => {
+          const r = d.getBoundingClientRect();
+          return { w: +r.width.toFixed(1), h: +r.height.toFixed(1), rad: parseFloat(getComputedStyle(d).borderTopLeftRadius) };
+        });
+        const railButtons = rail ? rail.querySelectorAll("button").length : 0;
+        const caret = rail?.querySelector("[data-rail-next] svg");
+        const cluster = document.querySelector("[data-top-cluster]");
+        const clusterBoxes = cluster
+          ? [...cluster.querySelectorAll("button")].map((b) => {
+              const r = b.getBoundingClientRect();
+              return { w: +r.width.toFixed(1), h: +r.height.toFixed(1) };
+            })
+          : [];
+
+        /* 120: text color census outside the phone screen. */
+        const allowed = new Set(
+          ["--color-ink", "--color-muted", "--color-gold", "--color-teal", "--color-teal-bright", "--color-ember", "--color-abyss"].map(toRgb),
+        );
+        const colorHits = [];
+        for (const el of document.querySelectorAll("body *")) {
+          if (el.closest("[data-phone-screen]")) continue;
+          if (!vis(el)) continue;
+          if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
+          const c = getComputedStyle(el).color;
+          if (!allowed.has(c)) colorHits.push(`${el.tagName}:${(el.textContent || "").trim().slice(0, 16)}=${c}`);
+        }
+
+        return {
+          glows,
+          radiusHits: radiusHits.slice(0, 5),
+          figureCount: figures.length,
+          badFigures: badFigures.slice(0, 5),
+          displayFont,
+          upperHits: upperHits.slice(0, 5),
+          folioCount,
+          slabs,
+          rowBorders,
+          edgeSpread,
+          totalTop: totalCs?.borderTopWidth ?? null,
+          totalBottom: totalCs?.borderBottomWidth ?? null,
+          dotBoxes,
+          railButtons,
+          caretStroke: caret ? caret.getAttribute("stroke-width") : null,
+          clusterBoxes,
+          colorHits: colorHits.slice(0, 6),
+        };
+      }, ctaHref);
+      reads.push({ vp: `${vp.w}x${vp.h}`, g });
+      await ctx.close();
+    }
+
+    const both = (fn) => reads.every((r) => r.g != null && fn(r.g));
+    const detail = (fn) => reads.map((r) => `${r.vp} -> ${fn(r.g)}`).join(" | ");
+
+    check(
+      109,
+      "zero [data-glow]; zero elements with any border-radius > 8px outside the phone and the CTA",
+      both((g) => g.glows === 0 && g.radiusHits.length === 0),
+      detail((g) => `${g.glows} glow(s); radius hits ${JSON.stringify(g.radiusHits)}`),
+    );
+
+    check(
+      110,
+      "display font resolves to Newsreader; every [data-figure] resolves to IBM Plex Mono with tabular-nums",
+      both((g) => g.displayFont != null && g.displayFont.includes("Newsreader") && g.figureCount > 10 && g.badFigures.length === 0),
+      detail((g) => `display ${JSON.stringify(g.displayFont?.slice(0, 40))}; ${g.figureCount} figure(s), bad ${JSON.stringify(g.badFigures)}`),
+    );
+
+    check(
+      111,
+      "exactly one uppercase-tracked element class: every text-transform-uppercase + letter-spacing > 0.03em hit is a folio mark",
+      both((g) => g.folioCount === 4 && g.upperHits.length === 0),
+      detail((g) => `${g.folioCount} folio(s) (need 4); non-folio uppercase-tracked hits ${JSON.stringify(g.upperHits)}`),
+    );
+
+    check(
+      112,
+      "accent slab in sections 1 and 3: width 62% ±2 of the phone width, hard edge (no gradient, no filter)",
+      both((g) => g.slabs.every((s) => s.ok)),
+      detail((g) => g.slabs.map((s) => `${s.id}: ratio ${s.ratio ?? "?"} bg ${String(s.bgImage).slice(0, 10)} filter ${s.filter ?? "?"}`).join(", ")),
+    );
+
+    check(
+      113,
+      "caught rows are ruled: border-bottom 1px, rows 1-3 carry no left/right border (row 0 keeps its teal rule); amount cells share one right edge within 1px",
+      both(
+        (g) =>
+          g.rowBorders.every((b) => b != null && b.bottom === "1px" && b.right === "0px") &&
+          g.rowBorders.slice(1).every((b) => b.left === "0px") &&
+          g.edgeSpread != null &&
+          g.edgeSpread <= 1,
+      ),
+      detail(
+        (g) =>
+          `borders ${JSON.stringify(g.rowBorders)}; amount right-edge spread ${g.edgeSpread?.toFixed?.(2) ?? g.edgeSpread}px (need <= 1)`,
+      ),
+    );
+
+    check(
+      117,
+      "section-4 TOTAL: [data-total] carries a 2px rule above and 1px below",
+      both((g) => g.totalTop === "2px" && g.totalBottom === "1px"),
+      detail((g) => `border-top ${g.totalTop}, border-bottom ${g.totalBottom}`),
+    );
+
+    check(
+      118,
+      "rail = four 6px squares (radius <= 2px) + one 1px-stroke caret and nothing else; top-right cluster = exactly two 28px squares",
+      both(
+        (g) =>
+          g.dotBoxes.length === 4 &&
+          g.dotBoxes.every((d) => Math.abs(d.w - 6) <= 1 && Math.abs(d.h - 6) <= 1 && d.rad <= 2) &&
+          g.railButtons === 5 &&
+          g.caretStroke === "1" &&
+          g.clusterBoxes.length === 2 &&
+          g.clusterBoxes.every((b) => Math.abs(b.w - 28) <= 1 && Math.abs(b.h - 28) <= 1),
+      ),
+      detail(
+        (g) =>
+          `dots ${JSON.stringify(g.dotBoxes)}; rail buttons ${g.railButtons} (4 dots + caret = 5); caret stroke ${JSON.stringify(g.caretStroke)}; cluster ${JSON.stringify(g.clusterBoxes)}`,
+      ),
+    );
+
+    check(
+      120,
+      "text color census outside the phone screen: every text node resolves to ink, muted, gold, teal, teal-bright, ember, or abyss — no fourth gray",
+      both((g) => g.colorHits.length === 0),
+      detail((g) => `violations ${JSON.stringify(g.colorHits)}`),
+    );
+  });
+
+  /* --- 114 + 115 + 116 + 119: change 18 — the two parametric components
+         and the one-clock rule, motion on. --- */
+  await block("parametric-18", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+
+    const easeOut = (p) => 1 - Math.pow(1 - p, 3);
+    const readRings = () =>
+      page.evaluate(() => {
+        const t = parseFloat(document.querySelector("[data-demo]")?.getAttribute("data-t") ?? "NaN");
+        const dev = document.querySelector('[data-section="call"] [data-phone-device]');
+        const rings = [...document.querySelectorAll("[data-sonar-ring]")].map((c) => {
+          const cs = getComputedStyle(c);
+          /* RENDERED radius: computed r (SVG2 geometry property) wins over
+             the attribute — a CSS-animated ring must read as what it paints,
+             not what the engine wrote. */
+          const cssR = parseFloat(cs.r);
+          return {
+            r: Number.isFinite(cssR) ? cssR : parseFloat(c.getAttribute("r") || "0"),
+            o: parseFloat(cs.opacity),
+            anim: cs.animationName,
+          };
+        });
+        return { t, h: dev ? dev.getBoundingClientRect().height : 0, rings };
+      });
+
+    /* The brief samples two-alive at t=1.9, but D1's own coordinates
+       (births 0.2/1.4/2.6, life 1.4s) leave exactly ONE ring alive there —
+       the two-alive windows are 1.4-1.6 and 2.6-2.8. Sampled at 1.5, which
+       tests the same claim honestly. */
+    await waitT(page, 0.9);
+    const s09 = await readRings();
+    await waitT(page, 1.45);
+    const s15 = await readRings();
+    await waitT(page, 5.0);
+    const s50 = await readRings();
+
+    const live = (s) => s.rings.filter((r) => r.r > 0 && r.o > 0);
+    const maxR = (s) => 1.6 * s.h;
+    const closed = (s) => {
+      const e = s.t - 0.2;
+      return 1.6 * s.h * easeOut(e / 1.4);
+    };
+    const one = live(s09);
+    check(
+      114,
+      "sonar: one ring at t≈0.9 (0 < r < max, 0 < opacity < 0.7) matching the closed form within 2px; two rings alive at t≈1.5; zero at t=5.0",
+      one.length === 1 &&
+        one[0].r > 0 &&
+        one[0].r < maxR(s09) &&
+        one[0].o > 0 &&
+        one[0].o < 0.7 &&
+        Math.abs(one[0].r - closed(s09)) <= 2 &&
+        live(s15).length === 2 &&
+        live(s50).length === 0,
+      `t=${s09.t}: ${one.length} ring(s) r=${one[0]?.r?.toFixed?.(1)} (closed form ${closed(s09).toFixed(1)}, max ${maxR(s09).toFixed(0)}) o=${one[0]?.o}; ` +
+        `t=${s15.t}: ${live(s15).length} (need 2); t=${s50.t}: ${live(s50).length} (need 0)`,
+    );
+
+    /* 115: the flap board. Global 0.3 -> the t=0 (all-zeros) value. */
+    const zeroForm = usd(expected.lost).replace(/\d/g, "0");
+    const flapAt = () =>
+      page.evaluate(() => {
+        const el = document.querySelector("[data-leak-lost]");
+        const flips = [...document.querySelectorAll('[data-flap="digit"]')].map((f) => f.style.transform || "");
+        return { text: el ? el.textContent.trim() : null, flips };
+      });
+    /* Re-load to catch global t=0.3 cleanly. */
+    const ctx2 = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page2 = await ctx2.newPage();
+    await page2.goto(base, { waitUntil: "domcontentloaded" });
+    await waitT(page2, 0.25);
+    const early = await page2.evaluate(() => document.querySelector("[data-leak-lost]")?.textContent?.trim() ?? null);
+    await ctx2.close();
+
+    await waitT(page, 2.5 + INTRO);
+    let sawRotate = false;
+    for (let i = 0; i < 6 && !sawRotate; i++) {
+      const f = await flapAt();
+      sawRotate = f.flips.some((t) => t.includes("rotateX"));
+      if (!sawRotate) await page.waitForTimeout(45);
+    }
+    await waitT(page, 6.0 + INTRO);
+    const settled = await flapAt();
+
+    /* 116 samples HERE — the preset-switch test below re-parks the engine
+       (section 3 on screen), which would read the stamp mid-hide. */
+    const g116 = await page.evaluate(() => {
+      const inRow0 = document.querySelector('[data-caught-row="0"] [data-stamp]');
+      const others = [1, 2, 3].filter((i) => document.querySelector(`[data-caught-row="${i}"] [data-stamp]`));
+      let angle = null;
+      let opacity = null;
+      if (inRow0) {
+        const cs = getComputedStyle(inRow0);
+        opacity = cs.opacity;
+        const m = cs.transform.match(/matrix\(([-\d.]+),\s*([-\d.]+)/);
+        if (m) angle = (Math.atan2(parseFloat(m[2]), parseFloat(m[1])) * 180) / Math.PI;
+      }
+      return {
+        present: !!inRow0,
+        angle,
+        opacity,
+        others,
+        justNow: document.body.innerText.includes("Just now"),
+      };
+    });
+
+    /* Preset switch: the flap series must never exceed the on-screen value. */
+    await goSection(page, 2);
+    await page.waitForTimeout(300);
+    const before = await page.evaluate(() => {
+      const el = document.querySelector("[data-leak-lost]");
+      return el ? Number((el.textContent || "").replace(/[^0-9]/g, "")) : NaN;
+    });
+    await snapTrack(page, 1);
+    const series = [];
+    for (let i = 0; i < 12; i++) {
+      series.push(
+        await page.evaluate(() => {
+          const el = document.querySelector("[data-leak-lost]");
+          return el ? Number((el.textContent || "").replace(/[^0-9]/g, "")) : NaN;
+        }),
+      );
+      await page.waitForTimeout(60);
+    }
+    const finite = series.filter(Number.isFinite);
+    const peak = finite.length ? Math.max(...finite) : NaN;
+
+    check(
+      115,
+      `split-flap: "${zeroForm}" at global t=0.3; "${usd(expected.lost)}" settled; a mid-roll digit flap carries rotateX; preset-switch series never exceeds the on-screen value`,
+      early === zeroForm &&
+        settled.text === usd(expected.lost) &&
+        sawRotate === true &&
+        Number.isFinite(before) &&
+        finite.length === series.length &&
+        peak <= before,
+      `t=0.3 ${JSON.stringify(early)} (want ${JSON.stringify(zeroForm)}); settled ${JSON.stringify(settled.text)} ` +
+        `(want ${JSON.stringify(usd(expected.lost))}); rotateX seen ${sawRotate}; switch series [${series.join(", ")}] peak ${peak} (must be <= ${before})`,
+    );
+
+    check(
+      116,
+      "SALVAGED stamp on row[0] after insert, rotated -3° (computed matrix), absent on rows 1-3; no \"Just now\" text anywhere",
+      g116.present &&
+        g116.angle != null &&
+        Math.abs(g116.angle - -3) <= 0.5 &&
+        g116.opacity === "1" &&
+        g116.others.length === 0 &&
+        g116.justNow === false,
+      `present ${g116.present}, angle ${g116.angle?.toFixed?.(2)}° (need -3±0.5), opacity ${g116.opacity}, ` +
+        `rows with stamp ${JSON.stringify(g116.others)} (need none), "Just now" present ${g116.justNow}`,
+    );
+
+    /* 119: one clock. Source scan (the engine module is components/Demo.tsx)
+       + no CSS animation on either parametric component. */
+    const srcFiles = [
+      "components/Phone.tsx",
+      "components/Ledger.tsx",
+      "lib/timeline.ts",
+      "lib/client.config.ts",
+      "lib/dates.ts",
+      "lib/format.ts",
+      "app/page.tsx",
+      "app/layout.tsx",
+      "app/og/page.tsx",
+      "app/globals.css",
+    ];
+    const srcHits = [];
+    for (const f of srcFiles) {
+      const body = readFileSync(join(ROOT, f), "utf8");
+      const m = body.match(/setTimeout|setInterval|requestAnimationFrame/g);
+      if (m) srcHits.push(`${f}: ${m.length}`);
+    }
+    const anims = await page.evaluate(() => {
+      const els = [...document.querySelectorAll("[data-sonar-ring], [data-flap], [data-accent-slab]")];
+      return els.map((el) => getComputedStyle(el).animationName).filter((a) => a !== "none");
+    });
+    check(
+      119,
+      "no second animation clock: zero setTimeout/setInterval/requestAnimationFrame outside the engine module (components/Demo.tsx); no CSS animation on the sonar, flaps, or slab",
+      srcHits.length === 0 && anims.length === 0,
+      `source hits ${JSON.stringify(srcHits)} (need none); CSS animations ${JSON.stringify(anims)} (need none)`,
+    );
+
+    await ctx.close();
   });
 
   await browser.close();

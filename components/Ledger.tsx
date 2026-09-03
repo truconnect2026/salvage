@@ -4,15 +4,52 @@ import { type LedgerDates } from "@/lib/dates";
 import { usd } from "@/lib/format";
 
 /**
- * The owner side. NOT a phone: a wider, shorter card, so the two surfaces read
- * as two different devices at a glance rather than a matched pair.
+ * The owner side, rebuilt as a LOG (change 18, C2/C3): 1px rules structure
+ * every group — no card frame, no tiles, no pills. Money runs in Plex Mono
+ * under the [data-figure] contract; the still-lost figure is a split-flap
+ * board the playback engine drives off the one rAF phase.
  *
- * Row [0] of the caught list is the live link to the phone: the SAME booking
- * that closes the thread lands here the instant it closes. SSR renders it
- * fully settled (the no-JS floor); the playback engine in Demo.tsx hides it on
- * mount and slides it back in at CAUGHT_ROW_AT, driven by the one shared rAF
- * loop — never a second timer.
+ * Row [0] of the caught table is the live link to the phone: the SAME
+ * booking that closes the thread lands here the instant it closes. SSR
+ * renders it fully settled (the no-JS floor); the engine hides it on mount
+ * and slides it back in at CAUGHT_ROW_AT — never a second timer.
  */
+
+/* change 18 (D2): the split-flap board. One flap per glyph of the settled
+   figure — "$4,080" = 6 flaps, $ and comma static. SSR is the settled
+   state; the ENGINE derives every mid-flight glyph and rotateX purely from
+   the phase (see paintFlaps in Demo.tsx). Reduced motion never runs the
+   engine, so the static figure stands. textContent of [data-leak-lost]
+   concatenates to the plain figure, which is what the numeric gates read. */
+function FlapBoard({ value, compact }: { value: number; compact: boolean }) {
+  const glyphs = usd(value).split("");
+  return (
+    <span data-leak-lost data-flap-board className="inline-flex items-baseline gap-[2px]">
+      {glyphs.map((g, i) => {
+        const digit = /\d/.test(g);
+        return (
+          <span
+            key={i}
+            data-flap={digit ? "digit" : "static"}
+            className={`relative inline-flex justify-center overflow-hidden rounded-[2px] bg-surface-2 px-[3px] font-medium leading-[1.15] text-ember ${
+              compact ? "text-[24px]" : "text-[44px]"
+            }`}
+            data-figure
+          >
+            <span data-flap-face style={{ display: "inline-block" }}>
+              {g}
+            </span>
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute left-0 right-0 top-1/2 h-px bg-abyss/70"
+            />
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
 export default function Ledger({
   preset,
   bizName,
@@ -23,8 +60,8 @@ export default function Ledger({
   /* The effective business name (custom or preset default) — change 10's
      live name field re-skins this header without touching playback. */
   bizName?: string;
-  /* Tighter, larger-type rendering for the OG thumbnail: legible at 500px
-     wide beats "looks right at full size", and the frame is short on height. */
+  /* Tighter rendering for the OG thumbnail: legible at 500px wide beats
+     "looks right at full size", and the frame is short on height. */
   compact?: boolean;
   /* change 17 (D2): request-time month + row dates (America/New_York),
      computed server-side. The compact OG variant renders neither. */
@@ -34,161 +71,100 @@ export default function Ledger({
   const headerName = bizName ?? preset.bizName;
   const L = COPY.ledger;
 
-  /* change 12: the panel now lives inside a 100dvh snap section (a track
-     panel on mobile, the two-up's right column on desktop) with the owner
-     card docked above it, so the interactive variant runs dense at EVERY
-     width — the change-10 ">=1100 only" density is now the floor. The OG
-     compact variant is untouched. */
-  const pad = compact ? "p-3" : "p-4 min-[500px]:p-5";
-  const tileValue = `mt-1.5 font-display font-semibold leading-none lining-nums ${
-    compact ? "text-[24px]" : "text-[24px] min-[500px]:text-[28px]"
-  }`;
+  /* change 18 (B4): ledger money runs 44px design-scale (the mobile
+     transform-fit scales the whole log down together); OG compact stays
+     thumbnail-tuned. */
+  const figure = compact ? "text-[24px]" : "text-[44px]";
 
   return (
-    <div data-panel-content className={`w-full rounded-2xl border border-line bg-surface ${pad}`}>
-      {/* Header: screen label, bizName + month, status pill right-aligned.
-          screenLabel sits INSIDE the card's own padding, not above it, so the
-          card's outer top edge lines up with the phone's — an external eyebrow
-          here would push the panel down relative to the phone and break the
-          "tops aligned" requirement. */}
-      <div className="flex items-start justify-between gap-4">
+    <div data-panel-content className="w-full">
+      {/* Header rule: screen label + bizName left, request-time month right
+          in mono. No pill — the log needs no status jewelry (A3/A4). */}
+      <div className="flex items-end justify-between gap-4 border-b border-line pb-2">
         <div className="min-w-0">
-          <p className="text-[10px] uppercase tracking-[0.2em] text-muted">{L.screenLabel}</p>
-          <div data-ledger-biz className="mt-1 truncate font-body text-[16px] font-semibold text-ink">
+          <p className="text-[12px] text-muted">{L.screenLabel}</p>
+          <div data-ledger-biz className="mt-0.5 truncate text-[16px] font-medium text-ink">
             {headerName}
           </div>
-          {/* change 12: below 500px the panel shares a 100dvh section with
-              the docked owner card, so the caption layer (month, tile
-              captions, review note) yields — same policy the OG compact
-              variant has always used. Nothing data-bearing is hidden. */}
-          {!compact && dates && (
-            <div data-ledger-month className="mt-0.5 hidden text-[12px] text-muted min-[500px]:block">
-              {dates.month}
-            </div>
-          )}
         </div>
-        <span className="shrink-0 whitespace-nowrap rounded-full border border-teal/50 bg-teal/10 px-3 py-1 text-[11px] font-medium text-teal-bright">
-          {L.statusLabel}
-        </span>
+        {!compact && dates && (
+          <div data-ledger-month data-figure className="shrink-0 pb-0.5 text-[13px] text-muted">
+            {dates.month}
+          </div>
+        )}
       </div>
 
-      {/* Metric tiles. change 13 (S2c): below 600px the interactive panel
-          shows TWO tiles — Recovered | Still lost, one full-width row — and
-          Reply time returns at >=600px. The OG compact variant keeps three. */}
-      <div
-        data-money
-        className={`grid ${
-          compact
-            ? "mt-2 gap-3 grid-cols-[repeat(auto-fit,minmax(96px,1fr))]"
-            : "mt-3 gap-2 grid-cols-2 min-[500px]:gap-3 min-[600px]:grid-cols-3 min-[1100px]:mt-4"
-        }`}
-      >
-        <div className={`rounded-xl border border-line bg-surface-2 ${compact ? "p-3" : "p-2.5 min-[500px]:p-4"}`}>
-          <p className="text-[11px] uppercase tracking-[0.14em] text-muted">{L.recoveredLabel}</p>
-          {/*
-           * data-ledger-recovered: the ONLY gold recovered figure on the page
-           * (change 5 deleted the phone-side card that used to carry this
-           * attribute). Kept alongside data-panel-recovered — which the
-           * playback engine and gates 26/28/31/32 already address — rather
-           * than renaming it, so gates 2/13/20 (pre-existing, unchanged code)
-           * still find it under its original name. One element, one write
-           * path (panelRecoveredAt drives it); the two attributes are just
-           * two names for the same node.
-           */}
-          {/* The recovered figure keeps its gate attributes on the INNER span:
-              the engine rewrites its textContent every frame, which would
-              destroy any children — so the shimmer overlay (change 10, C5c)
-              lives beside it, not inside it. The overlay's computed color is
-              inherited ink, never gold, so the gold census stays at one. */}
-          <p className={`${tileValue} relative block overflow-hidden`}>
-            <span data-panel-recovered data-ledger-recovered className="text-gold">
+      {/* The three money rows — ruled, figures right (C2/C3). */}
+      <div data-money>
+        <div className="flex items-baseline justify-between gap-3 border-b border-line py-1.5">
+          <p className="text-[14px] text-muted">
+            {L.recoveredLabel}
+            {!compact && (
+              <span data-calls-caught className="ml-2 hidden text-[12px] text-ink min-[500px]:inline">
+                <span data-figure>{preset.callsCaught}</span> calls booked
+              </span>
+            )}
+          </p>
+          {/* The recovered figure keeps its gate attributes on the leaf span:
+              the engine rewrites its textContent every frame. */}
+          <p className={`${figure} font-medium leading-none`}>
+            <span data-panel-recovered data-ledger-recovered data-figure className="text-gold">
               {usd(preset.recovered)}
             </span>
-            <span
-              data-gold-shimmer
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0"
-              style={{
-                opacity: 0,
-                transform: "translateX(-120%)",
-                background:
-                  "linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.30) 50%, transparent 70%)",
-              }}
-            />
           </p>
-          {!compact && (
-            <p data-calls-caught className="mt-1.5 hidden text-[12px] text-ink min-[500px]:block">
-              {preset.callsCaught} calls booked
-            </p>
-          )}
         </div>
 
-        <div className={`rounded-xl border border-line bg-surface-2 ${compact ? "p-3" : "p-2.5 min-[500px]:p-4"}`}>
-          <p className="text-[11px] uppercase tracking-[0.14em] text-muted">{L.lostLabel}</p>
-          {/*
-           * data-leak-lost: the ONLY element carrying this attribute (change
-           * 6 deleted the phone-side "Still lost" card that used to). The
-           * playback engine's collect() queries this attribute directly, so
-           * once the phone-side duplicate was gone it started binding here
-           * automatically — the climbing animation needed no engine change
-           * at all, just this element to land on.
-           */}
-          <p data-leak-lost className={`${tileValue} text-muted`}>
-            {usd(preset.lost)}
+        <div className="flex items-baseline justify-between gap-3 border-b border-line py-1.5">
+          <p className="text-[14px] text-muted">
+            {L.lostLabel}
+            {!compact && (
+              <span className="ml-2 hidden text-[12px] text-ink min-[500px]:inline">
+                <span data-figure>{preset.missedPerMonth}</span> rang out
+              </span>
+            )}
           </p>
-          {!compact && (
-            <p className="mt-1.5 hidden text-[12px] text-ink min-[500px]:block">{preset.missedPerMonth} rang out</p>
-          )}
+          <FlapBoard value={preset.lost} compact={compact} />
         </div>
 
-        <div
-          className={`rounded-xl border border-line bg-surface-2 ${
-            compact ? "p-3" : "hidden p-2.5 min-[500px]:p-4 min-[600px]:block"
-          }`}
-        >
-          <p className="text-[11px] uppercase tracking-[0.14em] text-muted">{L.replyLabel}</p>
-          <p className={`${tileValue} text-ink`}>{L.replyValue}</p>
-          {!compact && <p className="mt-1.5 hidden text-[12px] text-muted min-[500px]:block">{L.replyCaption}</p>}
+        <div className="flex items-baseline justify-between gap-3 border-b border-line py-1.5">
+          <p className="text-[14px] text-muted">
+            {L.replyLabel}
+            {!compact && (
+              <span className="ml-2 hidden text-[12px] text-muted min-[500px]:inline">{L.replyCaption}</span>
+            )}
+          </p>
+          <p data-figure className={`${figure} font-medium leading-none text-ink`}>
+            {L.replyValue}
+          </p>
         </div>
       </div>
 
-      {/* Caught list */}
-      <p
-        className={`text-[12px] uppercase tracking-[0.18em] text-muted ${compact ? "mt-2" : "mt-3 min-[1100px]:mt-4"}`}
-      >
-        {L.caughtLabel}
-      </p>
-      {/* rounded-tl-none: row [0]'s flush teal rule needs a square corner to
-          land against, not the panel's usual rounded one. Spelled out per
-          corner (never a bare `rounded-xl` plus an override) so the result
-          doesn't depend on Tailwind's utility ordering in the stylesheet. */}
-      <div
-        className={`overflow-hidden rounded-tl-none rounded-tr-xl rounded-br-xl rounded-bl-xl border border-line ${compact ? "mt-1.5" : "mt-2 min-[500px]:mt-3"}`}
-      >
-        <div className="divide-y divide-line">
-          <CaughtRow index={0} entry={row0} compact={compact} date={dates?.rows[0]} />
-          {rest.map((entry, i) => (
-            <CaughtRow key={i + 1} index={i + 1} entry={entry} compact={compact} date={dates?.rows[i + 1]} />
-          ))}
-        </div>
+      {/* Caught table (C3): ruled rows, mono figures, amounts on one shared
+          right edge. Desktop runs the four columns wide; mobile stacks
+          number+detail left, amount+date right. */}
+      <p className={`text-[13px] text-muted ${compact ? "mt-2" : "mt-3"}`}>{L.caughtLabel}</p>
+      <div className={compact ? "mt-1" : "mt-1.5"}>
+        <CaughtRow index={0} entry={row0} compact={compact} date={dates?.rows[0]} />
+        {rest.map((entry, i) => (
+          <CaughtRow key={i + 1} index={i + 1} entry={entry} compact={compact} date={dates?.rows[i + 1]} />
+        ))}
       </div>
 
       {!compact && (
-        <p className="mt-2.5 hidden text-[12px] text-muted min-[500px]:block min-[1100px]:mt-3">{L.reviewNote}</p>
+        <p className="mt-2 hidden text-[12px] text-muted min-[500px]:block">{L.reviewNote}</p>
       )}
 
-      {/* Since-install strip: the panel's last element, closing the gap
-          against the phone at >=1100px with a running total rather than
-          empty space. Renders in both variants — the OG composite wants it
-          too. The dollar figure is ink, deliberately not gold: gold stays
-          reserved for the one recovered figure above (gates 31/38). */}
+      {/* Since-install: the ledger's LAST ruled row (C2), not a boxed strip. */}
       <div
-        className={`border-t border-line ${compact ? "mt-2 pt-1.5" : "mt-3 pt-2.5 min-[1100px]:mt-4 min-[1100px]:pt-3"}`}
+        className={`flex items-baseline justify-between gap-3 border-b border-t border-line ${compact ? "mt-2 py-1.5" : "mt-2.5 py-2"}`}
       >
-        <p className="text-[10px] uppercase tracking-[0.2em] text-muted">{L.sinceLabel}</p>
-        <p data-since-strip className={`mt-1.5 text-muted ${compact ? "text-[14px]" : "text-[13px]"}`}>
-          <span data-since-calls>{preset.sinceCalls}</span> calls caught ·{" "}
-          <span data-since-recovered className="font-semibold text-ink">{usd(preset.sinceRecovered)}</span> recovered
+        <p className="text-[12px] text-muted">{L.sinceLabel}</p>
+        <p data-since-strip className={`text-muted ${compact ? "text-[14px]" : "text-[13px]"}`}>
+          <span data-since-calls data-figure>{preset.sinceCalls}</span> calls caught ·{" "}
+          <span data-since-recovered data-figure className="font-medium text-ink">
+            {usd(preset.sinceRecovered)}
+          </span>{" "}
+          recovered
         </p>
       </div>
     </div>
@@ -209,14 +185,16 @@ function CaughtRow({
   date?: string;
 }) {
   /* Row [0] is the call the phone just closed — SSR carries its highlight
-     from the first paint, not only once the playback engine slides it in. */
+     from the first paint, not only once the playback engine slides it in.
+     The teal left rule and distinct ground survive the de-boxing (gate 39);
+     change 20 recolors the rule to the vertical accent. */
   const isFirst = index === 0;
 
   return (
     <div
       data-caught-row={index}
-      className={`flex items-start gap-3 ${compact ? "px-3 py-2" : "px-3 py-1.5 min-[500px]:px-4 min-[500px]:py-2"} ${
-        isFirst ? "border-l-2 border-l-teal bg-surface-3" : "bg-surface-2"
+      className={`flex items-start gap-3 border-b border-line py-1.5 ${compact ? "" : "min-[500px]:py-2"} ${
+        isFirst ? "border-l-2 border-l-teal bg-surface pl-2" : ""
       }`}
     >
       <span className="mt-0.5 shrink-0 text-muted">
@@ -224,32 +202,37 @@ function CaughtRow({
       </span>
       <div className="min-w-0 flex-1">
         <div
-          className={`tabular-nums text-ink ${compact ? "text-[15px]" : "text-[14px] min-[500px]:text-[15px]"}`}
+          data-figure
+          className={`text-ink ${compact ? "text-[15px]" : "text-[13px] min-[500px]:text-[14px]"}`}
         >
           {entry.number}
         </div>
-        {/* change 8: at 500px the caught rows read as four anonymous numbers
-            unless the detail line itself is legible, so compact carries a
-            ~40% larger size here than the interactive panel's 12px. The
-            "Just now" tag is dropped in compact — decoration competing with
-            that detail line for the same sliver of space loses. */}
         <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
           <span className={`truncate text-muted ${compact ? "text-[17px]" : "text-[12px]"}`}>{entry.detail}</span>
           {isFirst && !compact && (
-            <span className="shrink-0 rounded-full bg-teal/15 px-1.5 py-0.5 text-[10px] font-medium text-teal-bright">
-              {COPY.ledger.justNow}
+            /* change 18 (D3): the SALVAGED stamp — a rubber stamp on the log
+               entry, not a pill. The engine fades it in with the row insert
+               (120ms); SSR seeds the settled state. */
+            <span
+              data-stamp
+              data-figure
+              className="shrink-0 rounded-[4px] border border-teal px-1.5 text-[11px] tracking-[0.12em] text-teal-bright"
+              style={{ transform: "rotate(-3deg)", opacity: 1 }}
+            >
+              {COPY.ledger.stamp}
             </span>
           )}
         </div>
       </div>
       <div className="shrink-0 text-right">
-        <div
-          data-caught-amount={index}
-          className={`tabular-nums text-ink ${compact ? "text-[15px]" : "text-[14px]"}`}
-        >
+        <div data-caught-amount={index} data-figure className={`text-ink ${compact ? "text-[15px]" : "text-[14px]"}`}>
           {usd(entry.amount)}
         </div>
-        {!compact && <div data-caught-date={index} className="mt-0.5 text-[11px] text-muted">{date ?? entry.date}</div>}
+        {!compact && (
+          <div data-caught-date={index} data-figure className="mt-0.5 text-[11px] text-muted">
+            {date ?? entry.date}
+          </div>
+        )}
       </div>
     </div>
   );

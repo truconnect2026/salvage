@@ -12,10 +12,24 @@
   --color-teal: #2CC7B6;
   --color-teal-bright: #74E9DC;
   --color-gold: #D8B45A;
+  /* change 18 (D): the still-lost flap glyphs — money going the wrong way
+     is ember, never gold, never gray. */
+  --color-ember: #C4785A;
   --color-ink: #E9EEF4;
   --color-muted: #8AA0B4;
-  --font-display: var(--font-fraunces);
-  --font-body: var(--font-inter);
+  /* change 18 FONTS (KEEP_BRAND_FONTS = false): Newsreader display, IBM
+     Plex Sans body, IBM Plex Mono figures. */
+  --font-display: var(--font-newsreader);
+  --font-body: var(--font-plex-sans);
+  --font-figures: var(--font-plex-mono);
+}
+
+/* change 18 (B4): the figure contract. EVERY number, timestamp, date,
+   phone number, and currency outside the phone screen carries
+   [data-figure]: Plex Mono, tabular. Gate 110 holds the contract. */
+[data-figure] {
+  font-family: var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Change 12 (A1): the page itself never scrolls — the pager owns the one
@@ -26,10 +40,11 @@ body {
   overflow: hidden;
 }
 
+/* change 18 (A5/D): the ground is flat abyss — no gradients anywhere
+   outside the phone. The old radial+linear wash read as dashboard
+   atmosphere. */
 body {
-  background:
-    radial-gradient(1200px 600px at 50% -10%, #0C1A2E 0%, transparent 60%),
-    linear-gradient(180deg, #060B14 0%, #08111F 100%);
+  background: var(--color-abyss);
 }
 
 /* The vertical pager (A1). Native CSS scroll-snap only: no wheel listeners,
@@ -163,16 +178,16 @@ body {
 
 /* change 16 (B3): the mobile save-section stack (owner card + ledger)
    scales to FIT its column instead of stepping through the change-12 zoom
-   ladder — laid out at a fixed 342px design width and 578px natural
-   height, then transform-scaled by whichever is tighter: column height,
-   column width, or 1. transform, NOT zoom: WebKit's legacy zoom rounds
-   small font sizes up and inflates the zoomed subtree (measured 2x its
-   expected height at SE-class factors) — a geometric scale renders
-   exactly height x factor in every engine, so the ledger's last line
-   holds >= 16px above the viewport bottom (gate 95). The first transform
-   line is the no-container-query floor (iOS 15); plain two-length
-   divisions only — WebKit drops the declaration when the numerator is a
-   calc() sum. */
+   ladder — laid out at a fixed 342px design width and (change 18) a 621px
+   natural log height, then transform-scaled by whichever is tighter:
+   column height (640 divisor = natural + slack), column width, or 1.
+   transform, NOT zoom: WebKit's legacy zoom rounds small font sizes up
+   and inflates the zoomed subtree (measured 2x its expected height at
+   SE-class factors) — a geometric scale renders exactly height x factor
+   in every engine, so the ledger's last line holds >= 16px above the
+   viewport bottom (gate 95). The first transform line is the
+   no-container-query floor (iOS 15); plain two-length divisions only —
+   WebKit drops the declaration when the numerator is a calc() sum. */
 @media (max-width: 1099.98px) {
   [data-save-fit] {
     container-type: size;
@@ -183,9 +198,9 @@ body {
     top: 50%;
     left: 50%;
     width: 342px;
-    transform: translate(-50%, -50%) scale(0.82);
+    transform: translate(-50%, -50%) scale(0.78);
     transform: translate(-50%, -50%)
-      scale(min(calc(100cqh / 590px), calc(100cqw / 342px), 1));
+      scale(min(calc(100cqh / 640px), calc(100cqw / 342px), 1));
   }
 }
 
@@ -211,29 +226,12 @@ body {
   }
 }
 
-/* Desktop section-1 ground (change 15, A2): one light source behind the
-   phone + scene-type group. Mobile keeps the change-13 default glow. */
-@media (min-width: 1100px) {
-  [data-section="call"] [data-glow] {
-    width: 1100px;
-    height: 1100px;
-    left: 42%;
-    top: 38%;
-    background: radial-gradient(
-      closest-side,
-      color-mix(in srgb, var(--color-surface-3) 45%, transparent),
-      transparent
-    );
-  }
-}
-
-/* Fraunces warmth: optical sizing on, SOFT axis raised. Applies wherever the
-   display face is used — this rule stacks with Tailwind's own
-   .font-display { font-family: ... } utility. */
+/* change 18 (A1): the radial glows are gone — the log has no atmosphere,
+   only rules and slabs. Newsreader keeps optical sizing on. */
 .font-display {
   font-optical-sizing: auto;
-  font-variation-settings: "SOFT" 70;
 }
+
 
 /* Everything INSIDE the phone screen speaks the device's language, not the
    brand's: the system UI stack (change 10, C1a). The lock screen and both

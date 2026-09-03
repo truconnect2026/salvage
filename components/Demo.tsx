@@ -16,21 +16,26 @@ import {
   CALL_END_FADE_DUR,
   CALL_ENDED_AT,
   CALL_RINGING_AT,
+  CAUGHT_ROW_AT,
   CAUGHT_ROW_RISE,
   CHIME_AT,
   CONTROLS_AT,
   CONTROLS_FADE,
   DELIVERED_AT,
   DOT_PERIOD,
+  FLAP_STAGGER,
+  FLAP_STEP,
   LAND_AT,
   LOOP_UNTIL,
   RING_BEATS,
   RING_BURST_DUR,
+  RING_DUR,
+  RING_MAX_FACTOR,
+  RING_MAX_OPACITY,
   SCENE_CAUGHT_AT,
   SCENE_DIALING_AT,
   SCENE_FADE,
-  SHIMMER_AT,
-  SHIMMER_DUR,
+  STAMP_IN,
   SWAP_FADE,
   SWAP_ROLL,
   THREAD_FADE_AT,
@@ -97,7 +102,13 @@ type Nodes = {
   callEnd: HTMLElement | null;
   banner: HTMLElement | null;
   notifyPhone: HTMLElement | null;
-  shimmer: HTMLElement | null;
+  /* change 18: the sonar ring pair (SVG circles), the split-flap cells, the
+     row[0] stamp, and the section-1 device height the ring radius scales
+     against. */
+  sonarRings: SVGCircleElement[];
+  sonarH: number;
+  flapCells: { el: HTMLElement; face: HTMLElement; digit: boolean }[];
+  stamp: HTMLElement | null;
 };
 
 /* ---------------------------------------------------------------------------
@@ -293,14 +304,59 @@ function collect(root: HTMLElement): Nodes {
     callEnd: q("[data-call-end]"),
     banner: q("[data-banner]"),
     notifyPhone: q("[data-notify-phone]"),
-    shimmer: q("[data-gold-shimmer]"),
+    sonarRings: Array.from(root.querySelectorAll<SVGCircleElement>("[data-sonar-ring]")),
+    sonarH: root.querySelector<HTMLElement>('[data-section="call"] [data-phone-device]')?.offsetHeight ?? 0,
+    flapCells: Array.from(root.querySelectorAll<HTMLElement>("[data-flap]")).map((el) => ({
+      el,
+      face: el.querySelector<HTMLElement>("[data-flap-face]") as HTMLElement,
+      digit: el.dataset.flap === "digit",
+    })),
+    stamp: q("[data-stamp]"),
   };
 }
 
 function paintNumbers(ctx: Ctx, lost: number, panelRecovered: number) {
   ctx.shown = { lost, panelRecovered };
-  if (ctx.nodes.leak) ctx.nodes.leak.textContent = usd(lost);
+  /* change 18 (D2): the still-lost figure is the flap board now — its
+     glyphs are written by paintFlaps off the same phase, never here. A
+     build without the board (OG page) falls back to plain text. */
+  if (ctx.nodes.leak && ctx.nodes.flapCells.length === 0) ctx.nodes.leak.textContent = usd(lost);
   if (ctx.nodes.panelRecovered) ctx.nodes.panelRecovered.textContent = usd(panelRecovered);
+}
+
+/* change 18 (D2): the split-flap painter. Every glyph the board shows is a
+   PURE function of the clock: flap i samples the value function at its own
+   80ms-quantized, 40ms-staggered time; a glyph change between consecutive
+   quanta renders as a mid-flight rotateX. No timers, no stored state — a
+   frame can be replayed from (clock, valueAt) alone. */
+function paintFlaps(ctx: Ctx, clock: number, valueAt: (q: number) => number) {
+  const cells = ctx.nodes.flapCells;
+  if (cells.length === 0) return;
+  const digits = cells.filter((c) => c.digit);
+  const D = digits.length;
+  if (D === 0) return;
+  const pad = (v: number) =>
+    String(Math.max(0, Math.round(v)))
+      .padStart(D, "0")
+      .slice(-D);
+  digits.forEach((c, i) => {
+    /* One COMMON 80ms grid, offset per flap by the 40ms stagger: sampled
+       times are non-increasing left-to-right, so on a descending roll the
+       high-order flaps always show the newer (smaller) value — a composed
+       mid-flight reading can never exceed the value it rolls from (gate
+       24's rule). */
+    const local = clock - FLAP_STAGGER * i;
+    const q = Math.floor(local / FLAP_STEP) * FLAP_STEP;
+    const cur = pad(valueAt(q))[i];
+    const prev = pad(valueAt(q - FLAP_STEP))[i];
+    if (c.face.textContent !== cur) c.face.textContent = cur;
+    if (cur !== prev && local >= 0) {
+      const prog = clamp01((local - q) / FLAP_STEP);
+      c.el.style.transform = `perspective(400px) rotateX(${((1 - prog) * -75).toFixed(1)}deg)`;
+    } else if (c.el.style.transform) {
+      c.el.style.transform = "";
+    }
+  });
 }
 
 function paintFade(ctx: Ctx, o: number) {
@@ -415,14 +471,30 @@ function paintScene(ctx: Ctx, t: number) {
     n.notifyPhone.style.transform = `translateY(${(1 - np) * -140}%)`;
   }
 
-  /* --- One shimmer sweep when the gold count-up completes (C5c). rAF-driven,
-         not a CSS loop; it never touches the figure's own color. --- */
-  if (n.shimmer) {
-    const sp = clamp01((t - SHIMMER_AT) / SHIMMER_DUR);
-    const active = t >= SHIMMER_AT && sp < 1;
-    n.shimmer.style.opacity = active ? "1" : "0";
-    n.shimmer.style.transform = `translateX(${-120 + 240 * sp}%)`;
+  /* --- The sonar rings (change 18, D1): each ring is a pure function of
+         (t - birthBeat) — radius grows to RING_MAX_FACTOR x the device
+         height, opacity falls from RING_MAX_OPACITY, both ease-out. Three
+         beats share two circles; a beat's ring is dead long before its
+         circle is needed again. --- */
+  if (n.sonarRings.length === 2 && n.sonarH > 0) {
+    const live: ({ r: number; o: number } | null)[] = [null, null];
+    RING_BEATS.forEach((beat, bi) => {
+      const e = t - beat;
+      if (e >= 0 && e < RING_DUR) {
+        const p = easeOut(e / RING_DUR);
+        live[bi % 2] = { r: RING_MAX_FACTOR * n.sonarH * p, o: RING_MAX_OPACITY * (1 - p) };
+      }
+    });
+    n.sonarRings.forEach((c, j) => {
+      const a = live[j];
+      c.setAttribute("r", a ? a.r.toFixed(1) : "0");
+      c.setAttribute("opacity", a ? a.o.toFixed(3) : "0");
+    });
   }
+
+  /* --- The SALVAGED stamp (change 18, D3): lands with the row insert,
+         120ms fade on the same clock. --- */
+  if (n.stamp) n.stamp.style.opacity = String(clamp01((tt - CAUGHT_ROW_AT) / STAMP_IN));
 }
 
 function schedule(ctx: Ctx) {
@@ -443,6 +515,7 @@ function park(ctx: Ctx) {
     leakAt(-THREAD_START, ctx.preset.lost),
     panelRecoveredAt(-THREAD_START, ctx.preset.recovered, ctx.preset.caught[0].amount),
   );
+  paintFlaps(ctx, -THREAD_START, (q) => leakAt(q, ctx.preset.lost));
   ctx.root.dataset.t = "0.000";
 }
 
@@ -477,6 +550,12 @@ function tick(ctx: Ctx, now: number) {
         ctx,
         Math.round(tr.from.lost + (tr.target.lost - tr.from.lost) * rp),
         Math.round(tr.from.panelRecovered + (tr.target.panelRecovered - tr.from.panelRecovered) * rp),
+      );
+      /* The flap roll shares the swap's own clock and value curve — the
+         roll DESCENDS to the incoming preset's beat-zero (gate 24's rule),
+         so no flap ever climbs first. */
+      paintFlaps(ctx, e, (q) =>
+        Math.round(tr.from.lost + (tr.target.lost - tr.from.lost) * easeOut(clamp01(q / SWAP_ROLL))),
       );
       ctx.root.dataset.t = "swap";
       schedule(ctx);
@@ -524,6 +603,7 @@ function tick(ctx: Ctx, now: number) {
   paintScene(ctx, t);
   paintFade(ctx, 1);
   paintNumbers(ctx, leakAt(tt, p.lost), panelRecoveredAt(tt, p.recovered, p.caught[0].amount));
+  paintFlaps(ctx, tt, (q) => leakAt(q, p.lost));
   ctx.root.dataset.t = t.toFixed(3);
 
   /* Sound rides the same phase value this frame just painted with. */
@@ -547,8 +627,9 @@ const beatZeroTotals = (p: Preset): Totals => ({
   panelRecovered: panelRecoveredAt(0, p.recovered, p.caught[0].amount),
 });
 
+/* change 18 (A4): square-corner — the CTA keeps the page's one pill. */
 const ghost =
-  "rounded-full border border-teal px-5 py-2.5 text-[13px] font-medium text-teal-bright " +
+  "rounded-[2px] border border-teal px-5 py-2.5 text-[13px] font-medium text-teal-bright " +
   "transition-colors hover:bg-teal/10 outline-none " +
   "focus-visible:ring-2 focus-visible:ring-teal-bright focus-visible:ring-offset-2 focus-visible:ring-offset-abyss";
 
@@ -558,32 +639,17 @@ const buildQuery = (biz: string, name: string) =>
 /* Wayfinding, not headlines (change 13, G3): kicker 12px tracked, title
    Fraunces 28px, muted, 32px inset. Below 1100px the title runs 20px — at
    28px it would sit on the section-1 phone's status row on a 390px screen. */
+/* change 18 (B5): the folio mark — "NO. 1 — THE CALL" in one 12px mono
+   line, the log's page number. The ONLY uppercase-tracked element class on
+   the page (gate 111); the reserve rule from change 16 (content >= 32px
+   below it) stands. */
 function SectionMark({ kicker, title }: { kicker: string; title: string }) {
   return (
     <div data-section-mark className="pointer-events-none absolute left-8 top-8 z-20">
-      {/* change 16 (B2): 0.05em tracking — the 0.3em digits read as gapped
-          typography soup at 12px; the mark block is now RESERVED (sections
-          pad their content >= 32px below its baseline) instead of floating
-          over whatever the section put there. */}
-      <p className="text-[12px] uppercase tracking-[0.05em] text-muted">{kicker}</p>
-      <p className="mt-1 font-display text-[20px] leading-tight text-muted min-[1100px]:text-[28px]">{title}</p>
+      <p data-folio data-figure className="text-[12px] uppercase tracking-[0.04em] text-muted">
+        {kicker} — {title}
+      </p>
     </div>
-  );
-}
-
-/* Section ground (change 13, G2): one radial light source per section, behind
-   its primary object. Static — gate 81 asserts no animation ever rides it. */
-function Glow() {
-  return (
-    <div
-      data-glow
-      aria-hidden="true"
-      className="pointer-events-none absolute left-1/2 top-1/2 z-0 h-[900px] w-[900px] -translate-x-1/2 -translate-y-1/2"
-      style={{
-        background:
-          "radial-gradient(closest-side, color-mix(in srgb, var(--color-surface) 14%, transparent), transparent)",
-      }}
-    />
   );
 }
 
@@ -636,6 +702,7 @@ function SpeakerGlyph({ on }: { on: boolean }) {
 }
 
 function ChevronGlyph() {
+  /* change 18 (A4/C6): a 1px-stroke caret, teal — engraved, not embossed. */
   return (
     <svg
       width="18"
@@ -643,7 +710,7 @@ function ChevronGlyph() {
       viewBox="0 0 18 10"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.8"
+      strokeWidth="1"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -715,6 +782,10 @@ export default function Demo({
       paintScene(ctx, 0);
       paintFade(ctx, 0);
       paintNumbers(ctx, ctx.shown.lost, ctx.shown.panelRecovered);
+      /* The re-rendered flap board arrives showing the incoming preset's
+         SETTLED glyphs — repaint it at the mid-roll value before this
+         commit ever reaches the screen. */
+      paintFlaps(ctx, 0, () => ctx.shown.lost);
     } else if (ctx.armed && !ctx.transition) {
       /* A React commit landing only AFTER the roll already parked (a stalled
          main thread) would leave the parked numbers computed from the stale
@@ -1215,15 +1286,16 @@ export default function Demo({
     });
   };
 
+  /* change 18 (C6/A4): dots are 6px teal-stroke SQUARES now — the rail and
+     the panel switcher speak the same 1px-rule language as the log. */
   const pagerDot = (active: boolean) =>
-    `h-2.5 w-2.5 rounded-full border transition-colors outline-none focus-visible:ring-2 focus-visible:ring-teal-bright ${
-      active ? "border-teal bg-teal" : "border-muted/40 bg-transparent"
+    `h-1.5 w-1.5 rounded-[2px] border border-teal transition-colors outline-none focus-visible:ring-2 focus-visible:ring-teal-bright ${
+      active ? "bg-teal" : "bg-transparent opacity-60"
     }`;
 
-  /* Horizontal panel dots (change 13, G4): 8px, inactive 40%, active teal. */
   const panelDot = (active: boolean) =>
-    `h-2 w-2 rounded-full transition-opacity outline-none focus-visible:ring-2 focus-visible:ring-teal-bright ${
-      active ? "bg-teal opacity-100" : "bg-muted opacity-40"
+    `h-1.5 w-1.5 rounded-[2px] border border-teal transition-opacity outline-none focus-visible:ring-2 focus-visible:ring-teal-bright ${
+      active ? "bg-teal opacity-100" : "bg-transparent opacity-60"
     }`;
 
   return (
@@ -1240,7 +1312,6 @@ export default function Demo({
       {/* ---- SECTION 1 — the call. The phone; at >=1100px the scene type
            sits left of it (change 15, A2), all three lines on the one clock. ---- */}
       <section data-section="call">
-        <Glow />
         <SectionMark {...COPY.sections.call} />
 
         {/* change 16 (B1/B2): below 1100px the right padding clears the
@@ -1249,7 +1320,9 @@ export default function Demo({
             baseline, so the phone can never ride up into the mark. */}
         <div className="relative z-10 flex h-full w-full items-center justify-center gap-16 pb-6 pl-6 pr-14 pt-[112px] min-[1100px]:p-6">
           <div data-scene className="hidden max-w-[30ch] shrink-0 min-[1100px]:block">
-            <p className="font-display text-[96px] font-medium leading-none text-ink lining-nums">
+            {/* change 18 (B4): the clock is a timestamp — it runs in mono
+                like every figure on the page. */}
+            <p data-figure className="text-[96px] font-medium leading-none text-ink">
               {preset.thread[0].time}
             </p>
             {/* Three stacked lines; the engine crossfades opacity on the
@@ -1258,21 +1331,21 @@ export default function Demo({
             <div className="relative mt-5 h-[80px]">
               <p
                 data-scene-line="closed"
-                className="absolute inset-x-0 top-0 font-display text-[28px] italic leading-snug text-muted"
+                className="absolute inset-x-0 top-0 font-display text-[30px] font-normal italic leading-[30px] text-muted"
                 style={{ opacity: 0 }}
               >
                 {COPY.scene.closed}
               </p>
               <p
                 data-scene-line="dialing"
-                className="absolute inset-x-0 top-0 font-display text-[28px] italic leading-snug text-muted"
+                className="absolute inset-x-0 top-0 font-display text-[30px] font-normal italic leading-[30px] text-muted"
                 style={{ opacity: 0 }}
               >
                 {COPY.scene.dialing}
               </p>
               <p
                 data-scene-line="caught"
-                className="absolute inset-x-0 top-0 font-display text-[28px] italic leading-snug text-muted"
+                className="absolute inset-x-0 top-0 font-display text-[30px] font-normal italic leading-[30px] text-muted"
                 style={{ opacity: 1 }}
               >
                 {COPY.scene.caught}
@@ -1281,7 +1354,7 @@ export default function Demo({
           </div>
 
           <div className="w-full max-w-[390px] shrink-0">
-            <Phone preset={preset} bizName={bizName} typingBefore={[2]} />
+            <Phone preset={preset} bizName={bizName} typingBefore={[2]} slab sonar />
           </div>
         </div>
 
@@ -1299,7 +1372,6 @@ export default function Demo({
            phone (the visitor just watched it in section 1). Desktop keeps
            change 14's contained two-up. ---- */}
       <section data-section="save">
-        <Glow />
         <SectionMark {...COPY.sections.save} />
 
         <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pb-8 pl-6 pr-14 pt-[112px] min-[1100px]:px-10 min-[1100px]:pb-6 min-[1100px]:pt-6">
@@ -1312,11 +1384,10 @@ export default function Demo({
                 {/* change 14: 30px on desktop — at 44px the h1 runs four
                     lines in the 40% column and the >=340px phone cannot be
                     contained (availH = 852 - headline). */}
-                {/* change 16 (B6): 26px at 390 — 32px ran four lines in the
-                    rail-guttered column and pushed the ledger's last line
-                    under the fold (gate 98 holds it at <= 3 lines; 28px
-                    still wrapped to four in the 310px column). */}
-                <h1 className="max-w-3xl font-display font-medium leading-[1.12] text-ink text-[26px] min-[1100px]:text-[30px]">
+                {/* change 16 (B6): 26px at 390, <= 3 lines (gate 98).
+                    change 18 (B1/B6): Newsreader 500, -0.01em, lh 1.02;
+                    desktop <= 2 lines. */}
+                <h1 className="max-w-3xl font-display font-medium leading-[1.02] tracking-[-0.01em] text-ink text-[26px] min-[1100px]:text-[26px]">
                   {COPY.headline}
                 </h1>
                 {/* Mobile keeps the sub here; on desktop it lives in the
@@ -1355,7 +1426,7 @@ export default function Demo({
                 </p>
                 {/* The owner card: DOCKED statically in flow, 12px above the
                     panel at every width. */}
-                <div data-notify-ledger className="z-30 mx-auto mb-3 w-[min(92%,440px)]">
+                <div data-notify-ledger className="z-30 mb-2 w-full">
                   <NotifyCard bizName={bizName} entry={preset.caught[0]} />
                 </div>
                 <div data-ledger-panel className="w-full">
@@ -1386,7 +1457,6 @@ export default function Demo({
            carries label + tiles per preset and stays the page-wide
            switcher; dots + cue sit ABOVE the phone on mobile. ---- */}
       <section data-section="yours">
-        <Glow />
         <SectionMark {...COPY.sections.yours} />
 
         <div
@@ -1396,7 +1466,9 @@ export default function Demo({
         >
           <div className="shrink-0 max-w-md min-[1100px]:max-w-[520px]">
             <label className="block">
-              <span className="text-[12px] uppercase tracking-[0.18em] text-muted">{COPY.name.label}</span>
+              {/* change 18 (A3): micro-label de-capped — body case, no
+                  tracking; only folios stay uppercase. */}
+              <span className="text-[13px] text-muted">{COPY.name.label}</span>
               <input
                 data-name-input
                 type="text"
@@ -1426,7 +1498,7 @@ export default function Demo({
               data-yours-phone-fit
               className="order-3 mx-auto mt-2 min-h-0 w-full max-w-[390px] flex-1 min-[1100px]:order-none min-[1100px]:mx-0 min-[1100px]:mt-0 min-[1100px]:h-full min-[1100px]:flex-none"
             >
-              <Phone preset={preset} bizName={bizName} variant="static" staticId={preset.id} skinThread />
+              <Phone preset={preset} bizName={bizName} variant="static" staticId={preset.id} skinThread slab />
             </div>
 
             {/* The switcher IS the track: label + tiles per preset. */}
@@ -1439,27 +1511,29 @@ export default function Demo({
                     data-preset={p.id}
                     className="flex min-h-0 flex-col justify-start min-[1100px]:px-2"
                   >
-                    <p className="font-display text-[28px] font-medium leading-tight text-ink">{p.label}</p>
-                    {/* Three money tiles: ticket gold, missed ink, lost muted
-                        — exactly ONE gold element per panel (gates 79/82). */}
-                    <div className="mt-2 grid grid-cols-2 gap-2 min-[1100px]:mt-5 min-[1100px]:grid-cols-1 min-[1100px]:gap-3">
-                      <div data-tile="ticket" className="rounded-xl border border-line bg-surface p-3 min-[1100px]:p-5">
-                        <span data-ticket data-tile-value className="font-display text-[28px] font-semibold text-gold lining-nums min-[1100px]:text-[56px]">
-                          ${p.ticket}
-                        </span>{" "}
+                    <p className="font-display text-[28px] font-medium leading-[1.02] tracking-[-0.01em] text-ink">{p.label}</p>
+                    {/* change 18 (C2): the tiles are a ruled two-column
+                        table now — label left in body, figure right in
+                        mono. Ticket stays the one gold element per panel
+                        (gates 79/82). */}
+                    <div className="mt-2 border-t border-line min-[1100px]:mt-5">
+                      <div data-tile="ticket" className="flex items-baseline justify-between gap-3 border-b border-line py-2 min-[1100px]:py-3">
                         <span className="text-[13px] text-ink min-[1100px]:text-[17px]">{COPY.yours.ticketSuffix}</span>
+                        <span data-ticket data-tile-value data-figure className="font-medium leading-none text-gold text-[32px] min-[1100px]:text-[56px]">
+                          ${p.ticket}
+                        </span>
                       </div>
-                      <div data-tile="missed" className="rounded-xl border border-line bg-surface p-3 min-[1100px]:p-5">
-                        <span data-tile-value className="font-display text-[28px] font-semibold text-ink lining-nums min-[1100px]:text-[56px]">
-                          {p.missedPerMonth}
-                        </span>{" "}
+                      <div data-tile="missed" className="flex items-baseline justify-between gap-3 border-b border-line py-2 min-[1100px]:py-3">
                         <span className="text-[13px] text-ink min-[1100px]:text-[17px]">{COPY.yours.missedSuffix}</span>
+                        <span data-tile-value data-figure className="font-medium leading-none text-ink text-[32px] min-[1100px]:text-[56px]">
+                          {p.missedPerMonth}
+                        </span>
                       </div>
-                      <div data-tile="lost" className="col-span-2 rounded-xl border border-line bg-surface p-3 min-[1100px]:col-span-1 min-[1100px]:p-5">
-                        <span data-tile-value className="font-display text-[28px] font-semibold text-muted lining-nums min-[1100px]:text-[56px]">
-                          {usd(p.lost)}
-                        </span>{" "}
+                      <div data-tile="lost" className="flex items-baseline justify-between gap-3 border-b border-line py-2 min-[1100px]:py-3">
                         <span className="text-[13px] text-muted min-[1100px]:text-[17px]">{COPY.yours.lostSuffix}</span>
+                        <span data-tile-value data-figure className="font-medium leading-none text-muted text-[32px] min-[1100px]:text-[56px]">
+                          {usd(p.lost)}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -1474,7 +1548,7 @@ export default function Demo({
               className="order-2 mt-2 flex h-14 shrink-0 flex-col items-center justify-center gap-1.5 min-[1100px]:hidden"
             >
               <p
-                className={`rounded-full bg-abyss/80 px-3 py-1 text-[12px] text-muted backdrop-blur transition-opacity duration-500 ${
+                className={`text-[12px] text-muted transition-opacity duration-500 ${
                   yoursCueGone ? "opacity-0" : "opacity-100"
                 }`}
               >
@@ -1499,7 +1573,7 @@ export default function Demo({
           {/* Desktop: dots + cue at the section's bottom center. */}
           <div className="pointer-events-none absolute inset-x-0 bottom-12 z-20 hidden justify-center min-[1100px]:flex">
             <p
-              className={`rounded-full bg-abyss/80 px-3 py-1 text-[12px] text-muted backdrop-blur transition-opacity duration-500 ${
+              className={`text-[12px] text-muted transition-opacity duration-500 ${
                 yoursCueGone ? "opacity-0" : "opacity-100"
               }`}
             >
@@ -1529,21 +1603,24 @@ export default function Demo({
           1-3 — the surface band read as a different page bolted on. The
           border-t stays: a rule is structure, not ground. */}
       <section data-section="math" data-bottom-band className="border-t border-line">
-        <Glow />
         <SectionMark {...COPY.sections.math} />
 
         <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col items-center justify-center gap-10 pl-6 pr-14 text-center min-[1100px]:gap-12 min-[1100px]:px-6">
-          <p data-math className="max-w-[20ch] font-display font-medium leading-[1.12] text-ink [font-size:clamp(40px,6vw,72px)]">
-            {COPY.mathLead}{" "}
-            <span data-math-numeral className="font-semibold text-gold lining-nums">
-              {preset.missedPerMonth}
-            </span>{" "}
-            {COPY.mathMid}{" "}
-            <span data-math-numeral className="font-semibold text-gold lining-nums">
-              ${preset.ticket}
-            </span>{" "}
-            {COPY.mathTail}
-          </p>
+          {/* change 18 (C5): the math line is the ledger's TOTAL — a 2px
+              rule above, 1px below, numerals in mono at display size. */}
+          <div data-total className="w-full border-b border-t-2 border-line py-8 min-[1100px]:py-10">
+            <p data-math className="mx-auto max-w-[20ch] font-display font-medium leading-[1.08] tracking-[-0.01em] text-ink [font-size:clamp(40px,6vw,72px)]">
+              {COPY.mathLead}{" "}
+              <span data-math-numeral data-figure className="font-medium text-gold">
+                {preset.missedPerMonth}
+              </span>{" "}
+              {COPY.mathMid}{" "}
+              <span data-math-numeral data-figure className="font-medium text-gold">
+                ${preset.ticket}
+              </span>{" "}
+              {COPY.mathTail}
+            </p>
+          </div>
 
           {/* One row on desktop: the CTA and the since-install strip beside
               it at 18px ink (S4b) — a standing total, not a footnote. The
@@ -1562,26 +1639,26 @@ export default function Demo({
               <p className="mt-3 text-[13px] text-muted">{COPY.footNote}</p>
             </div>
             <p className="text-[18px] text-ink">
-              {preset.sinceCalls} calls caught ·{" "}
-              <span className="font-semibold">{usd(preset.sinceRecovered)}</span> recovered
+              <span data-figure>{preset.sinceCalls}</span> calls caught ·{" "}
+              <span data-figure className="font-medium">{usd(preset.sinceRecovered)}</span> recovered
             </p>
           </div>
         </div>
 
-        <p className="absolute bottom-8 left-8 z-10 text-[12px] uppercase tracking-[0.3em] text-muted">
+        {/* change 18 (A3): the wordmark sheds its uppercase tracking — only
+            folios stay tracked-caps. */}
+        <p className="absolute bottom-8 left-8 z-10 text-[12px] text-muted">
           {COPY.chrome.og.wordmark}
         </p>
       </section>
 
       {/* ---- The rail (change 15, A3): Share, sound, dots, next-chevron —
            persistent on the right edge in every section. ---- */}
-      {/* change 16 (B1): below 1100px the rail lives inside a 40px right
-          column (36px controls at right: 2px) and every section pads 56px
-          right — nothing renders under it (gate 93). */}
-      <div
-        data-rail
-        className="fixed right-0.5 top-1/2 z-40 flex -translate-y-1/2 flex-col items-center gap-3 min-[1100px]:right-6 min-[1100px]:gap-4"
-      >
+      {/* change 18 (C6/A4): the share + sound controls are a TOP-RIGHT
+          cluster of 28px teal-stroke squares now; the rail keeps only the
+          6px square dots and the 1px caret. change 16's gutter contract
+          (rail inside the 40px right column, content padded 56px) stands. */}
+      <div data-top-cluster className="fixed right-1 top-2 z-40 flex gap-1.5 min-[1100px]:right-6 min-[1100px]:top-6 min-[1100px]:gap-2">
         <button
           data-share
           data-rail-share
@@ -1589,7 +1666,7 @@ export default function Demo({
           onClick={onShare}
           title={COPY.shareLabel}
           aria-label={COPY.a11y.share}
-          className={`flex h-9 w-9 items-center justify-center rounded-full border border-teal outline-none transition-colors focus-visible:ring-2 focus-visible:ring-teal-bright focus-visible:ring-offset-2 focus-visible:ring-offset-abyss min-[1100px]:h-10 min-[1100px]:w-10 ${
+          className={`flex h-7 w-7 items-center justify-center rounded-[2px] border border-teal outline-none transition-colors focus-visible:ring-2 focus-visible:ring-teal-bright focus-visible:ring-offset-2 focus-visible:ring-offset-abyss ${
             share === "copied" ? "bg-teal text-abyss" : "bg-transparent text-teal-bright hover:bg-teal/10"
           }`}
         >
@@ -1604,13 +1681,18 @@ export default function Demo({
           title={soundOn ? COPY.a11y.soundOn : COPY.a11y.soundOff}
           aria-label={soundOn ? COPY.a11y.soundOn : COPY.a11y.soundOff}
           aria-pressed={soundOn}
-          className={`flex h-9 w-9 items-center justify-center rounded-full border border-teal outline-none transition-colors focus-visible:ring-2 focus-visible:ring-teal-bright focus-visible:ring-offset-2 focus-visible:ring-offset-abyss min-[1100px]:h-10 min-[1100px]:w-10 ${
+          className={`flex h-7 w-7 items-center justify-center rounded-[2px] border border-teal outline-none transition-colors focus-visible:ring-2 focus-visible:ring-teal-bright focus-visible:ring-offset-2 focus-visible:ring-offset-abyss ${
             soundOn ? "bg-teal text-abyss" : "bg-transparent text-teal-bright hover:bg-teal/10"
           }`}
         >
           <SpeakerGlyph on={soundOn} />
         </button>
+      </div>
 
+      <div
+        data-rail
+        className="fixed right-0.5 top-1/2 z-40 flex -translate-y-1/2 flex-col items-center gap-3 min-[1100px]:right-6 min-[1100px]:gap-4"
+      >
         <div className="my-1 flex flex-col gap-3">
           {SECTIONS.map((s, i) => (
             <button
@@ -1630,7 +1712,7 @@ export default function Demo({
           type="button"
           onClick={() => goSection(activeSection + 1)}
           aria-label={COPY.a11y.next}
-          className={`flex h-8 w-8 items-center justify-center text-ink opacity-40 outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-teal-bright ${
+          className={`flex h-8 w-8 items-center justify-center text-teal outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-teal-bright ${
             activeSection >= SECTIONS.length - 1 ? "hidden" : ""
           }`}
         >

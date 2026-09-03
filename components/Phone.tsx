@@ -190,27 +190,23 @@ const initialsOf = (name: string) =>
  * device's language.
  */
 export function NotifyCard({ bizName, entry }: { bizName: string; entry: CaughtEntry }) {
+  /* change 18 (C4): a ruled ENTRY, not a card — 1px rule top and bottom,
+     no fill, no radius, no blur. Same content; the Salvage S mark keeps
+     teal (a 4px square now: the log stamps, it doesn't bead). */
   return (
-    <div
-      className="rounded-2xl p-3 font-phone"
-      style={{
-        background: "rgba(9, 17, 31, 0.88)",
-        backdropFilter: "blur(16px)",
-        WebkitBackdropFilter: "blur(16px)",
-      }}
-    >
+    <div className="border-y border-line py-2.5">
       <div className="flex items-center gap-1.5">
-        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal">
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] bg-teal">
           <span className="font-display text-[13px] font-semibold leading-none text-abyss">S</span>
         </span>
         <span className="text-[11px] font-medium text-muted">{COPY.notify.appTag}</span>
         <span className="ml-auto text-[11px] text-muted">{COPY.notify.nowLabel}</span>
       </div>
-      <div className="mt-1.5 truncate text-[14px] font-semibold leading-snug text-ink">
+      <div className="mt-1.5 truncate text-[14px] font-medium leading-snug text-ink">
         {bizName} · {COPY.notify.bookedLabel}
       </div>
       <div className="mt-0.5 truncate text-[13px] leading-snug text-muted">
-        {entry.detail} · ${entry.amount}
+        {entry.detail} · <span data-figure>${entry.amount}</span>
       </div>
     </div>
   );
@@ -371,6 +367,8 @@ export default function Phone({
   variant = "live",
   staticId,
   skinThread = false,
+  slab = false,
+  sonar = false,
 }: {
   preset: Preset;
   /* The effective business name (custom or preset default). Falls back to the
@@ -397,6 +395,15 @@ export default function Phone({
   /* ... and re-skins the thread's own bizName mentions to the effective name
      — a pure substitution inside the approved strings, no new copy. */
   skinThread?: boolean;
+  /* change 18 (C1): the accent slab — a solid band 62% of the device width,
+     centered 18% left of the device center, running the full section height
+     (the section's overflow clips it). It lives INSIDE the device box so it
+     zooms and travels with the phone; painted before the bezel, so the
+     phone breaks its edge. */
+  slab?: boolean;
+  /* change 18 (D1): the sonar ring pair, centered on the screen center,
+     behind the phone. Pure engine-driven SVG — no CSS animation. */
+  sonar?: boolean;
 }) {
   const thread = preset.thread;
   const typing = new Set(typingBefore);
@@ -631,6 +638,31 @@ export default function Phone({
       {...(live ? {} : { "data-phone-static": true })}
       className="relative mx-auto aspect-[9/19.5] w-full max-w-[390px] shrink-0"
     >
+      {/* z -1: the device wrapper creates no stacking context, so the slab
+          and rings escape BEHIND the section's content — a flex `order`ed
+          sibling would otherwise paint the full-height band over the
+          section's text (change 18 review, lens 1 finding 1). */}
+      {slab && (
+        <div
+          aria-hidden="true"
+          data-accent-slab
+          className="absolute left-[1%] -z-1 w-[62%] bg-surface"
+          style={{ top: "-150vh", bottom: "-150vh" }}
+        />
+      )}
+      {sonar && (
+        <svg
+          aria-hidden="true"
+          data-sonar
+          className="pointer-events-none absolute left-1/2 top-1/2 -z-1 -translate-x-1/2 -translate-y-1/2"
+          width="2800"
+          height="2800"
+          viewBox="0 0 2800 2800"
+        >
+          <circle data-sonar-ring="0" cx="1400" cy="1400" r="0" fill="none" stroke="var(--color-teal)" strokeWidth="1" opacity="0" />
+          <circle data-sonar-ring="1" cx="1400" cy="1400" r="0" fill="none" stroke="var(--color-teal)" strokeWidth="1" opacity="0" />
+        </svg>
+      )}
       {/* change 17 (B1): hardware nubs — two volume (44px, 14px gap) left,
           one power (64px) right, 6px proud of the frame, one step lighter
           than the bezel. Aluminum, not UI. */}

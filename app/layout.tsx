@@ -1,21 +1,35 @@
 import type { Metadata } from "next";
-import { Fraunces, Inter } from "next/font/google";
+import { IBM_Plex_Mono, IBM_Plex_Sans, Newsreader } from "next/font/google";
 import { META } from "@/lib/client.config";
 import "./globals.css";
 
-/* Change 10: Fraunces replaces Cormorant Garamond as the display face.
-   Variable, with the optical-size and SOFT axes loaded — the warmth comes
-   from font-variation-settings in globals.css, not a separate weight file. */
-const fraunces = Fraunces({
-  variable: "--font-fraunces",
+/* change 18 — FONTS (Andy's veto block, KEEP_BRAND_FONTS = false):
+   display Newsreader (opsz variable, 400/500 + italic 400), body IBM Plex
+   Sans (400/500), figures IBM Plex Mono (400/500) for EVERY number,
+   timestamp, date, phone number, and currency outside the phone screen —
+   tabular-nums, wired through the [data-figure] contract in globals.css.
+   The phone screen keeps the system stack. To restore the brand pack set
+   KEEP_BRAND_FONTS = true and swap back Fraunces/Inter here (mono figures
+   stay regardless — they are what makes a log a log). */
+const newsreader = Newsreader({
+  variable: "--font-newsreader",
   subsets: ["latin"],
-  axes: ["opsz", "SOFT"],
+  style: ["normal", "italic"],
+  axes: ["opsz"],
   display: "swap",
 });
 
-const inter = Inter({
-  variable: "--font-inter",
+const plexSans = IBM_Plex_Sans({
+  variable: "--font-plex-sans",
   subsets: ["latin"],
+  weight: ["400", "500"],
+  display: "swap",
+});
+
+const plexMono = IBM_Plex_Mono({
+  variable: "--font-plex-mono",
+  subsets: ["latin"],
+  weight: ["400", "500"],
   display: "swap",
 });
 
@@ -41,7 +55,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${fraunces.variable} ${inter.variable}`}>
+    <html lang="en" className={`${newsreader.variable} ${plexSans.variable} ${plexMono.variable}`}>
       <body className="bg-abyss text-ink font-body antialiased">{children}</body>
     </html>
   );

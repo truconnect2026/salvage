@@ -110,6 +110,51 @@ an intermediate panel chaining correctly; name debounce and Share during
 queued transitions; playback re-arm on preset switch and fresh restart on
 returning to section 1.
 
+## Change 17 — adversarial review (1 lens)
+
+Lens: WebKit 26 at 390x844 and 375x667 (the closest available stand-in for
+real iOS Safari on this machine — change-12 precedent; real-device behaviors
+remain speculative). Anything overlapping, clipped, hidden, or visibly
+not-iOS? Confirmed findings fixed and re-measured before the change-17
+commit.
+
+| # | Finding | Verdict |
+|---|---------|---------|
+| 1 | **WebKit legacy zoom inflated the mobile save-stack** — zoomed subtree rendered ~15% taller than design x factor at SE-class factors (2x at 0.33), clipping the ledger's last line below the fold at 375x667 and 320x568. | **Fixed.** The stack fit uses `transform: scale()` (geometrically exact in every engine) instead of `zoom`; measured within 1px of Chromium at 320/375/390/414 widths, last line 41-64px above the fold. |
+| 2 | The Replay pill sat ON the device's bottom-left bezel corner at 375x667 (37px overlap) — the 140px section-1 reserve did not account for the control band on short viewports. | **Fixed.** Below 720px of height the device cap reserve grows to 220px; measured 0 intersection at 375x667 and 320x568. |
+| 3 | The closing confirmation banner slides over the contact header. | **Traced clean** — that is exactly how an iOS banner behaves; no change. |
+
+Traced clean in WebKit at both sizes: the six-button grid, nubs, notch,
+status glyphs, two-line banner clamp, thread mask, "Today" marker, and
+surface-3 bubbles; the design-scale screen zoom applies (0.73 / 0.56) with
+the screen contained in the bezel.
+
+## Change 18 — adversarial review (2 lenses)
+
+### Lens 1 — "Does anything still read as a generic dashboard?"
+
+| # | Finding | Verdict |
+|---|---------|---------|
+| 1 | **The accent slab painted OVER section-3's text** — flex `order` puts the phone wrapper last in paint order, so the full-height band covered the name field and tile labels. | **Fixed.** Slab and sonar carry `z-index: -1`; the device wrapper creates no stacking context, so both escape behind the section content. Re-measured: labels legible over the band. |
+| 2 | The desktop headline ran three lines at 30px — B6 caps it at two at 1440. | **Fixed.** 26px at 1440 renders exactly 2 line boxes (measured). |
+| 3 | Named as still-generic, accepted for now: the s2 sub-headline still floats like SaaS hero copy above the notify entry (change 19's comprehension copy reworks that block), and the share-fallback input keeps its 8px input radius (a control, inside gate 109's allowance). | **Documented.** |
+
+### Lens 2 — "Do the sonar and split-flap derive from the single rAF phase?"
+
+Mechanically held by gate 119 (zero timer/rAF tokens outside the engine
+module; zero CSS animations on either component — probe AH proves the
+detector) and gate 114's closed-form radius check. Walked by the reviewer:
+the sonar paints in `paintScene(t)`; the flaps paint in the playback tick
+(thread clock), the swap branch (the rAF-stamped transition clock), and
+`park()` — every glyph and rotateX is a pure function of (clock, valueAt),
+replayable from a single frame. The flap grid quantizes all flaps onto ONE
+80ms grid (stagger offsets the sample point, not the grid), so a descending
+roll can never compose a mid-flight reading above the value it rolls from —
+the change-10 no-climb rule (gate 24) holds through the board. Honest
+deviation: the brief's gate 114 sampled "two rings at t=1.9", but D1's own
+coordinates (births 0.2/1.4/2.6, life 1.4s) leave one ring alive there; the
+gate samples the two-alive claim inside a real overlap window (t≈1.5).
+
 ## Change 15 — adversarial review (1 lens)
 
 Lens: is there ANY code path where audio is scheduled from a clock other
