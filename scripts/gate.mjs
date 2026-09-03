@@ -2372,6 +2372,11 @@ if (!chromium) {
     const page = await ctx.newPage();
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
+    /* change 24: the non-default panels hydrate from the JSON script tag —
+       wait for the filled track before counting anything per panel. */
+    await page.waitForFunction((want) => document.querySelectorAll("[data-panel]").length >= want, presets.length, {
+      timeout: 15000,
+    });
 
     const g = await page.evaluate(() => {
       const device = document.querySelector('[data-section="save"] [data-phone-device]');
