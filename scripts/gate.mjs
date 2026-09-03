@@ -312,6 +312,10 @@ retired(73, "change 15 (A3) replaced the settled-gated down-cue with the persist
 retired(75, "change 15 (A1) removed the phone from mobile section 2 — there is no section-2 mobile device to compare");
 retired(81, "change 18 (A1) killed every radial glow — there is no [data-glow] left to freeze; gate 109 asserts the absence");
 retired(
+  108,
+  "Lighthouse LCP includes simulated hydration cost on an already-painted SSR element; replaced by 150/151",
+);
+retired(
   87,
   "change 18 (C1/C2) put the accent slab behind the section-3 phone and rebuilt the tiles as a ruled table — the change-15 tile/phone geometry this froze no longer describes the layout; gates 79 and 94 carry the surviving claims",
 );
@@ -534,11 +538,11 @@ const BROWSER_GATES = [
   74, 76, 77, 78, 79, 80, 82, 83,
   84, 85, 86, 88, 89, 90,
   91, 92, 93, 94, 95, 96, 97, 98, 99, 100,
-  101, 102, 103, 104, 105, 106, 107, 108,
+  101, 102, 103, 104, 105, 106, 107,
   109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120,
   121, 122, 123, 124, 125, 126, 127, 128, 129, 130,
   131, 132, 133, 134, 135, 136, 137, 138, 139,
-  140, 141, 142, 143, 144, 145, 146, 147, 148, 149,
+  140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151,
 ];
 
 if (!chromium) {
@@ -3573,19 +3577,48 @@ if (!chromium) {
     await ctx.close();
   });
 
-  /* --- 108: the Lighthouse budget, live URL only. Local runs cannot stand
-         in for the deployed CDN path, so the gate asserts only against
-         https bases; the deploy step's live re-gate is where it bites. --- */
+  /* --- 150 + 151: the perf budget, live URL only (gate 108 retired —
+         Lighthouse's LCP simulates hydration cost on an already-painted
+         SSR element; 150 measures the PAINT, 151 keeps Lighthouse for the
+         score and CLS). Local runs cannot stand in for the deployed CDN
+         path, so both assert only against https bases. --- */
   await block("perf-17", async () => {
     if (!base.startsWith("https://")) {
-      check(
-        108,
-        "Lighthouse mobile LCP <= 2.5s, CLS <= 0.05",
-        true,
-        "live-only gate: asserted on the deployed URL re-gate, not localhost",
-      );
+      check(150, "observed LCP <= 1.6s", true, "live-only gate: asserted on the deployed URL re-gate, not localhost");
+      check(151, "Lighthouse perf >= 75, CLS <= 0.05", true, "live-only gate: asserted on the deployed URL re-gate, not localhost");
       return;
     }
+
+    /* 150: the rendered truth — a buffered PerformanceObserver under the
+       same Moto-class profile (slow 4G, 4x CPU) on the live URL. */
+    const ctx150 = await browser.newContext({ viewport: { width: 412, height: 823 } });
+    const page150 = await ctx150.newPage();
+    const cdp150 = await ctx150.newCDPSession(page150);
+    await cdp150.send("Network.emulateNetworkConditions", {
+      offline: false,
+      latency: 150,
+      downloadThroughput: (1.6 * 1024 * 1024) / 8,
+      uploadThroughput: (750 * 1024) / 8,
+    });
+    await cdp150.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+    await page150.addInitScript(() => {
+      window.__lcp = 0;
+      new PerformanceObserver((l) => {
+        for (const e of l.getEntries()) window.__lcp = Math.round(e.startTime);
+      }).observe({ type: "largest-contentful-paint", buffered: true });
+    });
+    await page150.goto(base, { waitUntil: "load" });
+    await page150.waitForTimeout(5000);
+    const lcpObserved = await page150.evaluate(() => window.__lcp);
+    await ctx150.close();
+    check(
+      150,
+      "observed LCP (buffered PerformanceObserver, slow-4G + 4x CPU, live) <= 1.6s",
+      lcpObserved > 0 && lcpObserved <= 1600,
+      `observed LCP ${lcpObserved}ms (need > 0 and <= 1600)`,
+    );
+
+    /* 151: Lighthouse keeps the score + CLS watch. */
     let lighthouse, launcher;
     try {
       const req = createRequire(import.meta.url);
@@ -3594,7 +3627,7 @@ if (!chromium) {
       lighthouse = (await import(pathToFileURL(req.resolve("lighthouse")).href)).default;
       launcher = req("chrome-launcher");
     } catch (err) {
-      check(108, "Lighthouse mobile LCP <= 2.5s, CLS <= 0.05", false, `lighthouse unavailable: ${err.message}`);
+      check(151, "Lighthouse perf >= 75, CLS <= 0.05", false, `lighthouse unavailable: ${err.message}`);
       return;
     }
     const chrome = await launcher.launch({ chromeFlags: ["--headless=new", "--no-sandbox"] });
@@ -3605,14 +3638,14 @@ if (!chromium) {
         output: "json",
       });
       const a = result.lhr.audits;
-      const lcp = a["largest-contentful-paint"].numericValue;
       const cls = a["cumulative-layout-shift"].numericValue;
+      const score = Math.round((result.lhr.categories.performance?.score ?? 0) * 100);
       check(
-        108,
-        "Lighthouse mobile (Moto G Power, slow 4G): LCP <= 2.5s, CLS <= 0.05",
-        lcp <= 2500 && cls <= 0.05,
-        `LCP ${(lcp / 1000).toFixed(2)}s (need <= 2.5s), CLS ${cls.toFixed(3)} (need <= 0.05), ` +
-          `perf score ${Math.round((result.lhr.categories.performance?.score ?? 0) * 100)}`,
+        151,
+        "Lighthouse mobile (Moto G Power, slow 4G): perf score >= 75, CLS <= 0.05",
+        score >= 75 && cls <= 0.05,
+        `perf score ${score} (need >= 75), CLS ${cls.toFixed(3)} (need <= 0.05), ` +
+          `simulated LCP ${(a["largest-contentful-paint"].numericValue / 1000).toFixed(2)}s (informational)`,
       );
     } finally {
       await chrome.kill();
