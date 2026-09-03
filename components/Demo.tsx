@@ -910,15 +910,17 @@ export default function Demo({
       return;
     }
 
-    /* change 17 (E1): the phone screens and the section-1 scene caption
-       hold at opacity 0 until the fonts have settled, then fade in over
-       200ms — nothing pops mid-glyph-swap. Reduced motion never hides
-       (the branch above already returned); no-JS never hides (these
-       styles are set here, client-side, not in the SSR markup). */
+    /* change 17 (E1), re-scoped by change 22: ONLY web-font text waits for
+       fonts.ready — the captions, folio marks, and headline (Newsreader /
+       Plex). The phone screen is the system stack and paints on the FIRST
+       frame; gating it was what pushed LCP past the fonts. Reduced motion
+       never hides (the branch above already returned); no-JS never hides
+       (these styles are set here, client-side, not in the SSR markup). */
     const fontFade = [
-      ...root.querySelectorAll<HTMLElement>("[data-phone-screen]"),
       ...root.querySelectorAll<HTMLElement>("[data-scene]"),
       ...root.querySelectorAll<HTMLElement>("[data-scene-mobile]"),
+      ...root.querySelectorAll<HTMLElement>("[data-section-mark]"),
+      ...root.querySelectorAll<HTMLElement>("h1"),
     ];
     /* Hide INSTANTLY (this layout effect runs before the hydration paint,
        so the SSR frame never flashes), then transition only the fade-IN. */

@@ -537,7 +537,7 @@ const BROWSER_GATES = [
   109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120,
   121, 122, 123, 124, 125, 126, 127, 128, 129, 130,
   131, 132, 133, 134, 135, 136, 137, 138, 139,
-  140, 141, 142, 143, 144, 145, 146,
+  140, 141, 142, 143, 144, 145, 146, 147,
 ];
 
 if (!chromium) {
@@ -3545,19 +3545,29 @@ if (!chromium) {
     });
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await waitHydrated(page);
-    const before = await page.evaluate(
-      () => getComputedStyle(document.querySelector('[data-section="call"] [data-phone-screen]')).opacity,
-    );
+    /* Amended (change 22): the phone is the SYSTEM stack — it paints on
+       frame one; only the web-font text (caption, folios, headline) waits
+       for fonts.ready. */
+    const read107 = () =>
+      page.evaluate(() => ({
+        screen: getComputedStyle(document.querySelector('[data-section="call"] [data-phone-screen]')).opacity,
+        caption: getComputedStyle(document.querySelector("[data-scene]")).opacity,
+        folio: getComputedStyle(document.querySelector("[data-section-mark]")).opacity,
+      }));
+    const before = await read107();
     await page.evaluate(() => window.__releaseFonts());
     await page.waitForTimeout(500);
-    const after = await page.evaluate(
-      () => getComputedStyle(document.querySelector('[data-section="call"] [data-phone-screen]')).opacity,
-    );
+    const after = await read107();
     check(
       107,
-      "phone screen opacity 0 before fonts.ready (held stub) and 1 after it resolves",
-      before === "0" && after === "1",
-      `before ${JSON.stringify(before)} (need "0"), after ${JSON.stringify(after)} (need "1")`,
+      "phone screen opacity === 1 BEFORE fonts.ready (held stub); caption + folio hold at 0 and fade to 1 after it resolves",
+      before.screen === "1" &&
+        before.caption === "0" &&
+        before.folio === "0" &&
+        after.screen === "1" &&
+        after.caption === "1" &&
+        after.folio === "1",
+      `before ${JSON.stringify(before)} (screen must already be "1"); after ${JSON.stringify(after)} (all "1")`,
     );
     await ctx.close();
   });
@@ -4775,6 +4785,53 @@ if (!chromium) {
         /^https:\/\//.test(ctaHref) &&
         /^https:\/\/[^/]+$/.test(shareOrigin),
       `smsHref ${JSON.stringify(smsHref)}; phone ${JSON.stringify(phoneText)}; cta ${JSON.stringify(ctaHref)}; origin ${JSON.stringify(shareOrigin)}`,
+    );
+  });
+
+  /* --- 147: change 22 — the display + mono faces are PRELOADED. The
+         expected URLs come from the page's own inlined @font-face rules —
+         never a hardcoded hash. --- */
+  await block("preload-22", async () => {
+    const res = await fetch(base + "/", { headers: { "cache-control": "no-cache" } });
+    const raw = await res.text();
+    const preloads = [...raw.matchAll(/<link([^>]*rel="preload"[^>]*)>/g)]
+      .map((m) => m[1])
+      .filter((attrs) => attrs.includes('as="font"'))
+      .map((attrs) => ({
+        href: (attrs.match(/href="([^"]+)"/) ?? [])[1] ?? "",
+        crossorigin: /crossorigin/i.test(attrs),
+      }));
+    /* Family -> woff2 URLs, from the @font-face blocks the build inlined. */
+    const faceUrls = (family) => {
+      const urls = new Set();
+      for (const m of raw.matchAll(/@font-face\s*\{([^}]+)\}/g)) {
+        const body = m[1];
+        if (!new RegExp(`font-family:\\s*'?${family}'?`, "i").test(body)) continue;
+        for (const u of body.matchAll(/url\((\/_next\/static\/media\/[^)]+\.woff2)\)/g)) urls.add(u[1]);
+      }
+      return [...urls];
+    };
+    const display = faceUrls("Newsreader");
+    const mono = faceUrls("IBM Plex Mono");
+    /* The @font-face rules list EVERY unicode-range subset (latin-ext,
+       cyrillic, …); next/font's manifest marks only the latin faces for
+       preload. The claim: at least one Newsreader and one Plex Mono face
+       is preloaded, every font preload is crossorigin, and every preload
+       matches a face the CSS actually declares. */
+    const hit = (urls) => preloads.filter((p) => urls.includes(p.href));
+    const known = [...display, ...mono, ...faceUrls("IBM Plex Sans")];
+    const strays = preloads.filter((p) => !known.includes(p.href));
+    check(
+      147,
+      'head carries as="font" crossorigin preloads for the display (Newsreader) and mono (IBM Plex Mono) faces, all matching declared @font-face URLs',
+      preloads.length > 0 &&
+        preloads.every((p) => p.crossorigin) &&
+        hit(display).length >= 1 &&
+        hit(mono).length >= 1 &&
+        strays.length === 0,
+      `${preloads.length} font preload(s), all crossorigin ${preloads.every((p) => p.crossorigin)}; ` +
+        `display hits ${hit(display).length}/${display.length} faces, mono hits ${hit(mono).length}/${mono.length}; ` +
+        `strays ${JSON.stringify(strays.map((p) => p.href.slice(-30)))}`,
     );
   });
 

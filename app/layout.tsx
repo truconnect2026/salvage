@@ -1,8 +1,35 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Newsreader } from "next/font/google";
 import { META, SITE } from "@/lib/client.config";
 import "./globals.css";
+
+/* change 22: this Next build emits NO font preload links of its own (the
+   change-17 finding), so the layout reads next/font's OWN manifest — never
+   a hardcoded hash — and preloads every face the page entry declares
+   (Newsreader normal+italic, Plex Sans, Plex Mono). The manifest ships in
+   .next/server, so it is traced into the deployed function. */
+let fontFiles: string[] | null = null;
+function fontPreloads(): string[] {
+  if (fontFiles) return fontFiles;
+  try {
+    const manifest = JSON.parse(
+      readFileSync(join(process.cwd(), ".next", "server", "next-font-manifest.json"), "utf8"),
+    ) as { app?: Record<string, string[]> };
+    const files = new Set<string>();
+    for (const [entry, list] of Object.entries(manifest.app ?? {})) {
+      if (!entry.endsWith("/app/page")) continue;
+      for (const f of list) if (f.endsWith(".woff2")) files.add(`/_next/${f}`);
+    }
+    fontFiles = [...files];
+  } catch {
+    fontFiles = [];
+  }
+  return fontFiles;
+}
 
 /* change 18 — FONTS (Andy's veto block, KEEP_BRAND_FONTS = false):
    display Newsreader (opsz variable, 400/500 + italic 400), body IBM Plex
@@ -60,6 +87,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${newsreader.variable} ${plexSans.variable} ${plexMono.variable}`}>
       <body className="bg-abyss text-ink font-body antialiased">
+        {/* React hoists preload links rendered anywhere into <head>. */}
+        {fontPreloads().map((href) => (
+          <link key={href} rel="preload" href={href} as="font" type="font/woff2" crossOrigin="anonymous" />
+        ))}
         {children}
         <Analytics />
       </body>
