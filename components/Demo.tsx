@@ -273,6 +273,10 @@ type Ctx = {
   announced: boolean;
   toastLatched: boolean;
   fireToast: () => void;
+  /* change 27 (C2): the banner unmounts 2.6s after it lands (4.7 + 2.6 =
+     7.3); park/replay remount it for the next run. */
+  bannerLatched: boolean;
+  setBannerGone: (gone: boolean) => void;
 };
 
 /* Beat crossings -> Web Audio schedules, on the rAF phase and nothing else.
@@ -573,6 +577,8 @@ function park(ctx: Ctx) {
   ctx.audio.lastT = -1;
   ctx.caretLatched = false;
   ctx.setCaretBob(false);
+  ctx.bannerLatched = false;
+  ctx.setBannerGone(false);
   paintScene(ctx, 0);
   paintFade(ctx, 1);
   paintNumbers(
@@ -701,6 +707,12 @@ function tick(ctx: Ctx, now: number) {
     ctx.caretLatched = true;
     ctx.setCaretBob(true);
   }
+  /* change 27 (C2): the banner leaves the DOM 2.6s after its landing
+     (BANNER_AT 4.4 + BANNER_IN 0.3 + 2.6). Gate 166. */
+  if (!ctx.bannerLatched && t >= 7.3) {
+    ctx.bannerLatched = true;
+    ctx.setBannerGone(true);
+  }
   if (!ctx.toastLatched && t >= 0.5) {
     ctx.toastLatched = true;
     ctx.fireToast();
@@ -752,7 +764,7 @@ const buildQuery = (biz: string, name: string, refDjl = false) =>
 function SectionMark({ kicker, title }: { kicker: string; title: string }) {
   return (
     <div data-section-mark className="pointer-events-none absolute left-8 top-8 z-20">
-      <p data-folio data-figure data-ink className="text-[13px] uppercase tracking-[0.04em] text-muted" style={{ transitionDuration: "200ms" }}>
+      <p data-folio data-figure data-ink className="text-[13px] uppercase tracking-[0.04em] text-muted min-[1100px]:text-[15px]" style={{ transitionDuration: "200ms" }}>
         {kicker} — {title}
       </p>
     </div>
@@ -861,6 +873,9 @@ export default function Demo({
   /* One-shot swipe cue: shown when section 3 first becomes active, dismissed
      by the first horizontal scroll or a 4s timeout. */
   const [yoursCueGone, setYoursCueGone] = useState(false);
+  /* change 27 (C2): the banner's DOM presence — the engine latches it gone
+     at t=7.3; park/replay flip it back. */
+  const [bannerGone, setBannerGone] = useState(false);
   /* Sound (change 15, B2): off until the rail toggle's tap. Restored from
      sessionStorage in the mount effect — never under reduced motion. */
   const [soundOn, setSoundOn] = useState(false);
@@ -970,6 +985,14 @@ export default function Demo({
     ctx.nodes = collect(ctx.root);
   }, [name]);
 
+  /* change 27 (C2): the banner mounts and unmounts mid-run — re-collect so
+     the engine never paints a detached node and always finds a fresh one. */
+  useLayoutEffect(() => {
+    const ctx = ctxRef.current;
+    if (!ctx) return;
+    ctx.nodes = collect(ctx.root);
+  }, [bannerGone]);
+
   /* Mount. Reduced motion means zero timers: the SSR settled state stands.
      Otherwise the clock PARKS at t=0 (change 12) — the section observer
      below starts it when the call section is >= 60% visible. */
@@ -996,6 +1019,8 @@ export default function Demo({
       setCaretBob,
       announced: false,
       toastLatched: false,
+      bannerLatched: false,
+      setBannerGone,
       fireToast: () => {
         let seen = false;
         try {
@@ -1427,6 +1452,8 @@ export default function Demo({
     ctx.audio.lastT = -1;
     ctx.caretLatched = false;
     setCaretBob(false);
+    ctx.bannerLatched = false;
+    setBannerGone(false);
     schedule(ctx);
   };
 
@@ -1564,7 +1591,7 @@ export default function Demo({
   /* change 18 (C6/A4): dots are 6px teal-stroke SQUARES now — the rail and
      the panel switcher speak the same 1px-rule language as the log. */
   const pagerDot = (active: boolean) =>
-    `h-1.5 w-1.5 rounded-[2px] border border-teal transition-colors outline-none focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
+    `h-[7px] w-[7px] rounded-[2px] border border-teal transition-colors outline-none min-[1100px]:h-2 min-[1100px]:w-2 focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
       active ? "bg-teal" : "bg-transparent opacity-60"
     }`;
 
@@ -1595,34 +1622,38 @@ export default function Demo({
             40px rail column (56px total) and the top padding reserves the
             section mark's block — content starts >= 32px below its
             baseline, so the phone can never ride up into the mark. */}
-        <div className="relative z-10 flex h-full w-full items-center justify-center gap-16 pb-6 pl-6 pr-14 pt-[112px] min-[1100px]:p-6">
-          <div data-scene data-client-world className="hidden max-w-[30ch] shrink-0 min-[1100px]:block">
+        {/* change 27 (B1): >=1100 a [1fr_auto_1fr] grid — the DEVICE is the
+            centered column, the scene type right-aligned in the left third,
+            vertically centered on the phone. */}
+        <div className="relative z-10 flex h-full w-full items-center justify-center gap-16 pb-6 pl-6 pr-14 pt-[112px] min-[1100px]:grid min-[1100px]:grid-cols-[1fr_auto_1fr] min-[1100px]:gap-x-10 min-[1100px]:p-6">
+          <div data-scene data-client-world className="hidden shrink-0 min-[1100px]:block min-[1100px]:justify-self-end min-[1100px]:self-center min-[1100px]:-translate-y-8">
             {/* change 18 (B4): the clock is a timestamp — it runs in mono
-                like every figure on the page. */}
-            <p data-figure className="text-[96px] font-medium leading-none text-ink">
+                like every figure on the page. change 27 (A): 160px — it
+                wraps at the space into a clock lockup. */}
+            <p data-figure className="text-[160px] font-medium leading-none text-ink">
               {preset.thread[0].time}
             </p>
             {/* Three stacked lines; the engine crossfades opacity on the
                 miss (3.6) and the thread's first beat (5.6). SSR seeds the
                 settled state — "caught" — as the no-JS floor. */}
-            <div className="relative mt-5 h-[80px]">
+            <div className="relative mt-5 h-[88px] max-w-[30ch] text-[32px]">
               <p
                 data-scene-line="closed"
-                className="absolute inset-x-0 top-0 font-caption text-[30px] font-normal italic leading-[30px] text-ink"
+                className="absolute inset-x-0 top-0 font-caption text-[32px] font-normal italic leading-[36px] text-ink"
                 style={{ opacity: 0 }}
               >
                 {COPY.scene.closed}
               </p>
               <p
                 data-scene-line="dialing"
-                className="absolute inset-x-0 top-0 font-caption text-[30px] font-normal italic leading-[30px] text-ink"
+                className="absolute inset-x-0 top-0 font-caption text-[32px] font-normal italic leading-[36px] text-ink"
                 style={{ opacity: 0 }}
               >
                 {COPY.scene.dialing}
               </p>
               <p
                 data-scene-line="caught"
-                className="absolute inset-x-0 top-0 font-caption text-[30px] font-normal italic leading-[30px] text-ink"
+                className="absolute inset-x-0 top-0 font-caption text-[32px] font-normal italic leading-[36px] text-ink"
                 style={{ opacity: 1 }}
               >
                 {COPY.scene.mobile.caught.pre}
@@ -1632,7 +1663,10 @@ export default function Demo({
             </div>
           </div>
 
-          <div className="w-full max-w-[390px] shrink-0">
+          {/* change 27 (B1): the stage column carries an explicit width — a
+              shrink-wrapped grid column gives the aspect-boxed device
+              nothing to size against (globals sets 82dvh * 9/19.5). */}
+          <div data-call-stage className="w-full max-w-[390px] shrink-0">
             {/* change 19 (B1): the mobile caption — Newsreader italic 22px,
                 centered above the phone, height reserved, riding the same
                 three beats as the desktop scene type (same slots, one
@@ -1662,7 +1696,7 @@ export default function Demo({
                 {COPY.scene.mobile.caught.post}
               </p>
             </div>
-            <Phone preset={preset} bizName={bizName} typingBefore={[2]} slab sonar />
+            <Phone preset={preset} bizName={bizName} typingBefore={[2]} slab sonar showBanner={!bannerGone} />
             {/* change 26 (C7): the settled pair — centered under the
                 phone, 24px below the bezel, 12px apart. The engine lands
                 them at settle. */}
@@ -1675,6 +1709,7 @@ export default function Demo({
               </button>
             </div>
           </div>
+          <div aria-hidden="true" className="hidden min-[1100px]:block" />
         </div>
       </section>
 
@@ -1685,10 +1720,10 @@ export default function Demo({
       <section data-section="save" data-entry-fx={fxReady ? (entered[1] ? "run" : "pending") : undefined}>
         <SectionMark {...COPY.sections.save} />
 
-        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pb-8 pl-6 pr-14 pt-[112px] min-[1100px]:px-10 min-[1100px]:pb-6 min-[1100px]:pt-6">
+        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pb-8 pl-6 pr-14 pt-[112px] min-[1100px]:max-w-[1360px] min-[1100px]:px-10 min-[1100px]:pb-6 min-[1100px]:pt-6">
           <div
             data-save-grid
-            className="flex min-h-0 w-full flex-1 flex-col min-[1100px]:grid min-[1100px]:grid-cols-[2fr_3fr] min-[1100px]:grid-rows-[auto_minmax(0,1fr)] min-[1100px]:items-start min-[1100px]:gap-x-12"
+            className="flex min-h-0 w-full flex-1 flex-col min-[1100px]:grid min-[1100px]:grid-cols-[38fr_62fr] min-[1100px]:grid-rows-[auto_minmax(0,1fr)] min-[1100px]:items-start min-[1100px]:gap-x-12"
           >
               {/* change 26 (D1): the headline lives in the LEDGER's column
                   on desktop — one left edge for headline, sub, note, card,
@@ -1700,7 +1735,7 @@ export default function Demo({
                 {/* change 16 (B6): 26px at 390, <= 3 lines (gate 98).
                     change 18 (B1/B6): Newsreader 500, -0.01em, lh 1.02;
                     desktop <= 2 lines. */}
-                <h1 className="max-w-3xl font-display font-medium leading-[1.08] tracking-[-0.01em] text-ink text-[26px] min-[1100px]:text-[26px]">
+                <h1 className="max-w-3xl font-display font-medium leading-[1.08] tracking-[-0.01em] text-ink text-[26px] min-[1100px]:text-[56px]">
                   {COPY.headline.split(/(?<=\.)\s+/).map((line, i) => (
                     <span
                       key={line}
@@ -1746,7 +1781,7 @@ export default function Demo({
                     the left column so the phone's height budget closes at a
                     >=340px width. Gate 33 accepts whichever [data-sub] is
                     visible. */}
-                <p data-sub data-ink className="hidden text-[16px] leading-relaxed text-muted min-[1100px]:block">
+                <p data-sub data-ink className="hidden text-[17px] leading-relaxed text-muted min-[1100px]:block">
                   {COPY.sub}
                 </p>
                 <p data-fictional data-ink className="mb-3 mt-0.5 hidden font-caption text-[12px] italic text-muted min-[1100px]:block">
@@ -1757,8 +1792,27 @@ export default function Demo({
                 <div data-notify-ledger data-ink className="z-30 mb-2 w-full">
                   <NotifyCard bizName={bizName} entry={preset.caught[0]} />
                 </div>
+                {/* change 27 (B2): >=1100 the ledger is an app on a TABLET —
+                    a 10px aluminum frame at a 28px radius, specular light
+                    falling from the top-left, the panel as its screen. The
+                    frame sits a step above the abyss so it reads at 1x. */}
                 <div data-ledger-panel className="w-full">
-                  <Ledger preset={preset} bizName={bizName} dates={dates} />
+                  <div
+                    data-ledger-bezel
+                    className="relative min-[1100px]:rounded-[28px] min-[1100px]:border min-[1100px]:border-line/70 min-[1100px]:bg-[#111D30] min-[1100px]:p-[10px] min-[1100px]:shadow-[0_40px_60px_rgba(0,0,0,0.35),0_4px_6px_rgba(0,0,0,0.6)]"
+                  >
+                    <div
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0 hidden rounded-[28px] min-[1100px]:block"
+                      style={{
+                        background:
+                          "linear-gradient(133deg, rgba(233,238,244,0.22), rgba(233,238,244,0.05) 24%, transparent 52%)",
+                      }}
+                    />
+                    <div className="relative min-[1100px]:rounded-[19px] min-[1100px]:bg-abyss min-[1100px]:px-6 min-[1100px]:py-5">
+                      <Ledger preset={preset} bizName={bizName} dates={dates} />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1797,9 +1851,9 @@ export default function Demo({
         <div
           ref={yoursPanelRef}
           data-yours-panel
-          className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pl-6 pr-14 pt-[112px] min-[1100px]:px-10 min-[1100px]:pb-8 min-[1100px]:pt-[124px]"
+          className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pl-6 pr-14 pt-[112px] min-[1100px]:grid min-[1100px]:grid-cols-2 min-[1100px]:grid-rows-[auto_minmax(0,1fr)] min-[1100px]:gap-x-12 min-[1100px]:px-10 min-[1100px]:pb-8 min-[1100px]:pt-[124px]"
         >
-          <div className="shrink-0 max-w-md min-[1100px]:max-w-[520px]">
+          <div className="shrink-0 max-w-md min-[1100px]:col-start-1 min-[1100px]:row-start-1 min-[1100px]:max-w-[400px]">
             <label className="block">
               <span className="text-[13px] text-muted">{COPY.name.label}</span>
               {/* change 26 (E3/E4): pencil glyph before the placeholder;
@@ -1844,7 +1898,7 @@ export default function Demo({
             <div className="mt-3 border-t border-line" />
           </div>
 
-          <div className="mt-2 flex min-h-0 w-full flex-1 flex-col min-[1100px]:mt-3 min-[1100px]:grid min-[1100px]:grid-cols-2 min-[1100px]:grid-rows-[100%] min-[1100px]:items-start min-[1100px]:gap-x-12">
+          <div className="mt-2 flex min-h-0 w-full flex-1 flex-col min-[1100px]:contents">
             {/* The live-skin phone: name lands on its contact header AND on
                 thread[0]'s own mention of the business (skinThread). Mobile:
                 bottom-anchored, ~55% visible, bleeding off the section. */}
@@ -1855,7 +1909,7 @@ export default function Demo({
                 (gate 94). */}
             <div
               data-yours-phone-fit
-              className="order-3 mx-auto mt-2 min-h-0 w-full max-w-[390px] flex-1 min-[1100px]:order-none min-[1100px]:mx-0 min-[1100px]:mt-0 min-[1100px]:h-full min-[1100px]:flex-none"
+              className="order-3 mx-auto mt-2 min-h-0 w-full max-w-[390px] flex-1 min-[1100px]:order-none min-[1100px]:col-start-1 min-[1100px]:row-start-2 min-[1100px]:mx-0 min-[1100px]:mt-2 min-[1100px]:h-full min-[1100px]:min-h-0 min-[1100px]:flex-none"
             >
               <Phone
                 preset={preset}
@@ -1868,7 +1922,7 @@ export default function Demo({
             </div>
 
             {/* The switcher IS the track: label + tiles per preset. */}
-            <div className="order-1 flex min-h-0 flex-col min-[1100px]:order-none min-[1100px]:h-full">
+            <div className="order-1 flex min-h-0 flex-col min-[1100px]:order-none min-[1100px]:col-start-2 min-[1100px]:row-start-1 min-[1100px]:row-span-2 min-[1100px]:h-full">
               <div ref={yoursTrackRef} data-track className="min-h-0 w-full flex-1">
                 {presetList.map((p) => (
                   <div
@@ -1876,35 +1930,35 @@ export default function Demo({
                     data-panel
                     data-preset={p.id}
                     data-client-world
-                    className="flex min-h-0 flex-col justify-start min-[1100px]:px-2"
+                    className="flex min-h-0 flex-col justify-start min-[1100px]:h-full min-[1100px]:px-2"
                     style={{ "--accent": p.accent, "--accent-soft": p.accentSoft, "--accent-ink": p.accentInk } as CSSProperties}
                   >
-                    <p data-panel-label className="font-display text-[28px] font-medium leading-[1.02] tracking-[-0.01em] text-[var(--accent,#E9EEF4)]">{p.label}</p>
+                    <p data-panel-label className="font-display text-[28px] font-medium leading-[1.02] tracking-[-0.01em] text-[var(--accent,#E9EEF4)] min-[1100px]:text-[44px]">{p.label}</p>
                     {/* change 19 (B9): the fourth preset explains itself. */}
                     {p.tagline && <p className="mt-0.5 text-[13px] text-muted">{p.tagline}</p>}
                     {/* change 26 (E1): a ruled mono head over the double
                         hairline, then labeled rows. Ticket stays the one
                         gold element per panel (gates 79/82). */}
-                    <div className="mt-2 min-[1100px]:mt-5">
+                    <div className="mt-2 min-[1100px]:mt-5 min-[1100px]:flex min-[1100px]:min-h-0 min-[1100px]:flex-1 min-[1100px]:flex-col">
                       <p data-figure className="pb-1 text-[11px] tracking-[0.04em] text-muted">
                         {COPY.yours.rowsHead}
                       </p>
                       <div className="hairline2" aria-hidden="true" style={{ borderColor: "var(--accent-soft, #22384F)" }} />
-                      <div data-tile="ticket" className="flex items-baseline justify-between gap-3 border-b border-[var(--accent-soft,#22384F)] py-2 min-[1100px]:py-3">
-                        <span className="text-[13px] text-ink min-[1100px]:text-[17px]">{COPY.yours.rows.ticket}</span>
-                        <span data-ticket data-tile-value data-figure className="font-medium leading-none text-gold text-[32px] min-[1100px]:text-[56px]">
+                      <div data-tile="ticket" className="flex items-baseline justify-between gap-3 border-b border-[var(--accent-soft,#22384F)] py-2 min-[1100px]:flex-1 min-[1100px]:items-center min-[1100px]:py-8">
+                        <span className="whitespace-nowrap text-[13px] text-ink min-[1100px]:text-[17px]">{COPY.yours.rows.ticket}</span>
+                        <span data-ticket data-tile-value data-figure className="font-medium leading-none text-gold text-[32px] min-[1100px]:text-[96px]">
                           ${p.ticket}
                         </span>
                       </div>
-                      <div data-tile="missed" className="flex items-baseline justify-between gap-3 border-b border-[var(--accent-soft,#22384F)] py-2 min-[1100px]:py-3">
-                        <span className="text-[13px] text-ink min-[1100px]:text-[17px]">{COPY.yours.rows.missed}</span>
-                        <span data-tile-value data-figure className="font-medium leading-none text-ink text-[32px] min-[1100px]:text-[56px]">
+                      <div data-tile="missed" className="flex items-baseline justify-between gap-3 border-b border-[var(--accent-soft,#22384F)] py-2 min-[1100px]:flex-1 min-[1100px]:items-center min-[1100px]:py-8">
+                        <span className="whitespace-nowrap text-[13px] text-ink min-[1100px]:text-[17px]">{COPY.yours.rows.missed}</span>
+                        <span data-tile-value data-figure className="font-medium leading-none text-ink text-[32px] min-[1100px]:text-[96px]">
                           {p.missedPerMonth}
                         </span>
                       </div>
-                      <div data-tile="lost" className="flex items-baseline justify-between gap-3 border-b border-[var(--accent-soft,#22384F)] py-2 min-[1100px]:py-3">
-                        <span className="text-[13px] text-muted min-[1100px]:text-[17px]">{COPY.yours.rows.lost}</span>
-                        <span data-tile-value data-figure className="font-medium leading-none text-muted text-[32px] min-[1100px]:text-[56px]">
+                      <div data-tile="lost" className="flex items-baseline justify-between gap-3 border-b border-[var(--accent-soft,#22384F)] py-2 min-[1100px]:flex-1 min-[1100px]:items-center min-[1100px]:py-8">
+                        <span className="whitespace-nowrap text-[13px] text-muted min-[1100px]:text-[17px]">{COPY.yours.rows.lost}</span>
+                        <span data-tile-value data-figure className="font-medium leading-none text-muted text-[32px] min-[1100px]:text-[96px]">
                           {usd(p.lost)}
                         </span>
                       </div>
@@ -1980,7 +2034,7 @@ export default function Demo({
       <section data-section="math" data-bottom-band data-entry-fx={fxReady ? (entered[3] ? "run" : "pending") : undefined} className="border-t border-line">
         <SectionMark {...COPY.sections.math} />
 
-        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col items-center justify-center gap-10 pl-6 pr-14 text-center min-[1100px]:gap-12 min-[1100px]:px-6">
+        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col items-center justify-center gap-10 pl-6 pr-14 text-center min-[1100px]:max-w-[1360px] min-[1100px]:gap-12 min-[1100px]:px-6">
           {/* change 18 (C5): the math line is the ledger's TOTAL — a 2px
               rule above, 1px below, numerals in mono at display size. */}
           <div data-total className="w-full border-b border-t-2 border-line py-4">
@@ -1994,7 +2048,7 @@ export default function Demo({
                 const midPart = afterName.split("{missed}")[1]?.split("${ticket}")[0] ?? "";
                 const tailPart = afterName.split("${ticket}")[1] ?? "";
                 return (
-                  <p data-math className="mx-auto max-w-[24ch] font-display font-medium leading-[1.08] tracking-[-0.01em] text-ink [font-size:clamp(40px,6vw,72px)]">
+                  <p data-math className="mx-auto max-w-[24ch] font-display font-medium leading-[1.08] tracking-[-0.01em] text-ink [font-size:clamp(40px,6vw,72px)] min-[1100px]:max-w-none min-[1100px]:[font-size:112px]">
                     <span data-math-name>{name}</span>
                     {beforeMissed}
                     <span data-math-numeral data-figure className="font-medium text-gold">
@@ -2009,7 +2063,7 @@ export default function Demo({
                 );
               })()
             ) : (
-              <p data-math className="mx-auto max-w-[20ch] font-display font-medium leading-[1.08] tracking-[-0.01em] text-ink [font-size:clamp(40px,6vw,72px)]">
+              <p data-math className="mx-auto max-w-[20ch] font-display font-medium leading-[1.08] tracking-[-0.01em] text-ink [font-size:clamp(40px,6vw,72px)] min-[1100px]:max-w-none min-[1100px]:[font-size:112px]">
                 {COPY.mathLead}{" "}
                 <span data-math-numeral data-figure className="font-medium text-gold">
                   {preset.missedPerMonth}
@@ -2026,8 +2080,12 @@ export default function Demo({
           {/* change 21 (B): the close. change 26 (F3) drops since-install
               from this section; (G6) the ?ref=djl portfolio variant swaps
               the conversion block for the portfolio pitch — price, sms,
-              and Calendly hidden. */}
-          <div className="flex w-full max-w-md flex-col items-center gap-2.5">
+              and Calendly hidden. change 27 (B4): >=1100 the close is ROW 2
+              of a two-row section — CTA block left, builtBy/loop/wordmark/
+              stack right-aligned right. The ?ref=djl variant runs the same
+              grid. */}
+          <div className="flex w-full max-w-md flex-col items-center gap-2.5 min-[1100px]:grid min-[1100px]:max-w-none min-[1100px]:grid-cols-2 min-[1100px]:items-start min-[1100px]:gap-x-16 min-[1100px]:text-left">
+            <div data-close-left className="flex w-full flex-col items-center gap-2.5 min-[1100px]:items-start">
             {refDjl ? (
               <>
                 <a
@@ -2039,7 +2097,7 @@ export default function Demo({
                 >
                   {COPY.portfolio.cta}
                 </a>
-                <p data-cta-sub className="text-[14px] text-muted">
+                <p data-cta-sub className="text-[14px] text-muted min-[1100px]:text-[17px]">
                   {COPY.portfolio.sub}
                 </p>
               </>
@@ -2055,10 +2113,10 @@ export default function Demo({
                 >
                   {COPY.close.ctaLabel}
                 </a>
-                <p data-cta-sub className="text-[14px] text-muted">
+                <p data-cta-sub className="text-[14px] text-muted min-[1100px]:text-[17px]">
                   {COPY.close.ctaSub}
                 </p>
-                <p data-sms-line className="text-[14px] text-muted">
+                <p data-sms-line className="text-[14px] text-muted min-[1100px]:text-[17px]">
                   {COPY.close.textLead}{" "}
                   <a
                     data-sms
@@ -2070,13 +2128,16 @@ export default function Demo({
                     {COPY.contact.phone}
                   </a>
                 </p>
-                <p data-price-line data-figure className="text-[15px] text-ink">
+                <p data-price-line data-figure className="text-[15px] text-ink min-[1100px]:text-[17px]">
                   {COPY.close.priceLine}
                 </p>
               </>
             )}
+            </div>
 
-            <div data-close-rule className="mt-2 w-full border-t border-line" />
+            <div data-close-rule className="mt-2 w-full border-t border-line min-[1100px]:hidden" />
+
+            <div data-close-right className="flex w-full flex-col items-center gap-1 min-[1100px]:items-end min-[1100px]:text-right">
 
             {/* change 26 (F4): 56px portrait; the name and the wordmark both
                 link home. */}
@@ -2128,6 +2189,7 @@ export default function Demo({
             <p data-stack-line data-figure className="text-[11px] text-muted">
               {COPY.close.stack}
             </p>
+            </div>
           </div>
         </div>
       </section>
@@ -2138,7 +2200,7 @@ export default function Demo({
           cluster of 28px teal-stroke squares now; the rail keeps only the
           6px square dots and the 1px caret. change 16's gutter contract
           (rail inside the 40px right column, content padded 56px) stands. */}
-      <div data-top-cluster className="fixed right-1 top-2 z-40 flex gap-1.5 min-[1100px]:right-6 min-[1100px]:top-6 min-[1100px]:gap-2">
+      <div data-top-cluster className="fixed right-1 top-2 z-40 flex gap-1.5 min-[1100px]:right-10 min-[1100px]:top-6 min-[1100px]:gap-2">
         <button
           data-share
           data-rail-share
@@ -2146,7 +2208,7 @@ export default function Demo({
           onClick={onShare}
           title={COPY.shareLabel}
           aria-label={COPY.a11y.share}
-          className={`flex h-7 w-7 items-center justify-center rounded-[2px] border border-teal bg-transparent text-teal-bright outline-none transition-opacity hover:opacity-100 focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
+          className={`flex h-7 w-7 items-center justify-center rounded-[2px] border border-teal bg-transparent text-teal-bright outline-none transition-opacity min-[1100px]:h-8 min-[1100px]:w-8 hover:opacity-100 focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
             share === "copied" ? "opacity-100" : "opacity-70"
           }`}
         >
@@ -2161,7 +2223,7 @@ export default function Demo({
           title={soundOn ? COPY.a11y.soundOn : COPY.a11y.soundOff}
           aria-label={soundOn ? COPY.a11y.soundOn : COPY.a11y.soundOff}
           aria-pressed={soundOn}
-          className={`flex h-7 w-7 items-center justify-center rounded-[2px] border border-teal outline-none transition-colors focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
+          className={`flex h-7 w-7 items-center justify-center rounded-[2px] border border-teal outline-none transition-colors min-[1100px]:h-8 min-[1100px]:w-8 focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
             soundOn ? "bg-teal text-abyss" : "bg-transparent text-teal-bright opacity-70 hover:opacity-100"
           }`}
         >
@@ -2172,7 +2234,7 @@ export default function Demo({
       {toastOn && (
         <div
           data-sound-toast
-          className="fixed right-1 top-11 z-40 text-[12px] text-muted min-[1100px]:right-6 min-[1100px]:top-16"
+          className="fixed right-1 top-11 z-40 text-[12px] text-muted min-[1100px]:right-10 min-[1100px]:top-16"
         >
           {COPY.a11y.tapForSound}
         </div>
@@ -2180,7 +2242,7 @@ export default function Demo({
 
       <div
         data-rail
-        className="fixed right-0.5 top-1/2 z-40 flex -translate-y-1/2 flex-col items-center gap-3 min-[1100px]:right-6 min-[1100px]:gap-4"
+        className="fixed right-0.5 top-1/2 z-40 flex -translate-y-1/2 flex-col items-center gap-3 min-[1100px]:right-10 min-[1100px]:gap-4"
       >
         <div className="my-1 flex flex-col gap-3">
           {SECTIONS.map((s, i) => (

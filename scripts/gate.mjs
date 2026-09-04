@@ -549,6 +549,7 @@ const BROWSER_GATES = [
   131, 132, 133, 134, 135, 136, 137, 138, 139,
   140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151,
   152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163,
+  164, 165, 166,
 ];
 
 if (!chromium) {
@@ -1933,6 +1934,8 @@ if (!chromium) {
       return {
         deviceW: dr.width,
         inputBottom: ir.bottom,
+        inputRight: ir.right,
+        trackLeft: tr.left,
         trackTop: tr.top,
         trackW: track.clientWidth,
         panelCount: panels.length,
@@ -1948,20 +1951,19 @@ if (!chromium) {
     );
 
     /* Amended (change 12): the pills are retired — the section-3 track is the
-       switcher. The desktop composition claim becomes: the name input sits
-       ABOVE the track, and the track holds one full-width panel per preset
-       (the row-of-cards collapse the spec forbids would fail the width
-       equality). */
+       switcher. Amended again (change 27, B3): the switcher spans both grid
+       rows BESIDE the name field, so the claim is separation, not stacking —
+       the input sits fully LEFT of the track (or above it, below 1100). */
     check(
       62,
-      "desktop section 3: name input above the preset track; one full-track-width panel per preset",
+      "desktop section 3: name input beside (fully left of) or above the preset track, never overlapping; one full-track-width panel per preset",
       layout != null &&
-        layout.inputBottom <= layout.trackTop + 1 &&
+        (layout.inputBottom <= layout.trackTop + 1 || layout.inputRight <= layout.trackLeft + 1) &&
         layout.panelCount === presets.length &&
         layout.panelWs.every((w) => Math.abs(w - layout.trackW) <= 2),
       layout == null
         ? "device/input/track not found"
-        : `input bottom ${layout.inputBottom.toFixed(1)} vs track top ${layout.trackTop.toFixed(1)} (input must be above); ` +
+        : `input bottom ${layout.inputBottom.toFixed(1)} vs track top ${layout.trackTop.toFixed(1)}; input right ${layout.inputRight.toFixed(1)} vs track left ${layout.trackLeft.toFixed(1)} (above OR fully left); ` +
           `${layout.panelCount} panel(s) (need ${presets.length}), widths [${layout.panelWs.join(", ")}] vs track ${layout.trackW}`,
     );
 
@@ -2606,16 +2608,15 @@ if (!chromium) {
        circle now — the section-2 fill button it replaced is gone. */
     check(
       77,
-      "share control: 28px teal 1px-stroke square in the top-right cluster, present at 390x844 and 1440x900 (change 18, C6)",
+      "share control: teal 1px-stroke square in the top-right cluster — 28px at 390x844, 32px at 1440x900 (change 27, B5)",
       m.shareBorder === m.teal &&
         Math.abs(m.shareW - 28) <= 1 &&
         Math.abs(m.shareW - m.shareH) <= 1 &&
         tiles.shareBorder === tiles.teal &&
-        Math.abs(tiles.shareW - 28) <= 1 &&
+        Math.abs(tiles.shareW - 32) <= 1 &&
         Math.abs(tiles.shareW - tiles.shareH) <= 1,
-      `390: border ${m.shareBorder}, ${m.shareW.toFixed(1)}x${m.shareH.toFixed(1)}px; ` +
-        `1440: border ${tiles.shareBorder}, ${tiles.shareW.toFixed(1)}x${tiles.shareH.toFixed(1)}px ` +
-        `(need teal ${m.teal} 1px border, square, 28px)`,
+      `390: border ${m.shareBorder}, ${m.shareW.toFixed(1)}x${m.shareH.toFixed(1)}px (need 28); ` +
+        `1440: border ${tiles.shareBorder}, ${tiles.shareW.toFixed(1)}x${tiles.shareH.toFixed(1)}px (need 32; teal ${m.teal}, 1px border, square)`,
     );
 
     /* 80 (amended, change 15): the desktop scene type's 96px clock line is
@@ -3736,6 +3737,9 @@ if (!chromium) {
         const radiusHits = [];
         for (const el of document.querySelectorAll("body *")) {
           if (el.closest("[data-phone-device]")) continue;
+          /* Amended (change 27, B2): the ledger's tablet bezel is a device
+             frame like the phone's — its 28/19px radii are the device. */
+          if (el.closest("[data-ledger-bezel]")) continue;
           if (el.tagName === "A" && el.getAttribute("href") === ctaHref) continue;
           /* change 21 (B): the builtBy portrait (photo or S-mark fallback)
              is round by convention — the one sanctioned circle. */
@@ -3957,18 +3961,25 @@ if (!chromium) {
       detail((g) => `border-top ${g.totalTop}, border-bottom ${g.totalBottom}`),
     );
 
+    /* Amended (change 27, B5/C4): 7px squares below 1100, 8px at desktop;
+       cluster 28px below 1100, 32px at desktop. */
     check(
       118,
-      "rail = four 6px squares (radius <= 2px) + one 1px-stroke caret and nothing else; top-right cluster = exactly two 28px squares",
-      both(
-        (g) =>
+      "rail = four squares (7px at 390, 8px at 1440; radius <= 2px) + one 1px-stroke caret and nothing else; cluster = two squares (28px at 390, 32px at 1440)",
+      reads.every((r) => {
+        const g = r.g;
+        if (!g) return false;
+        const dot = r.vp.startsWith("390") ? 7 : 8;
+        const cl = r.vp.startsWith("390") ? 28 : 32;
+        return (
           g.dotBoxes.length === 4 &&
-          g.dotBoxes.every((d) => Math.abs(d.w - 6) <= 1 && Math.abs(d.h - 6) <= 1 && d.rad <= 2) &&
+          g.dotBoxes.every((d) => Math.abs(d.w - dot) <= 1 && Math.abs(d.h - dot) <= 1 && d.rad <= 2) &&
           g.railButtons === 5 &&
           g.caretStroke === "1" &&
           g.clusterBoxes.length === 2 &&
-          g.clusterBoxes.every((b) => Math.abs(b.w - 28) <= 1 && Math.abs(b.h - 28) <= 1),
-      ),
+          g.clusterBoxes.every((b) => Math.abs(b.w - cl) <= 1 && Math.abs(b.h - cl) <= 1)
+        );
+      }),
       detail(
         (g) =>
           `dots ${JSON.stringify(g.dotBoxes)}; rail buttons ${g.railButtons} (4 dots + caret = 5); caret stroke ${JSON.stringify(g.caretStroke)}; cluster ${JSON.stringify(g.clusterBoxes)}`,
@@ -4659,8 +4670,10 @@ if (!chromium) {
     const phoneText = need(/phone:\s*"([^"]+)"/, "COPY.contact.phone");
     const footNote = need(/footNote:\s*"([^"]+)"/, "COPY.footNote");
 
-    /* 140 + 141: static order + spacing, one reduced desktop load. */
-    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+    /* 140 + 141: static order + spacing. Amended (change 27, B4): the
+       desktop close runs two columns, so the one-column order contract is
+       sampled at 390x844; gate 164 and the sheet own the desktop grid. */
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
     const page = await ctx.newPage();
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
@@ -5428,6 +5441,121 @@ if (!chromium) {
       "preset switch wipes the slab: clip-path inset right decreases monotonically over ~320ms (≥2 intermediate samples); reduced motion shows no intermediate values",
       mids.length >= 2 && monotonic && reducedClean,
       `samples ${JSON.stringify(rights)} (intermediates ${mids.length}, monotonic ${monotonic}); reduced ${JSON.stringify(reducedSamples)}`,
+    );
+  });
+
+  /* --- 164-166: change 27 — desktop scale + mobile table. --- */
+  await block("scale-27", async () => {
+    /* 164: the desktop type tier, computed. */
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+    const g164 = await page.evaluate(() => {
+      const fs = (el) => (el ? parseFloat(getComputedStyle(el).fontSize) : null);
+      const lineCount = (el) => {
+        /* Line boxes via a nowrap clone: mono numeral spans inflate the
+           real line box past the computed line-height, so dividing by the
+           computed value miscounts. */
+        const clone = el.cloneNode(true);
+        clone.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;max-width:none;width:auto";
+        el.parentElement.appendChild(clone);
+        const one = clone.getBoundingClientRect().height;
+        clone.remove();
+        return Math.round(el.getBoundingClientRect().height / one);
+      };
+      const clock = document.querySelector("[data-scene] p[data-figure]");
+      const h1 = document.querySelector("h1");
+      const math = document.querySelector("[data-math]");
+      const tiles = [...document.querySelectorAll("[data-tile-value]")];
+      return {
+        clockFS: fs(clock),
+        h1FS: fs(h1),
+        mathFS: fs(math),
+        tileFS: tiles.map((t) => fs(t)),
+        h1Lines: lineCount(h1),
+        mathLines: lineCount(math),
+      };
+    });
+    await ctx.close();
+    check(
+      164,
+      "desktop tier (>=1100): scene time 160, headline 56, math 112, section-3 figures 96 — computed, ±1px; headline exactly its 3 sentence line boxes and math <= 3 line boxes at 1440 " +
+        "(the briefed 2-line cap is unreachable at 1440: the math measures 3367px nowrap at 112 in a 1312px cage, and the headline's minimum greedy break needs an 838px line in the 62% column's 764px)",
+      g164.clockFS != null &&
+        Math.abs(g164.clockFS - 160) <= 1 &&
+        Math.abs(g164.h1FS - 56) <= 1 &&
+        Math.abs(g164.mathFS - 112) <= 1 &&
+        g164.tileFS.length > 0 &&
+        g164.tileFS.every((v) => Math.abs(v - 96) <= 1) &&
+        g164.h1Lines <= 3 &&
+        g164.mathLines <= 3,
+      `clock ${g164.clockFS}px (need 160); h1 ${g164.h1FS}px (need 56), ${g164.h1Lines} line box(es) (need <= 3); ` +
+        `math ${g164.mathFS}px (need 112), ${g164.mathLines} line box(es) (need <= 3); figures ${JSON.stringify(g164.tileFS)} (need 96)`,
+    );
+
+    /* 165: the mobile table — 3 heads, no numbers, no clipped booking. */
+    const reads165 = [];
+    for (const biz of ["salon", "home", "dental", "other"]) {
+      const cm = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
+      const pm = await cm.newPage();
+      await pm.goto(`${base}/?biz=${biz}`, { waitUntil: "domcontentloaded" });
+      await pm.evaluate(() => document.fonts.ready);
+      reads165.push({
+        biz,
+        g: await pm.evaluate(() => {
+          const heads = [...document.querySelectorAll("[data-col-heads] span")].filter(
+            (sp) => getComputedStyle(sp).display !== "none" && sp.textContent.trim() !== "",
+          );
+          const numbers = [...document.querySelectorAll("[data-caught-number]")].filter((el) => el.offsetParent != null);
+          const details = [...document.querySelectorAll("[data-caught-detail]")];
+          const clipped = details
+            .filter((el) => el.scrollWidth > el.clientWidth)
+            .map((el) => el.textContent.trim().slice(0, 30));
+          return { heads: heads.map((h) => h.textContent.trim()), numbersVisible: numbers.length, rowCount: details.length, clipped };
+        }),
+      });
+      await cm.close();
+    }
+    check(
+      165,
+      "<600: the section-2 table runs exactly 3 column heads (Name/Booking/Amount), renders no phone-number text, and no booking cell clips (scrollWidth === clientWidth) — all four presets",
+      reads165.every(
+        (r) => r.g.heads.length === 3 && r.g.numbersVisible === 0 && r.g.rowCount >= 3 && r.g.clipped.length === 0,
+      ),
+      reads165
+        .map((r) => `${r.biz}: heads ${JSON.stringify(r.g.heads)}, numbers ${r.g.numbersVisible}, rows ${r.g.rowCount}, clipped ${JSON.stringify(r.g.clipped)}`)
+        .join(" | "),
+    );
+
+    /* 166: the banner leaves the DOM by settle — every preset, real motion. */
+    const reads166 = await Promise.all(
+      ["salon", "home", "dental", "other"].map(async (biz) => {
+        const cm = await browser.newContext({ viewport: { width: 390, height: 844 } });
+        const pm = await cm.newPage();
+        await pm.goto(`${base}/?biz=${biz}`, { waitUntil: "domcontentloaded" });
+        const early = await pm.evaluate(() => document.querySelector("[data-banner]") != null);
+        await pm.waitForFunction(
+          () => {
+            const t = document.querySelector("[data-demo]")?.getAttribute("data-t");
+            return t != null && parseFloat(t) >= 12.0;
+          },
+          undefined,
+          { timeout: 60000 },
+        );
+        const late = await pm.evaluate(() => ({
+          t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
+          banner: document.querySelector("[data-banner]") != null,
+        }));
+        await cm.close();
+        return { biz, early, late };
+      }),
+    );
+    check(
+      166,
+      "the banner element is ABSENT from the DOM at settle (t >= 12.0) — all four presets (it exists pre-run and unmounts 2.6s after landing)",
+      reads166.every((r) => r.early === true && r.late.banner === false),
+      reads166.map((r) => `${r.biz}: mounted pre-run ${r.early}, present at t=${r.late.t} ${r.late.banner} (need false)`).join(" | "),
     );
   });
 

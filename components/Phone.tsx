@@ -268,7 +268,7 @@ function MessagesGlyph() {
  * Demo.tsx drives every animated piece, including the ellipsis dots and the
  * Messages banner that lands over the dead call.
  */
-function CallScreen({ preset, bizName }: { preset: Preset; bizName: string }) {
+function CallScreen({ preset, bizName, showBanner }: { preset: Preset; bizName: string; showBanner: boolean }) {
   return (
     <div
       data-call
@@ -334,7 +334,9 @@ function CallScreen({ preset, bizName }: { preset: Preset; bizName: string }) {
           change 17 (C1): top edge 8px below the 36px status row — clear of
           the notch at every width — title one line, body clamped to TWO
           lines with the ellipsis on line two (the full approved text stays
-          in the DOM; the clamp is visual). */}
+          in the DOM; the clamp is visual). change 27 (C2): the element
+          LEAVES the DOM 2.6s after it lands — gate 166. */}
+      {showBanner && (
       <div
         data-banner
         className="absolute inset-x-3 top-[44px] z-40"
@@ -371,6 +373,7 @@ function CallScreen({ preset, bizName }: { preset: Preset; bizName: string }) {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -387,6 +390,7 @@ export default function Phone({
   slab = false,
   sonar = false,
   headerGhost = false,
+  showBanner = true,
 }: {
   preset: Preset;
   /* The effective business name (custom or preset default). Falls back to the
@@ -425,6 +429,9 @@ export default function Phone({
   /* change 18 (D1): the sonar ring pair, centered on the screen center,
      behind the phone. Pure engine-driven SVG — no CSS animation. */
   sonar?: boolean;
+  /* change 27 (C2): the engine unmounts the banner 2.6s after it lands;
+     replay and re-arm remount it. Live section-1 instance only. */
+  showBanner?: boolean;
 }) {
   const thread = preset.thread;
   const typing = new Set(typingBefore);
@@ -593,7 +600,7 @@ export default function Phone({
 
       {/* The outgoing-call opening lives only on the LIVE interactive device;
           a static instance is the settled thread and nothing else. */}
-      {aspect && live && <CallScreen preset={preset} bizName={effectiveBizName} />}
+      {aspect && live && <CallScreen preset={preset} bizName={effectiveBizName} showBanner={showBanner} />}
 
       {/* HER phone's closing beat: the booking confirmation from the
           business — Messages identity, not the owner's Salvage alert (that

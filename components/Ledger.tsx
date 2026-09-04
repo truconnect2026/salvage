@@ -36,7 +36,7 @@ function FlapBoard({ value, compact }: { value: number; compact: boolean }) {
             data-flap="digit"
             data-figure
             className={`relative inline-flex justify-center overflow-hidden bg-surface-2 px-[3px] font-medium leading-[1.15] text-ember ${
-              compact ? "text-[24px]" : "text-[44px]"
+              compact ? "text-[24px]" : "text-[44px] min-[1100px]:text-[56px]"
             }`}
           >
             <span data-flap-face style={{ display: "inline-block" }}>
@@ -53,7 +53,7 @@ function FlapBoard({ value, compact }: { value: number; compact: boolean }) {
             data-flap="static"
             data-figure
             className={`inline-flex justify-center px-[1px] font-medium leading-[1.15] text-ember ${
-              compact ? "text-[24px]" : "text-[44px]"
+              compact ? "text-[24px]" : "text-[44px] min-[1100px]:text-[56px]"
             }`}
           >
             <span data-flap-face style={{ display: "inline-block" }}>
@@ -95,7 +95,7 @@ export default function Ledger({
           </div>
         </div>
         {!compact && dates && (
-          <div data-ledger-month data-figure className="shrink-0 pb-0.5 text-[13px] text-muted">
+          <div data-ledger-month data-figure className="shrink-0 pb-0.5 text-[13px] text-muted min-[1100px]:text-[14px]">
             {dates.month}
           </div>
         )}
@@ -115,7 +115,7 @@ export default function Ledger({
               </span>
             )}
           </p>
-          <p className={`${compact ? "text-[24px]" : "text-[56px]"} font-medium leading-none`} aria-live="off">
+          <p className={`${compact ? "text-[24px]" : "text-[56px] min-[1100px]:text-[72px]"} font-medium leading-none`} aria-live="off">
             <span data-panel-recovered data-ledger-recovered data-figure className="text-gold">
               {usd(preset.recovered)}
             </span>
@@ -150,7 +150,7 @@ export default function Ledger({
           className={`grid ${
             compact
               ? "grid-cols-[20px_minmax(0,1.1fr)_minmax(0,1.3fr)_auto]"
-              : "grid-cols-[20px_minmax(0,1.1fr)_minmax(0,1.3fr)_auto_76px]"
+              : "grid-cols-[20px_minmax(0,0.8fr)_minmax(0,1.7fr)_auto] min-[600px]:grid-cols-[20px_minmax(0,1.1fr)_minmax(0,1.3fr)_auto_76px]"
           } items-baseline gap-x-2 border-b border-line pb-1 text-[11px] tracking-[0.04em] text-muted`}
         >
           <span />
@@ -158,9 +158,10 @@ export default function Ledger({
           <span data-figure>{L.cols.booking}</span>
           <span data-figure className="text-right">{L.cols.amount}</span>
           {/* compact (the OG card) hides row dates — a labeled empty column
-              would be worse than no column. */}
+              would be worse than no column. change 27 (C1): below 600 the
+              table runs Name · Booking · Amount only. */}
           {!compact && (
-            <span data-figure className="text-right">{L.cols.date}</span>
+            <span data-figure className="hidden text-right min-[600px]:inline">{L.cols.date}</span>
           )}
         </div>
         <CaughtRow index={0} entry={row0} compact={compact} date={dates?.rows[0]} />
@@ -184,7 +185,7 @@ export default function Ledger({
         className={`flex items-baseline justify-between gap-3 border-b border-t border-line ${compact ? "mt-2 py-1.5" : "mt-2.5 py-2"}`}
       >
         <p className="text-[12px] text-muted">{L.sinceLabel}</p>
-        <p data-since-strip className={`text-muted ${compact ? "text-[14px]" : "text-[13px]"}`}>
+        <p data-since-strip className={`text-muted ${compact ? "text-[14px]" : "text-[13px] min-[1100px]:text-[14px]"}`}>
           <span data-since-calls data-figure>{preset.sinceCalls}</span> calls caught ·{" "}
           <span data-since-recovered data-figure className="font-medium text-ink">
             {usd(preset.sinceRecovered)}
@@ -218,7 +219,7 @@ function CaughtRow({
       className={`grid ${
         compact
           ? "grid-cols-[20px_minmax(0,1.1fr)_minmax(0,1.3fr)_auto]"
-          : "grid-cols-[20px_minmax(0,1.1fr)_minmax(0,1.3fr)_auto_76px]"
+          : "grid-cols-[20px_minmax(0,0.8fr)_minmax(0,1.7fr)_auto] min-[600px]:grid-cols-[20px_minmax(0,1.1fr)_minmax(0,1.3fr)_auto_76px]"
       } items-start gap-x-2 py-1.5 ${compact ? "" : "min-[500px]:py-2"} ${
         isFirst ? "pl-2" : ""
       }`}
@@ -230,24 +231,39 @@ function CaughtRow({
       <div className="min-w-0">
         <div
           data-caught-name={index}
-          className={`truncate font-medium text-ink ${compact ? "text-[15px]" : "text-[13px]"}`}
+          className={`truncate font-medium text-ink ${compact ? "text-[15px]" : "text-[13px] min-[1100px]:text-[14px]"}`}
         >
           {entry.name}
         </div>
+        {/* change 27 (C1): the number line leaves the mobile table. */}
         {!compact && (
-          <div data-caught-number={index} data-figure className="mt-0.5 text-[12px] text-muted">
+          <div data-caught-number={index} data-figure className="mt-0.5 hidden text-[12px] text-muted min-[600px]:block">
             {entry.number}
           </div>
         )}
+        {/* change 27 (C1): below 600 the stamp docks under the name — the
+            date column that carried it is gone there. Styled as the one
+            [data-stamp]; only one of the two mounts ever renders. */}
+        {isFirst && !compact && (
+          <div className="mt-0.5 min-[600px]:hidden">
+            <span
+              data-figure
+              className="inline-block rounded-[4px] border border-[var(--accent,#2CC7B6)] px-1.5 text-[11px] tracking-[0.12em] text-[var(--accent,#74E9DC)]"
+              style={{ transform: "rotate(-3deg)", opacity: 1 }}
+            >
+              {COPY.ledger.stamp}
+            </span>
+          </div>
+        )}
       </div>
-      <div className={`min-w-0 truncate text-muted ${compact ? "text-[17px]" : "text-[12px]"}`}>
+      <div data-caught-detail={index} className={`min-w-0 truncate text-muted ${compact ? "text-[17px]" : "text-[12px]"}`}>
         {entry.detail}
       </div>
-      <div data-caught-amount={index} data-figure className={`text-right text-ink ${compact ? "text-[15px]" : "text-[13px]"}`}>
+      <div data-caught-amount={index} data-figure className={`text-right text-ink ${compact ? "text-[15px]" : "text-[13px] min-[1100px]:text-[14px]"}`}>
         {usd(entry.amount)}
       </div>
       {!compact && (
-      <div className="text-right">
+      <div className="hidden text-right min-[600px]:block">
         {/* D9: the stamp rides ABOVE the date cell, right-aligned — never
             over the amount. */}
         {isFirst && (
@@ -262,7 +278,7 @@ function CaughtRow({
             </span>
           </div>
         )}
-        <div data-caught-date={index} data-figure className="mt-0.5 text-[13px] text-muted">
+        <div data-caught-date={index} data-figure className="mt-0.5 text-[13px] text-muted min-[1100px]:text-[14px]">
           {date ?? entry.date}
         </div>
       </div>

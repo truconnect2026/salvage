@@ -135,6 +135,23 @@ body {
   max-width: min(390px, calc((100vh - 130px) * 9 / 19.5));
   max-width: min(390px, calc((100dvh - 130px) * 9 / 19.5));
 }
+/* change 27 (B1): >=1100 the device stands at exactly 82% of the viewport
+   height, centered — the width follows from the 19.5:9 box. Uncapped at
+   390: the screen lays out at design width and zooms, so a >390 render is
+   the same composition, larger. */
+@media (min-width: 1100px) {
+  [data-section="call"] [data-phone-device] {
+    max-width: calc(82vh * 9 / 19.5);
+    max-width: calc(82dvh * 9 / 19.5);
+  }
+  /* The stage column itself — a shrink-wrapped grid column would give the
+     aspect-boxed device no width to resolve against. */
+  [data-call-stage] {
+    width: calc(82vh * 9 / 19.5);
+    width: calc(82dvh * 9 / 19.5);
+    max-width: none;
+  }
+}
 /* change 13: below 1100px, sections 1 and 2 run the SAME phone size (gate
    75) — the largest device that clears the 28px-inset section mark above it
    (140px reserve). Section 2's phone is allowed to bleed off the section
@@ -214,6 +231,29 @@ body {
    viewport bottom (gate 95). The first transform line is the
    no-container-query floor (iOS 15); plain two-length divisions only —
    WebKit drops the declaration when the numerator is a calc() sum. */
+/* change 27 (B2): the desktop stack rides the same screenshot-scale fit —
+   the bezel'd tablet plus its dock outgrew the 62% column (831px natural in
+   a ~670px row), and scaling the composition as one unit is this site's
+   established device language. Top-anchored, centered; 840 = natural + slack. */
+@media (min-width: 1100px) {
+  [data-save-fit] {
+    container-type: size;
+    position: relative;
+  }
+  [data-save-stack] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    /* Review lens (change 27): left-anchored, not centered — the tablet
+       shares the headline's left edge (the change-26 D1 rule); the scale
+       slack falls to the right. */
+    transform-origin: 0 0;
+    transform: scale(0.8);
+    transform: scale(min(calc(100cqh / 840px), 1));
+  }
+}
+
 @media (max-width: 1099.98px) {
   [data-save-fit] {
     container-type: size;

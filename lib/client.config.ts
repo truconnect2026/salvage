@@ -53,8 +53,8 @@ export const COPY = {
     priceLine: "$1,000 setup · $200 a month",
     builtBy: "Built by Andy Jones · Chesterfield, VA",
     loopLabel: "Watch it again",
-    // change 26 (F5, APPROVED).
-    stack: "Next.js · Twilio · Vercel · built in Chesterfield",
+    // change 27 (C3, APPROVED) — one line at 390.
+    stack: "Next.js · Twilio · Vercel",
   },
   // change 26 (G6, APPROVED): the ?ref=djl portfolio variant.
   portfolio: {
@@ -234,7 +234,8 @@ export const PRESETS: Preset[] = [
       { name: "Mark T.", number: "(804) 555-0197", detail: "Tue 8:00 · water heater", amount: 850, date: "Mar 13" },
       { name: "Chris D.", number: "(804) 555-0155", detail: "Fri 1:00 · drain clog", amount: 900, date: "Mar 10" },
       { name: "Elena V.", number: "(804) 555-0184", detail: "Mon 9:00 · toilet install", amount: 1200, date: "Mar 6" },
-      { name: "Sam O.", number: "(804) 555-0161", detail: "Thu 7:30 · water heater replace", amount: 1300, date: "Mar 2" },
+      // change 27 (C1, APPROVED): shortened for 390 fit only — same booking.
+      { name: "Sam O.", number: "(804) 555-0161", detail: "Thu 7:30 · heater replace", amount: 1300, date: "Mar 2" },
     ],
     thread: [
       { from: "business", time: "8:47 PM", text: "Ridgeline Plumbing, sorry we couldn't pick up. What's going on? I can get someone scheduled." },
@@ -250,10 +251,12 @@ export const PRESETS: Preset[] = [
     ticket: 600, missedPerMonth: 9, callsCaught: 3, recovered: 1800, lost: 5400,
     sinceCalls: 19, sinceRecovered: 9800,
     caught: [
-      { name: "Priya S.", number: "(804) 555-0168", detail: "Fri 9:15 with Dr. Nakamura · chipped tooth", amount: 600, date: "Mar 12" },
-      { name: "Owen L.", number: "(804) 555-0122", detail: "Wed 10:30 with Dr. Nakamura · cleaning", amount: 300, date: "Mar 9" },
+      // change 27 (C1, APPROVED): the three Nakamura rows shortened to the
+      // home-preset "time · service" pattern for 390 fit only.
+      { name: "Priya S.", number: "(804) 555-0168", detail: "Fri 9:15 · chipped tooth", amount: 600, date: "Mar 12" },
+      { name: "Owen L.", number: "(804) 555-0122", detail: "Wed 10:30 · cleaning", amount: 300, date: "Mar 9" },
       { name: "Maya F.", number: "(804) 555-0147", detail: "Mon 2:00 with Dr. Osei · filling", amount: 400, date: "Mar 5" },
-      { name: "Luis R.", number: "(804) 555-0109", detail: "Thu 3:45 with Dr. Nakamura · crown", amount: 500, date: "Mar 1" },
+      { name: "Luis R.", number: "(804) 555-0109", detail: "Thu 3:45 · crown", amount: 500, date: "Mar 1" },
     ],
     thread: [
       { from: "business", time: "8:47 PM", text: "Fairfield Dental, sorry we missed your call. Office opens at 8, but I can hold a time for you now." },
