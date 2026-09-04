@@ -1616,6 +1616,10 @@ export default function Demo({
       {/* ---- SECTION 1 — the call. The phone; at >=1100px the scene type
            sits left of it (change 15, A2), all three lines on the one clock. ---- */}
       <section data-section="call">
+        {/* change 28 (A2): the desktop slab is a section band keyed off the
+            column edge (globals positions it); the in-device slab serves
+            below 1100. */}
+        <div aria-hidden="true" data-accent-slab data-call-band className="absolute inset-y-0 z-0 hidden bg-[var(--accent-soft,#0F1E33)] min-[1100px]:block" />
         <SectionMark {...COPY.sections.call} />
 
         {/* change 16 (B1/B2): below 1100px the right padding clears the
@@ -1625,8 +1629,8 @@ export default function Demo({
         {/* change 27 (B1): >=1100 a [1fr_auto_1fr] grid — the DEVICE is the
             centered column, the scene type right-aligned in the left third,
             vertically centered on the phone. */}
-        <div className="relative z-10 flex h-full w-full items-center justify-center gap-16 pb-6 pl-6 pr-14 pt-[112px] min-[1100px]:grid min-[1100px]:grid-cols-[1fr_auto_1fr] min-[1100px]:gap-x-10 min-[1100px]:p-6">
-          <div data-scene data-client-world className="hidden shrink-0 min-[1100px]:block min-[1100px]:justify-self-end min-[1100px]:self-center min-[1100px]:-translate-y-8">
+        <div className="relative z-10 flex h-full w-full items-center justify-center gap-16 pb-6 pl-6 pr-14 pt-[112px] min-[1100px]:mx-auto min-[1100px]:grid min-[1100px]:max-w-[1240px] min-[1100px]:grid-cols-[61fr_auto_39fr] min-[1100px]:gap-x-0 min-[1100px]:px-12 min-[1100px]:py-6">
+          <div data-scene data-client-world className="hidden shrink-0 min-[1100px]:block min-[1100px]:justify-self-start min-[1100px]:self-center min-[1100px]:-translate-y-8">
             {/* change 18 (B4): the clock is a timestamp — it runs in mono
                 like every figure on the page. change 27 (A): 160px — it
                 wraps at the space into a clock lockup. */}
@@ -1720,15 +1724,15 @@ export default function Demo({
       <section data-section="save" data-entry-fx={fxReady ? (entered[1] ? "run" : "pending") : undefined}>
         <SectionMark {...COPY.sections.save} />
 
-        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pb-8 pl-6 pr-14 pt-[112px] min-[1100px]:max-w-[1360px] min-[1100px]:px-10 min-[1100px]:pb-6 min-[1100px]:pt-6">
+        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pb-8 pl-6 pr-14 pt-[112px] min-[1100px]:max-w-[1240px] min-[1100px]:px-12 min-[1100px]:pb-6 min-[1100px]:pt-[84px]">
           <div
             data-save-grid
-            className="flex min-h-0 w-full flex-1 flex-col min-[1100px]:grid min-[1100px]:grid-cols-[38fr_62fr] min-[1100px]:grid-rows-[auto_minmax(0,1fr)] min-[1100px]:items-start min-[1100px]:gap-x-12"
+            className="flex min-h-0 w-full flex-1 flex-col min-[1100px]:grid min-[1100px]:grid-cols-[42fr_58fr] min-[1100px]:grid-rows-[auto_minmax(0,1fr)] min-[1100px]:items-start min-[1100px]:gap-x-12"
           >
               {/* change 26 (D1): the headline lives in the LEDGER's column
                   on desktop — one left edge for headline, sub, note, card,
                   and table; the phone owns the left column alone. */}
-              <header data-headline className="shrink-0 min-[1100px]:col-start-2 min-[1100px]:row-start-1">
+              <header data-headline className="shrink-0 min-[1100px]:col-start-1 min-[1100px]:row-start-1">
                 {/* change 14: 30px on desktop — at 44px the h1 runs four
                     lines in the 40% column and the >=340px phone cannot be
                     contained (availH = 852 - headline). */}
@@ -1763,7 +1767,7 @@ export default function Demo({
                   fully contained (change 14; gates 30/34/74/83). */}
               <div
                 data-save-phone-fit
-                className="mt-0 hidden w-full max-w-[390px] min-[1100px]:col-start-1 min-[1100px]:row-start-1 min-[1100px]:row-span-2 min-[1100px]:block min-[1100px]:h-full min-[1100px]:min-h-0 min-[1100px]:pt-16"
+                className="mt-0 hidden w-full max-w-[390px] min-[1100px]:col-start-1 min-[1100px]:row-start-2 min-[1100px]:block min-[1100px]:h-full min-[1100px]:min-h-0 min-[1100px]:pt-4"
               >
                 <Phone preset={preset} bizName={bizName} variant="static" />
               </div>
@@ -1775,7 +1779,7 @@ export default function Demo({
                 container the stack zooms against — the ladder of fixed zoom
                 steps is gone; the stack fits whatever height the headline
                 leaves. */}
-            <div data-save-fit className="mt-4 flex min-h-0 flex-1 flex-col min-[1100px]:col-start-2 min-[1100px]:row-start-2 min-[1100px]:mt-2 min-[1100px]:h-full">
+            <div data-save-fit className="mt-4 flex min-h-0 flex-1 flex-col min-[1100px]:col-start-2 min-[1100px]:row-start-1 min-[1100px]:row-span-2 min-[1100px]:mt-0 min-[1100px]:h-full">
               <div data-save-stack className="relative mx-auto my-auto w-full min-[1100px]:my-0">
                 {/* The sub-headline, desktop only (change 14): moved out of
                     the left column so the phone's height budget closes at a
@@ -1851,7 +1855,7 @@ export default function Demo({
         <div
           ref={yoursPanelRef}
           data-yours-panel
-          className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pl-6 pr-14 pt-[112px] min-[1100px]:grid min-[1100px]:grid-cols-2 min-[1100px]:grid-rows-[auto_minmax(0,1fr)] min-[1100px]:gap-x-12 min-[1100px]:px-10 min-[1100px]:pb-8 min-[1100px]:pt-[124px]"
+          className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pl-6 pr-14 pt-[112px] min-[1100px]:grid min-[1100px]:max-w-[1240px] min-[1100px]:grid-cols-2 min-[1100px]:grid-rows-[auto_minmax(0,1fr)] min-[1100px]:gap-x-12 min-[1100px]:px-12 min-[1100px]:pb-8 min-[1100px]:pt-[124px]"
         >
           <div className="shrink-0 max-w-md min-[1100px]:col-start-1 min-[1100px]:row-start-1 min-[1100px]:max-w-[400px]">
             <label className="block">
@@ -1909,7 +1913,7 @@ export default function Demo({
                 (gate 94). */}
             <div
               data-yours-phone-fit
-              className="order-3 mx-auto mt-2 min-h-0 w-full max-w-[390px] flex-1 min-[1100px]:order-none min-[1100px]:col-start-1 min-[1100px]:row-start-2 min-[1100px]:mx-0 min-[1100px]:mt-2 min-[1100px]:h-full min-[1100px]:min-h-0 min-[1100px]:flex-none"
+              className="order-3 mx-auto mt-2 min-h-0 w-full max-w-[390px] flex-1 min-[1100px]:order-none min-[1100px]:col-start-1 min-[1100px]:row-start-2 min-[1100px]:mx-auto min-[1100px]:mt-2 min-[1100px]:h-full min-[1100px]:min-h-0 min-[1100px]:flex-none"
             >
               <Phone
                 preset={preset}
@@ -1930,7 +1934,7 @@ export default function Demo({
                     data-panel
                     data-preset={p.id}
                     data-client-world
-                    className="flex min-h-0 flex-col justify-start min-[1100px]:h-full min-[1100px]:px-2"
+                    className="flex min-h-0 flex-col justify-start min-[1100px]:h-full"
                     style={{ "--accent": p.accent, "--accent-soft": p.accentSoft, "--accent-ink": p.accentInk } as CSSProperties}
                   >
                     <p data-panel-label className="font-display text-[28px] font-medium leading-[1.02] tracking-[-0.01em] text-[var(--accent,#E9EEF4)] min-[1100px]:text-[44px]">{p.label}</p>
@@ -2000,11 +2004,11 @@ export default function Demo({
 
           {/* Desktop: dots + cue at the section's bottom center. */}
           {!yoursCueGone && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-12 z-20 hidden justify-center min-[1100px]:flex">
+            <div className="pointer-events-none absolute bottom-16 left-12 z-20 hidden min-[1100px]:flex">
               <p className="text-[12px] text-muted">{COPY.cues.presets}</p>
             </div>
           )}
-          <div className="absolute inset-x-0 bottom-6 z-20 hidden flex-col items-center gap-1.5 min-[1100px]:flex">
+          <div className="absolute bottom-6 left-12 z-20 hidden flex-col items-start gap-1.5 min-[1100px]:flex">
             <div className="flex justify-center gap-2.5">
               {presetList.map((p, i) => (
                 <button
@@ -2034,7 +2038,7 @@ export default function Demo({
       <section data-section="math" data-bottom-band data-entry-fx={fxReady ? (entered[3] ? "run" : "pending") : undefined} className="border-t border-line">
         <SectionMark {...COPY.sections.math} />
 
-        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col items-center justify-center gap-10 pl-6 pr-14 text-center min-[1100px]:max-w-[1360px] min-[1100px]:gap-12 min-[1100px]:px-6">
+        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col items-center justify-center gap-10 pl-6 pr-14 text-center min-[1100px]:max-w-[1240px] min-[1100px]:items-stretch min-[1100px]:gap-14 min-[1100px]:px-12 min-[1100px]:text-left">
           {/* change 18 (C5): the math line is the ledger's TOTAL — a 2px
               rule above, 1px below, numerals in mono at display size. */}
           <div data-total className="w-full border-b border-t-2 border-line py-4">
@@ -2048,7 +2052,7 @@ export default function Demo({
                 const midPart = afterName.split("{missed}")[1]?.split("${ticket}")[0] ?? "";
                 const tailPart = afterName.split("${ticket}")[1] ?? "";
                 return (
-                  <p data-math className="mx-auto max-w-[24ch] font-display font-medium leading-[1.08] tracking-[-0.01em] text-ink [font-size:clamp(40px,6vw,72px)] min-[1100px]:max-w-none min-[1100px]:[font-size:112px]">
+                  <p data-math className="mx-auto max-w-[24ch] font-display font-medium leading-[1.08] tracking-[-0.01em] text-ink [font-size:clamp(40px,6vw,72px)] min-[1100px]:mx-0 min-[1100px]:max-w-none min-[1100px]:[font-size:112px] min-[1100px]:[text-wrap:balance]">
                     <span data-math-name>{name}</span>
                     {beforeMissed}
                     <span data-math-numeral data-figure className="font-medium text-gold">
@@ -2063,7 +2067,7 @@ export default function Demo({
                 );
               })()
             ) : (
-              <p data-math className="mx-auto max-w-[20ch] font-display font-medium leading-[1.08] tracking-[-0.01em] text-ink [font-size:clamp(40px,6vw,72px)] min-[1100px]:max-w-none min-[1100px]:[font-size:112px]">
+              <p data-math className="mx-auto max-w-[20ch] font-display font-medium leading-[1.08] tracking-[-0.01em] text-ink [font-size:clamp(40px,6vw,72px)] min-[1100px]:mx-0 min-[1100px]:max-w-none min-[1100px]:[font-size:112px] min-[1100px]:[text-wrap:balance]">
                 {COPY.mathLead}{" "}
                 <span data-math-numeral data-figure className="font-medium text-gold">
                   {preset.missedPerMonth}
@@ -2084,7 +2088,7 @@ export default function Demo({
               of a two-row section — CTA block left, builtBy/loop/wordmark/
               stack right-aligned right. The ?ref=djl variant runs the same
               grid. */}
-          <div className="flex w-full max-w-md flex-col items-center gap-2.5 min-[1100px]:grid min-[1100px]:max-w-none min-[1100px]:grid-cols-2 min-[1100px]:items-start min-[1100px]:gap-x-16 min-[1100px]:text-left">
+          <div className="flex w-full max-w-md flex-col items-center gap-2.5 min-[1100px]:grid min-[1100px]:max-w-none min-[1100px]:grid-cols-[55fr_45fr] min-[1100px]:items-start min-[1100px]:gap-x-16 min-[1100px]:text-left">
             <div data-close-left className="flex w-full flex-col items-center gap-2.5 min-[1100px]:items-start">
             {refDjl ? (
               <>
@@ -2093,11 +2097,11 @@ export default function Demo({
                   href={COPY.portfolio.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-block rounded-full bg-gold px-8 py-4 text-[15px] font-semibold text-abyss outline-none focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2"
+                  className="inline-block rounded-full bg-gold px-8 py-4 text-[15px] font-semibold text-abyss outline-none focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 min-[1100px]:px-10 min-[1100px]:py-5 min-[1100px]:text-[20px]"
                 >
                   {COPY.portfolio.cta}
                 </a>
-                <p data-cta-sub className="text-[14px] text-muted min-[1100px]:text-[17px]">
+                <p data-cta-sub className="text-[14px] text-muted min-[1100px]:text-[19px]">
                   {COPY.portfolio.sub}
                 </p>
               </>
@@ -2109,14 +2113,14 @@ export default function Demo({
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={() => track("cta_calendly", { preset: preset.id })}
-                  className="inline-block rounded-full bg-gold px-8 py-4 text-[15px] font-semibold text-abyss outline-none focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2"
+                  className="inline-block rounded-full bg-gold px-8 py-4 text-[15px] font-semibold text-abyss outline-none focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 min-[1100px]:px-10 min-[1100px]:py-5 min-[1100px]:text-[20px]"
                 >
                   {COPY.close.ctaLabel}
                 </a>
-                <p data-cta-sub className="text-[14px] text-muted min-[1100px]:text-[17px]">
+                <p data-cta-sub className="text-[14px] text-muted min-[1100px]:text-[19px]">
                   {COPY.close.ctaSub}
                 </p>
-                <p data-sms-line className="text-[14px] text-muted min-[1100px]:text-[17px]">
+                <p data-sms-line className="text-[14px] text-muted min-[1100px]:font-figures min-[1100px]:text-[17px]">
                   {COPY.close.textLead}{" "}
                   <a
                     data-sms
@@ -2128,7 +2132,7 @@ export default function Demo({
                     {COPY.contact.phone}
                   </a>
                 </p>
-                <p data-price-line data-figure className="text-[15px] text-ink min-[1100px]:text-[17px]">
+                <p data-price-line data-figure className="text-[15px] text-ink min-[1100px]:text-[22px]">
                   {COPY.close.priceLine}
                 </p>
               </>
@@ -2137,7 +2141,7 @@ export default function Demo({
 
             <div data-close-rule className="mt-2 w-full border-t border-line min-[1100px]:hidden" />
 
-            <div data-close-right className="flex w-full flex-col items-center gap-1 min-[1100px]:items-end min-[1100px]:text-right">
+            <div data-close-right className="flex w-full flex-col items-center gap-1 min-[1100px]:items-start min-[1100px]:text-left">
 
             {/* change 26 (F4): 56px portrait; the name and the wordmark both
                 link home. */}

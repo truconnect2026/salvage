@@ -505,7 +505,9 @@ export default function Phone({
             aspect && live ? "justify-end" : "justify-start"
           }`}
         >
-          <div {...markEither("data-thread-area", "data-s-thread-area")} className="flex flex-col pt-3">
+          {/* change 28 (E1): a static reference phone opens its thread 16px
+              under the header; the live playback instance keeps 12. */}
+          <div {...markEither("data-thread-area", "data-s-thread-area")} className={`flex flex-col ${aspect && live ? "pt-3" : "pt-4"}`}>
             {thread.map((b, i) => {
               const prev = thread[i - 1];
               const next = thread[i + 1];

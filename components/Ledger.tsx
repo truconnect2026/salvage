@@ -168,6 +168,13 @@ export default function Ledger({
         {rest.map((entry, i) => (
           <CaughtRow key={i + 1} index={i + 1} entry={entry} compact={compact} date={dates?.rows[i + 1]} />
         ))}
+        {/* change 28 (D1): the desktop table runs 3 rows at 1x — the rest
+            fold into a mono footnote. Mobile and the OG keep every row. */}
+        {!compact && preset.caught.length > 3 && (
+          <p data-more-rows data-figure className="mt-1 hidden text-[12px] text-muted min-[1100px]:block">
+            {L.moreRows.replace("{n}", String(preset.caught.length - 3))}
+          </p>
+        )}
       </div>
 
       {/* D6: the reply time, demoted to a mono footnote under the table. */}
@@ -298,7 +305,9 @@ function CaughtRow({
     );
   }
   return (
-    <div data-caught-row={index} className="border-b border-line">
+    /* change 28 (D1): rows past the third leave the desktop render (the
+       moreRows footnote carries the count); mobile and the OG keep them. */
+    <div data-caught-row={index} className={`border-b border-line ${!compact && index >= 3 ? "min-[1100px]:hidden" : ""}`}>
       {cells}
     </div>
   );

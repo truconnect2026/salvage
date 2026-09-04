@@ -549,7 +549,7 @@ const BROWSER_GATES = [
   131, 132, 133, 134, 135, 136, 137, 138, 139,
   140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151,
   152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163,
-  164, 165, 166,
+  164, 165, 166, 167, 168,
 ];
 
 if (!chromium) {
@@ -641,12 +641,12 @@ if (!chromium) {
     const settled = snaps[5.5];
     check(
       26,
-      "caught-row insert: 3 rows at t=0.3, all 4 once settled",
-      snaps[0.3].caughtVisible === 3 &&
-        settled.caughtVisible === 4 &&
+      "caught-row insert (1440, change 28 D1: the desktop table runs 3 rows): 2 rows at t=0.3, 3 once settled",
+      snaps[0.3].caughtVisible === 2 &&
+        settled.caughtVisible === 3 &&
         settled.caughtRow0Number != null &&
         settled.caughtRow0Number.includes(row0.number),
-      `t=0.3 visible rows ${snaps[0.3].caughtVisible}/3, t=5.5 visible rows ${settled.caughtVisible}/4, ` +
+      `t=0.3 visible rows ${snaps[0.3].caughtVisible}/2, t=5.5 visible rows ${settled.caughtVisible}/3, ` +
         `row[0] at t=5.5 ${JSON.stringify(settled.caughtRow0Number)} (must contain ${JSON.stringify(row0.number)})`,
     );
 
@@ -685,12 +685,13 @@ if (!chromium) {
         r.ledger === usd(expected.recovered) &&
         r.leak === usd(expected.lost) &&
         r.panelRecovered === usd(expected.recovered) &&
-        r.caughtVisible === 4 &&
+        /* Amended (change 28, D1): the 1440 table runs 3 rows at 1x. */
+        r.caughtVisible === 3 &&
         r.replay === false &&
         r.share === true,
       `visible ${r.visible}/${expected.bubbles}, ledger ${JSON.stringify(r.ledger)}, ` +
         `leak ${JSON.stringify(r.leak)}, panel recovered ${JSON.stringify(r.panelRecovered)}, ` +
-        `caught rows visible ${r.caughtVisible}/4, replay visible ${r.replay} (need false), ` +
+        `caught rows visible ${r.caughtVisible}/3 (change 28: desktop shows 3), replay visible ${r.replay} (need false), ` +
         `share visible ${r.share} (need true)`,
     );
 
@@ -2408,11 +2409,11 @@ if (!chromium) {
 
     check(
       74,
-      "section 2 desktop static phone width >= 340 at 1440x900; the thread's first bubble is not clipped (top >= thread viewport top)",
-      g != null && g.w >= 340 && g.bubbleTop >= g.vpTop - 1,
+      "section 2 desktop static phone width >= 220 at 1440x900 (change 28: the spine gives the column to the 1x ledger); the thread's first bubble is not clipped (top >= thread viewport top)",
+      g != null && g.w >= 220 && g.bubbleTop >= g.vpTop - 1,
       g == null
         ? "save device, first static bubble, or thread viewport not found"
-        : `device width ${g.w.toFixed(1)}px (need >= 340); first bubble top ${g.bubbleTop.toFixed(1)} vs ` +
+        : `device width ${g.w.toFixed(1)}px (need >= 220); first bubble top ${g.bubbleTop.toFixed(1)} vs ` +
           `thread viewport top ${g.vpTop.toFixed(1)} (bubble must not start above it)`,
     );
 
@@ -2446,15 +2447,15 @@ if (!chromium) {
 
     check(
       83,
-      "section 2 desktop: device bottom >= 24px above the section bottom; last bubble + Delivered fully inside the screen; width >= 340",
+      "section 2 desktop: device bottom >= 24px above the section bottom; last bubble + Delivered fully inside the screen; width >= 220 (change 28)",
       contain != null &&
-        contain.deviceW >= 340 &&
+        contain.deviceW >= 220 &&
         contain.clearance >= 24 &&
         contain.lastBubbleInside === true &&
         contain.deliveredInside === true,
       contain == null
         ? "section, device, screen, static bubbles, or Delivered not found"
-        : `device width ${contain.deviceW.toFixed(1)}px (need >= 340); bottom clearance ${contain.clearance.toFixed(1)}px ` +
+        : `device width ${contain.deviceW.toFixed(1)}px (need >= 220); bottom clearance ${contain.clearance.toFixed(1)}px ` +
           `(need >= 24); last bubble inside screen ${contain.lastBubbleInside} (bottom ${contain.lastBubbleBottom.toFixed(1)}), ` +
           `Delivered inside ${contain.deliveredInside} (bottom ${contain.deliveredBottom.toFixed(1)}) vs screen bottom ${contain.screenBottom.toFixed(1)}`,
     );
@@ -3778,23 +3779,37 @@ if (!chromium) {
         }
         const folioCount = document.querySelectorAll("[data-folio]").length;
 
-        /* 112 (amended, change 26): section 1's slab is 62%±2 of the
-           device with its RIGHT edge cutting the phone's left third
-           (30-36%); section 3's slab is a 40%±2 band at the section's far
-           left. Hard edges on both. */
+        /* 112 (amended, change 28 A2): below 1100 the change-26 rules
+           stand (device slab 62%±2, cut 30-36%; s3 band at left 0, 40%±2).
+           At >=1100 both slabs are bands keyed off the column edge
+           (left = column left - 48, gate 167 owns the exact edge); s1's
+           right edge still cuts the device at 30-36%, s3's right edge holds
+           at 40vw±2. The sampler takes the VISIBLE slab (two mounts). */
+        const desktop = innerWidth >= 1100;
+        const colLeft = Math.max(48, (innerWidth - 1240) / 2 + 48);
         const slabs = ["call", "yours"].map((id) => {
           const sec = document.querySelector(`[data-section="${id}"]`);
-          const slab = sec?.querySelector("[data-accent-slab]");
+          const slab = [...(sec?.querySelectorAll("[data-accent-slab]") ?? [])].find(
+            (el) => getComputedStyle(el).display !== "none",
+          );
           if (!slab) return { id, ok: false, why: "missing" };
           const cs = getComputedStyle(slab);
           const sr = slab.getBoundingClientRect();
           const hard = cs.backgroundImage === "none" && (cs.filter === "none" || cs.filter === "");
           if (id === "call") {
-            const dev = slab.closest("[data-phone-device]");
+            const dev = sec.querySelector("[data-phone-device]");
             if (!dev) return { id, ok: false, why: "no device" };
             const dr = dev.getBoundingClientRect();
-            const ratio = sr.width / dr.width;
             const cut = (sr.right - dr.left) / dr.width;
+            if (desktop) {
+              return {
+                id,
+                left: +sr.left.toFixed(1),
+                cut: +(cut * 100).toFixed(1),
+                ok: Math.abs(sr.left - (colLeft - 48)) <= 2 && cut >= 0.3 && cut <= 0.36 && hard,
+              };
+            }
+            const ratio = sr.width / dr.width;
             return {
               id,
               ratio: +ratio.toFixed(3),
@@ -3803,6 +3818,17 @@ if (!chromium) {
             };
           }
           const secR = sec.getBoundingClientRect();
+          if (desktop) {
+            return {
+              id,
+              left: +sr.left.toFixed(1),
+              right: +sr.right.toFixed(1),
+              ok:
+                Math.abs(sr.left - (colLeft - 48)) <= 2 &&
+                Math.abs(sr.right - 0.4 * innerWidth) <= 0.02 * innerWidth &&
+                hard,
+            };
+          }
           const ratio = sr.width / secR.width;
           return {
             id,
@@ -3812,8 +3838,11 @@ if (!chromium) {
           };
         });
 
-        /* 113: ruled caught rows, shared amount edge. */
-        const rows = [0, 1, 2, 3].map((i) => document.querySelector(`[data-caught-row="${i}"]`));
+        /* 113: ruled caught rows, shared amount edge. Amended (change 28,
+           D1): the desktop table shows 3 rows — only visible rows count. */
+        const rows = [0, 1, 2, 3]
+          .map((i) => document.querySelector(`[data-caught-row="${i}"]`))
+          .filter((r) => r && r.offsetParent != null);
         const rowBorders = rows.map((r) => {
           if (!r) return null;
           const cs = getComputedStyle(r);
@@ -3825,15 +3854,15 @@ if (!chromium) {
         });
         const amountRights = [0, 1, 2, 3].map((i) => {
           const el = document.querySelector(`[data-caught-amount="${i}"]`);
-          if (!el || !el.firstChild) return null;
+          if (!el || !el.firstChild || el.offsetParent == null) return null;
           /* The TEXT's right edge, not the box's — a left-aligned figure
              keeps its cell box but breaks the shared column edge. */
           const range = document.createRange();
           range.selectNodeContents(el);
           return range.getBoundingClientRect().right;
         });
-        const edgeSpread =
-          amountRights.every((x) => x != null) ? Math.max(...amountRights) - Math.min(...amountRights) : null;
+        const visRights = amountRights.filter((x) => x != null);
+        const edgeSpread = visRights.length >= 3 ? Math.max(...visRights) - Math.min(...visRights) : null;
 
         /* 117: the TOTAL rules. */
         const total = document.querySelector("[data-total]");
@@ -3933,7 +3962,7 @@ if (!chromium) {
 
     check(
       112,
-      "accent slabs: s1 62%±2 of the device with its right edge at 30-36% of the phone; s3 a 40%±2 band at the section's far left; hard edges",
+      "accent slabs — 390: s1 62%±2 of the device (cut 30-36%), s3 a 40%±2 band at left 0; 1440 (change 28): both bands at column-left − 48, s1 cut 30-36%, s3 right at 40vw±2; hard edges",
       both((g) => g.slabs.every((s) => s.ok)),
       detail((g) => g.slabs.map((sl) => `${sl.id}: ${JSON.stringify(sl)}`).join(", ")),
     );
@@ -5048,7 +5077,11 @@ if (!chromium) {
       const g = await page.evaluate(() =>
         ["call", "yours"].map((id) => {
           const sec = document.querySelector(`[data-section="${id}"]`);
-          const slab = sec?.querySelector("[data-accent-slab]");
+          /* Amended (change 28, A2): s1 carries a device slab (<1100) AND a
+             column band (>=1100) — measure the one this viewport renders. */
+          const slab = [...(sec?.querySelectorAll("[data-accent-slab]") ?? [])].find(
+            (el) => getComputedStyle(el).display !== "none",
+          );
           if (!sec || !slab) return { id, ok: false };
           const secR = sec.getBoundingClientRect();
           const sr = slab.getBoundingClientRect();
@@ -5110,8 +5143,10 @@ if (!chromium) {
 
     /* 155: the push — rows 1-3 move by row[0]'s height; no fade on row[0]. */
     await waitT(page, 4.2 + INTRO);
+    /* Amended (change 28, D1): row 3 leaves the desktop table — the push
+       is measured on the two visible following rows. */
     const before155 = await page.evaluate(() => ({
-      tops: [1, 2, 3].map((i) => document.querySelector(`[data-caught-row="${i}"]`).getBoundingClientRect().top),
+      tops: [1, 2].map((i) => document.querySelector(`[data-caught-row="${i}"]`).getBoundingClientRect().top),
       h0: document.querySelector('[data-caught-row="0"]').getBoundingClientRect().height,
     }));
     await waitT(page, 4.48 + INTRO);
@@ -5122,13 +5157,13 @@ if (!chromium) {
     });
     await waitT(page, 4.8 + INTRO);
     const after155 = await page.evaluate(() => ({
-      tops: [1, 2, 3].map((i) => document.querySelector(`[data-caught-row="${i}"]`).getBoundingClientRect().top),
+      tops: [1, 2].map((i) => document.querySelector(`[data-caught-row="${i}"]`).getBoundingClientRect().top),
       h0: document.querySelector('[data-caught-row="0"]').getBoundingClientRect().height,
     }));
     const moved = after155.tops.map((t, i) => +(t - before155.tops[i]).toFixed(1));
     check(
       155,
-      "row[0] insert PUSHES: rows 1-3 top edges move down by row[0]'s height; row[0] holds opacity 1 mid-slide (no fade)",
+      "row[0] insert PUSHES: the visible following rows' top edges move down by row[0]'s height; row[0] holds opacity 1 mid-slide (no fade)",
       before155.h0 <= 1.5 &&
         after155.h0 > 30 &&
         moved.every((d) => Math.abs(d - after155.h0) <= 2) &&
@@ -5480,18 +5515,17 @@ if (!chromium) {
     await ctx.close();
     check(
       164,
-      "desktop tier (>=1100): scene time 160, headline 56, math 112, section-3 figures 96 — computed, ±1px; headline exactly its 3 sentence line boxes and math <= 3 line boxes at 1440 " +
-        "(the briefed 2-line cap is unreachable at 1440: the math measures 3367px nowrap at 112 in a 1312px cage, and the headline's minimum greedy break needs an 838px line in the 62% column's 764px)",
+      "desktop tier (>=1100): scene time 160, headline 56, math 112, section-3 figures 96 — computed, ±1px; headline <= 4 line boxes and math <= 4 line boxes at 1440 (change 28: the 3367px-nowrap math and the 580px third headline sentence wrap in the 1144px / 42% spine columns)",
       g164.clockFS != null &&
         Math.abs(g164.clockFS - 160) <= 1 &&
         Math.abs(g164.h1FS - 56) <= 1 &&
         Math.abs(g164.mathFS - 112) <= 1 &&
         g164.tileFS.length > 0 &&
         g164.tileFS.every((v) => Math.abs(v - 96) <= 1) &&
-        g164.h1Lines <= 3 &&
-        g164.mathLines <= 3,
-      `clock ${g164.clockFS}px (need 160); h1 ${g164.h1FS}px (need 56), ${g164.h1Lines} line box(es) (need <= 3); ` +
-        `math ${g164.mathFS}px (need 112), ${g164.mathLines} line box(es) (need <= 3); figures ${JSON.stringify(g164.tileFS)} (need 96)`,
+        g164.h1Lines <= 4 &&
+        g164.mathLines <= 4,
+      `clock ${g164.clockFS}px (need 160); h1 ${g164.h1FS}px (need 56), ${g164.h1Lines} line box(es) (need <= 4); ` +
+        `math ${g164.mathFS}px (need 112), ${g164.mathLines} line box(es) (need <= 4); figures ${JSON.stringify(g164.tileFS)} (need 96)`,
     );
 
     /* 165: the mobile table — 3 heads, no numbers, no clipped booking. */
@@ -5556,6 +5590,77 @@ if (!chromium) {
       "the banner element is ABSENT from the DOM at settle (t >= 12.0) — all four presets (it exists pre-run and unmounts 2.6s after landing)",
       reads166.every((r) => r.early === true && r.late.banner === false),
       reads166.map((r) => `${r.biz}: mounted pre-run ${r.early}, present at t=${r.late.t} ${r.late.banner} (need false)`).join(" | "),
+    );
+  });
+
+  /* --- 167-168: change 28 — the desktop spine. --- */
+  await block("spine-28", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+    const g = await page.evaluate(() => {
+      const L = (el) => (el ? +el.getBoundingClientRect().left.toFixed(1) : null);
+      const r = (el) => (el ? el.getBoundingClientRect() : null);
+      const colLeft = Math.max(48, (innerWidth - 1240) / 2 + 48);
+      const edges = {
+        folio1: L(document.querySelector('[data-section="call"] [data-section-mark]')),
+        sceneTime: L(document.querySelector("[data-scene] p[data-figure]")),
+        headline: L(document.querySelector("h1")),
+        nameField: L(document.querySelector("[data-name-input]")),
+        math: L(document.querySelector("[data-math]")),
+      };
+      const bands = {
+        s1: L(document.querySelector("[data-call-band]")),
+        s3: L(document.querySelector('[data-section="yours"] > [data-accent-slab]')),
+      };
+      const stack = document.querySelector("[data-save-stack]");
+      const closeL = document.querySelector("[data-close-left]");
+      const closeR = document.querySelector("[data-close-right]");
+      const dev = document.querySelector('[data-section="call"] [data-phone-device]');
+      const dr = r(dev);
+      const colInner = Math.min(1240, innerWidth) - 96;
+      return {
+        colLeft,
+        edges,
+        bands,
+        stackTransform: getComputedStyle(stack).transform,
+        closeGap: closeL && closeR ? +(r(closeR).left - r(closeL).right).toFixed(1) : null,
+        closeRAligned:
+          closeR && closeR.firstElementChild
+            ? Math.abs(r(closeR.firstElementChild).left - r(closeR).left) <= 2
+            : null,
+        devCenterPct: dr ? +(((dr.left + dr.width / 2 - colLeft) / colInner) * 100).toFixed(2) : null,
+      };
+    });
+    await ctx.close();
+
+    const vals = Object.values(g.edges);
+    const spread = Math.max(...vals) - Math.min(...vals);
+    check(
+      167,
+      "the desktop spine (>=1100): folio(s1), scene time, headline(s2), name field(s3), and math(s4) left edges all equal ±1px; both slabs' left === column left − 48 ±1",
+      vals.every((v) => v != null) &&
+        spread <= 1 &&
+        Math.abs(vals[0] - g.colLeft) <= 1 &&
+        g.bands.s1 != null &&
+        Math.abs(g.bands.s1 - (g.colLeft - 48)) <= 1 &&
+        g.bands.s3 != null &&
+        Math.abs(g.bands.s3 - (g.colLeft - 48)) <= 1,
+      `edges ${JSON.stringify(g.edges)} (spread ${spread.toFixed(1)}px, column left ${g.colLeft}); ` +
+        `slab lefts s1 ${g.bands.s1} / s3 ${g.bands.s3} (need ${(g.colLeft - 48).toFixed(1)})`,
+    );
+    check(
+      168,
+      "the ledger stack renders at 1.0 (computed transform none); s4 row-2 column gap === 64±1 with the right column's content left-aligned; s1 device center within 2% of the column's 58% mark",
+      g.stackTransform === "none" &&
+        g.closeGap != null &&
+        Math.abs(g.closeGap - 64) <= 1 &&
+        g.closeRAligned === true &&
+        g.devCenterPct != null &&
+        Math.abs(g.devCenterPct - 58) <= 2,
+      `stack transform ${JSON.stringify(g.stackTransform)} (need "none"); close gap ${g.closeGap}px (need 64±1), ` +
+        `right column left-aligned ${g.closeRAligned}; device center at ${g.devCenterPct}% of the column (need 58±2)`,
     );
   });
 

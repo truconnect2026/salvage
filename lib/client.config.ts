@@ -86,6 +86,8 @@ export const COPY = {
     // footnote; the old Reply time money row retired with its strings.
     cols: { name: "Name", booking: "Booking", amount: "Amount", date: "Date" },
     replyFoot: "Average reply 18s",
+    // change 28 (D1, APPROVED): the desktop table shows 3 rows at 1x.
+    moreRows: "+{n} more this month",
     caughtLabel: "Caught this month",
     reviewNote: "Review requests sent automatically after each visit.",
     sinceLabel: "Since install",
