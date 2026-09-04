@@ -549,7 +549,7 @@ const BROWSER_GATES = [
   131, 132, 133, 134, 135, 136, 137, 138, 139,
   140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151,
   152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163,
-  164, 165, 166, 167, 168,
+  164, 165, 166, 167, 168, 169, 170,
 ];
 
 if (!chromium) {
@@ -5661,6 +5661,69 @@ if (!chromium) {
         Math.abs(g.devCenterPct - 58) <= 2,
       `stack transform ${JSON.stringify(g.stackTransform)} (need "none"); close gap ${g.closeGap}px (need 64±1), ` +
         `right column left-aligned ${g.closeRAligned}; device center at ${g.devCenterPct}% of the column (need 58±2)`,
+    );
+  });
+
+  /* --- 169-170: change 29 — confirmation exit, one replay label. --- */
+  await block("exit-29", async () => {
+    /* 169: the confirmation card leaves the DOM 3.0s after landing (10.3 +
+       3.0 = 13.3) — sampled past it, every preset, real motion. */
+    const reads169 = await Promise.all(
+      ["salon", "home", "dental", "other"].map(async (biz) => {
+        const cm = await browser.newContext({ viewport: { width: 390, height: 844 } });
+        const pm = await cm.newPage();
+        await pm.goto(`${base}/?biz=${biz}`, { waitUntil: "domcontentloaded" });
+        const early = await pm.evaluate(() => document.querySelector("[data-notify-phone]") != null);
+        await pm.waitForFunction(
+          () => {
+            const t = document.querySelector("[data-demo]")?.getAttribute("data-t");
+            return t != null && parseFloat(t) >= 13.5;
+          },
+          undefined,
+          { timeout: 60000 },
+        );
+        const late = await pm.evaluate(() => ({
+          t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
+          card: document.querySelector("[data-notify-phone]") != null,
+        }));
+        await cm.close();
+        return { biz, early, late };
+      }),
+    );
+    check(
+      169,
+      "the booking-confirmation card is ABSENT from the DOM at settle (t >= 13.5; it unmounts at 13.3, 3.0s after landing) — all four presets",
+      reads169.every((r) => r.early === true && r.late.card === false),
+      reads169.map((r) => `${r.biz}: mounted pre-run ${r.early}, present at t=${r.late.t} ${r.late.card} (need false)`).join(" | "),
+    );
+
+    /* 170: one replay label. */
+    const replayLabel = need(/replayLabel:\s*"([^"]+)"/, "COPY.replayLabel");
+    const loopLabel = need(/loopLabel:\s*"([^"]+)"/, "COPY.close.loopLabel");
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+    const g170 = await page.evaluate(() => {
+      const hits = [...document.querySelectorAll("button, a")]
+        .filter((el) => el.textContent.trim() === "Watch again")
+        .map((el) => el.getAttribute("data-replay") != null ? "s1:data-replay" : el.getAttribute("data-loop") != null ? "s4:data-loop" : el.tagName);
+      return {
+        hits,
+        stale: document.body.textContent.includes("Watch it again"),
+      };
+    });
+    await ctx.close();
+    check(
+      170,
+      'one replay label: config replayLabel === loopLabel === "Watch again"; exactly the s1 and s4 controls render it; "Watch it again" appears nowhere',
+      replayLabel === "Watch again" &&
+        loopLabel === "Watch again" &&
+        g170.hits.length === 2 &&
+        g170.hits.includes("s1:data-replay") &&
+        g170.hits.includes("s4:data-loop") &&
+        g170.stale === false,
+      `config replay ${JSON.stringify(replayLabel)} / loop ${JSON.stringify(loopLabel)}; rendered "Watch again" on ${JSON.stringify(g170.hits)} (need exactly the two controls); "Watch it again" present ${g170.stale} (need false)`,
     );
   });
 

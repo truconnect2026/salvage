@@ -391,6 +391,7 @@ export default function Phone({
   sonar = false,
   headerGhost = false,
   showBanner = true,
+  showConfirm = true,
 }: {
   preset: Preset;
   /* The effective business name (custom or preset default). Falls back to the
@@ -432,6 +433,9 @@ export default function Phone({
   /* change 27 (C2): the engine unmounts the banner 2.6s after it lands;
      replay and re-arm remount it. Live section-1 instance only. */
   showBanner?: boolean;
+  /* change 29: the booking-confirmation card leaves the DOM 3.0s after it
+     lands, same contract. Live section-1 instance only. */
+  showConfirm?: boolean;
 }) {
   const thread = preset.thread;
   const typing = new Set(typingBefore);
@@ -609,8 +613,10 @@ export default function Phone({
           card belongs on the ledger side only; change 11 review). Existing
           approved strings recomposed, no new copy. Slides down from the top
           like every push she has ever received. Live instances only: the
-          static settled phone (change 12) has no closing beat. */}
-      {live && (
+          static settled phone (change 12) has no closing beat.
+          change 29: the element leaves the DOM 3.0s after landing — gate
+          169. */}
+      {live && showConfirm && (
       <div
         data-notify-phone
         className="absolute inset-x-3 top-3 z-40"

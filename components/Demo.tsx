@@ -277,6 +277,11 @@ type Ctx = {
      7.3); park/replay remount it for the next run. */
   bannerLatched: boolean;
   setBannerGone: (gone: boolean) => void;
+  /* change 29: the booking-confirmation card follows the same contract —
+     its slide-out completes at 13.0; the element leaves the DOM at 13.3
+     (land 10.3 + 3.0). Gate 169. */
+  confirmLatched: boolean;
+  setConfirmGone: (gone: boolean) => void;
 };
 
 /* Beat crossings -> Web Audio schedules, on the rAF phase and nothing else.
@@ -579,6 +584,8 @@ function park(ctx: Ctx) {
   ctx.setCaretBob(false);
   ctx.bannerLatched = false;
   ctx.setBannerGone(false);
+  ctx.confirmLatched = false;
+  ctx.setConfirmGone(false);
   paintScene(ctx, 0);
   paintFade(ctx, 1);
   paintNumbers(
@@ -712,6 +719,12 @@ function tick(ctx: Ctx, now: number) {
   if (!ctx.bannerLatched && t >= 7.3) {
     ctx.bannerLatched = true;
     ctx.setBannerGone(true);
+  }
+  /* change 29: the confirmation card leaves the DOM 3.0s after it lands
+     (10.3 + 3.0; its slide-out already completed at 13.0). */
+  if (!ctx.confirmLatched && t >= 13.3) {
+    ctx.confirmLatched = true;
+    ctx.setConfirmGone(true);
   }
   if (!ctx.toastLatched && t >= 0.5) {
     ctx.toastLatched = true;
@@ -876,6 +889,8 @@ export default function Demo({
   /* change 27 (C2): the banner's DOM presence — the engine latches it gone
      at t=7.3; park/replay flip it back. */
   const [bannerGone, setBannerGone] = useState(false);
+  /* change 29: same contract for the booking-confirmation card. */
+  const [confirmGone, setConfirmGone] = useState(false);
   /* Sound (change 15, B2): off until the rail toggle's tap. Restored from
      sessionStorage in the mount effect — never under reduced motion. */
   const [soundOn, setSoundOn] = useState(false);
@@ -985,13 +1000,14 @@ export default function Demo({
     ctx.nodes = collect(ctx.root);
   }, [name]);
 
-  /* change 27 (C2): the banner mounts and unmounts mid-run — re-collect so
-     the engine never paints a detached node and always finds a fresh one. */
+  /* change 27 (C2) / change 29: the banner and the confirmation card mount
+     and unmount mid-run — re-collect so the engine never paints a detached
+     node and always finds a fresh one. */
   useLayoutEffect(() => {
     const ctx = ctxRef.current;
     if (!ctx) return;
     ctx.nodes = collect(ctx.root);
-  }, [bannerGone]);
+  }, [bannerGone, confirmGone]);
 
   /* Mount. Reduced motion means zero timers: the SSR settled state stands.
      Otherwise the clock PARKS at t=0 (change 12) — the section observer
@@ -1021,6 +1037,8 @@ export default function Demo({
       toastLatched: false,
       bannerLatched: false,
       setBannerGone,
+      confirmLatched: false,
+      setConfirmGone,
       fireToast: () => {
         let seen = false;
         try {
@@ -1454,6 +1472,8 @@ export default function Demo({
     setCaretBob(false);
     ctx.bannerLatched = false;
     setBannerGone(false);
+    ctx.confirmLatched = false;
+    setConfirmGone(false);
     schedule(ctx);
   };
 
@@ -1700,7 +1720,7 @@ export default function Demo({
                 {COPY.scene.mobile.caught.post}
               </p>
             </div>
-            <Phone preset={preset} bizName={bizName} typingBefore={[2]} slab sonar showBanner={!bannerGone} />
+            <Phone preset={preset} bizName={bizName} typingBefore={[2]} slab sonar showBanner={!bannerGone} showConfirm={!confirmGone} />
             {/* change 26 (C7): the settled pair — centered under the
                 phone, 24px below the bezel, 12px apart. The engine lands
                 them at settle. */}

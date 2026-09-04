@@ -52,7 +52,8 @@ export const COPY = {
     textLead: "or text Andy:",
     priceLine: "$1,000 setup · $200 a month",
     builtBy: "Built by Andy Jones · Chesterfield, VA",
-    loopLabel: "Watch it again",
+    // change 29 (APPROVED): one replay label page-wide — matches replayLabel.
+    loopLabel: "Watch again",
     // change 27 (C3, APPROVED) — one line at 390.
     stack: "Next.js · Twilio · Vercel",
   },
