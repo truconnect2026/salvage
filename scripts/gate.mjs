@@ -3726,7 +3726,12 @@ if (!chromium) {
           `simulated LCP ${(a["largest-contentful-paint"].numericValue / 1000).toFixed(2)}s (informational)`,
       );
     } finally {
-      await chrome.kill();
+      /* chrome-launcher's temp cleanup intermittently throws EPERM on
+         Windows (a straggler process holds the profile dir) — that must
+         never take the whole suite down. */
+      try {
+        await chrome.kill();
+      } catch {}
     }
   });
 
@@ -5793,17 +5798,25 @@ if (!chromium) {
         await pm.goto(`${base}/?biz=${biz}`, { waitUntil: "domcontentloaded" });
         await pm.evaluate(() => document.fonts.ready);
         const g = await pm.evaluate((sel) => {
+          /* The law is about what RENDERS: clip every box to its section
+             AND to any scrolling ancestor (the section-3 preset track), so a
+             panel scrolled out of the track viewport — invisible to every
+             viewer — is not judged against a slab it cannot visually
+             cross. Visible text is still evaluated at full rigor. */
           const clip = (el) => {
             const r = el.getBoundingClientRect();
-            const sec = el.closest("[data-section]");
-            if (!sec) return r;
-            const sr = sec.getBoundingClientRect();
-            return {
-              left: Math.max(r.left, sr.left),
-              right: Math.min(r.right, sr.right),
-              top: Math.max(r.top, sr.top),
-              bottom: Math.min(r.bottom, sr.bottom),
-            };
+            let box = { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+            for (const anc of [el.closest("[data-section]"), el.closest("[data-track]")]) {
+              if (!anc) continue;
+              const ar = anc.getBoundingClientRect();
+              box = {
+                left: Math.max(box.left, ar.left),
+                right: Math.min(box.right, ar.right),
+                top: Math.max(box.top, ar.top),
+                bottom: Math.min(box.bottom, ar.bottom),
+              };
+            }
+            return box;
           };
           const slabs = [...document.querySelectorAll("[data-slab]")]
             .filter((el) => getComputedStyle(el).display !== "none" && el.getBoundingClientRect().width > 0)
@@ -5814,8 +5827,14 @@ if (!chromium) {
             return cs.display !== "none" && cs.visibility !== "hidden" && r.width > 0 && r.height > 0;
           });
           const bad = [];
+          let skipped = 0;
           for (const t of texts) {
-            const tr = t.getBoundingClientRect();
+            const tr = clip(t);
+            /* Scrolled fully out of its track / section: renders nowhere. */
+            if (tr.right - tr.left <= 0.5 || tr.bottom - tr.top <= 0.5) {
+              skipped++;
+              continue;
+            }
             for (const sl of slabs) {
               const b = sl.box;
               const inside =
@@ -5828,7 +5847,7 @@ if (!chromium) {
                 );
             }
           }
-          return { slabCount: slabs.length, textCount: texts.length, bad: bad.slice(0, 6) };
+          return { slabCount: slabs.length, textCount: texts.length, offscreen: skipped, bad: bad.slice(0, 6) };
         }, TEXT_SEL);
         reads171.push({ vp: `${vp.w}`, biz, g });
         await cm.close();
@@ -5841,7 +5860,7 @@ if (!chromium) {
       reads171
         .filter((r) => r.g.bad.length > 0)
         .map((r) => `${r.vp}/${r.biz}: ${JSON.stringify(r.g.bad)}`)
-        .join(" | ") || `clean: ${reads171.length} contexts, e.g. ${reads171[0].g.textCount} text boxes vs ${reads171[0].g.slabCount} slabs`,
+        .join(" | ") || `clean: ${reads171.length} contexts, e.g. ${reads171[0].g.textCount} text boxes (${reads171[0].g.offscreen} scrolled off-screen, not judged) vs ${reads171[0].g.slabCount} slabs`,
     );
 
     /* 172 + 173 + 174 partly share loads. 172: stamp at rest, zero height
