@@ -113,11 +113,14 @@ function CallGridGlyph({ kind }: { kind: string }) {
         </svg>
       );
     case "speaker":
+      /* change 31 (3): hand-drawn at 1.5px to match the share/sound chrome —
+         a ROUNDED cone with a radiused back plate, replacing the angular
+         volume-up silhouette that read as tray clip-art. */
       return (
-        <svg {...common}>
-          <path d="M5 11v6h4l6 5V6l-6 5H5z" fill="currentColor" stroke="none" />
-          <path d="M18.5 10.5a5 5 0 0 1 0 7" />
-          <path d="M21.5 8a9 9 0 0 1 0 12" />
+        <svg {...common} strokeWidth={1.5}>
+          <path d="M6 11.4h3.3l4.8-4.3a.8.8 0 0 1 1.4.6v12.6a.8.8 0 0 1-1.4.6l-4.8-4.3H6a1.3 1.3 0 0 1-1.3-1.3v-2.6A1.3 1.3 0 0 1 6 11.4z" />
+          <path d="M18.9 11.1a4.7 4.7 0 0 1 0 5.8" />
+          <path d="M21.7 8.6a8.5 8.5 0 0 1 0 10.8" />
         </svg>
       );
     case "add call":
@@ -205,11 +208,16 @@ export function NotifyCard({ bizName, entry }: { bizName: string; entry: CaughtE
           viewBox="0 0 14 14"
           fill="none"
           stroke="currentColor"
-          strokeWidth="1.2"
+          strokeWidth="1.5"
+          strokeLinecap="round"
           aria-hidden="true"
         >
-          <rect x="1" y="2.5" width="12" height="10.5" rx="1.5" />
-          <path d="M1 6h12M4.5 1v3M9.5 1v3" />
+          {/* change 31 (3): hand-drawn — hard corners in the page's own
+              edge language, a ruled header band, and a filled date mark
+              instead of the stock binder rings. */}
+          <rect x="1.2" y="2.9" width="11.6" height="9.9" rx="0.5" />
+          <path d="M1.2 6.2h11.6M4.4 1.5v2.8M9.6 1.5v2.8" />
+          <rect x="3.9" y="8.3" width="2.4" height="2" fill="currentColor" stroke="none" />
         </svg>
         <span className="truncate">{COPY.ledger.calendarLine}</span>
       </div>

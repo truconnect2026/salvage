@@ -885,6 +885,13 @@ const btnSecondary =
   "transition-colors hover:bg-white/5 outline-none " +
   "focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2";
 
+/* change 31 (2): ONE link treatment on the page — teal text over a 1px teal
+   underline at 70%. The gold CTA pill is a button, not a link, and keeps its
+   own tier; nothing else may invent a third style. */
+const linkStyle =
+  "text-teal-bright underline decoration-[rgba(44,199,182,0.7)] decoration-1 underline-offset-2 " +
+  "outline-none focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2";
+
 const buildQuery = (biz: string, name: string, refDjl = false) =>
   `?biz=${encodeURIComponent(biz)}${name ? `&name=${encodeURIComponent(name)}` : ""}${refDjl ? "&ref=djl" : ""}`;
 
@@ -1766,17 +1773,15 @@ export default function Demo({
     });
   };
 
-  /* change 18 (C6/A4): dots are 6px teal-stroke SQUARES now — the rail and
-     the panel switcher speak the same 1px-rule language as the log. */
-  const pagerDot = (active: boolean) =>
-    `h-[7px] w-[7px] rounded-[2px] border transition-colors outline-none min-[1100px]:h-2 min-[1100px]:w-2 focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
+  /* change 31 (1): ONE dot on the page. The rail and the section-3 panel
+     switcher are the same 8px teal square in the same two states (C2 idle /
+     active) — one definition, aliased, so the two can never drift again. */
+  const dot = (active: boolean) =>
+    `h-2 w-2 rounded-[2px] border transition-colors outline-none focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
       active ? "border-teal bg-teal" : "border-[rgba(44,199,182,0.7)] bg-transparent"
     }`;
-
-  const panelDot = (active: boolean) =>
-    `h-1.5 w-1.5 rounded-[2px] border transition-colors outline-none focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
-      active ? "border-teal bg-teal" : "border-[rgba(44,199,182,0.7)] bg-transparent"
-    }`;
+  const pagerDot = dot;
+  const panelDot = dot;
 
   return (
     /* The pager (A1): the ONLY vertical scroller on the page. html/body are
@@ -2085,11 +2090,15 @@ export default function Demo({
                     viewBox="0 0 14 14"
                     fill="none"
                     stroke="currentColor"
-                    strokeWidth="1.2"
+                    strokeWidth="1.5"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   >
-                    <path d="M9.7 1.6l2.7 2.7L4.6 12l-3.3.6.6-3.3zM8.4 2.9l2.7 2.7" />
+                    {/* change 31 (3): hand-drawn chisel-tip pencil — a flat
+                        butt and an explicit ferrule band, squared off away
+                        from the round-capped icon-library silhouette. */}
+                    <path d="M2.2 11.9L2.9 9.1l6.4-6.4 2.1 2.1-6.4 6.4z" />
+                    <path d="M7.9 4.1l2.1 2.1" />
                   </svg>
                 )}
                 <input
@@ -2340,7 +2349,7 @@ export default function Demo({
                     data-figure
                     href={COPY.contact.smsHref}
                     onClick={() => track("cta_sms", { preset: preset.id })}
-                    className="text-teal-bright underline decoration-teal underline-offset-2 outline-none focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2"
+                    className={linkStyle}
                   >
                     {COPY.contact.phone}
                   </a>
@@ -2393,7 +2402,7 @@ export default function Demo({
                   href={COPY.portfolio.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="underline decoration-line underline-offset-2 outline-none hover:text-ink focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2"
+                  className={linkStyle}
                 >
                   Andy Jones
                 </a>
@@ -2410,7 +2419,7 @@ export default function Demo({
                 href={COPY.portfolio.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-figures outline-none hover:text-ink focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2"
+                className={`font-figures ${linkStyle}`}
               >
                 {COPY.chrome.og.wordmark}
               </a>

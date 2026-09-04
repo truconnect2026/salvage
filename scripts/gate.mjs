@@ -18,7 +18,7 @@
  *   NODE_PATH=<somewhere-outside-this-repo>/node_modules \
  *     node scripts/gate.mjs http://localhost:3000
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import zlib from "node:zlib";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -550,6 +550,7 @@ const BROWSER_GATES = [
   140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151,
   152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163,
   164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177,
+  178, 179, 180,
 ];
 
 if (!chromium) {
@@ -4036,11 +4037,13 @@ if (!chromium) {
        cluster 28px below 1100, 32px at desktop. */
     check(
       118,
-      "rail = four squares (7px at 390, 8px at 1440; radius <= 2px) + one 1px-stroke caret and nothing else; cluster = two squares (28px at 390, 32px at 1440)",
+      "rail = four 8px squares (radius <= 2px) + one 1px-stroke caret and nothing else; cluster = two squares (28px at 390, 32px at 1440)",
       reads.every((r) => {
         const g = r.g;
         if (!g) return false;
-        const dot = r.vp.startsWith("390") ? 7 : 8;
+        /* Amended (change 31, 1): the rail and the panel switcher share ONE
+           8px definition — no per-viewport size any more. */
+        const dot = 8;
         const cl = r.vp.startsWith("390") ? 28 : 32;
         return (
           g.dotBoxes.length === 4 &&
@@ -6105,6 +6108,145 @@ if (!chromium) {
         JSON.stringify(end177) === JSON.stringify(finals) &&
         JSON.stringify(re177) === JSON.stringify(finals),
       `finals ${JSON.stringify(finals)}; +100ms ${JSON.stringify(mid177)} (must differ); +800ms ${JSON.stringify(end177)}; re-entry+150ms ${JSON.stringify(re177)} (both must equal finals)`,
+    );
+  });
+
+  /* --- 178-180: change 31 — one dot, one link, hand-drawn glyphs. --- */
+  await block("consistency-31", async () => {
+    /* 178 + 179 render-state, both viewports. */
+    const reads = [];
+    for (const vp of [
+      { w: 390, h: 844 },
+      { w: 1440, h: 900 },
+    ]) {
+      const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, reducedMotion: "reduce" });
+      const page = await ctx.newPage();
+      await page.goto(base, { waitUntil: "domcontentloaded" });
+      await page.evaluate(() => document.fonts.ready);
+      reads.push({
+        vp: `${vp.w}x${vp.h}`,
+        g: await page.evaluate(() => {
+          /* 178: every DOT-role chrome control on the page. The iOS typing
+             indicator inside the phone screen is real device UI and stays
+             round — it is not page chrome, so it is scoped out by name. */
+          const dots = [...document.querySelectorAll("[data-pager-dot], [data-panel-dot]")].filter(
+            (el) => el.offsetParent != null,
+          );
+          const shapes = dots.map((el) => {
+            const cs = getComputedStyle(el);
+            const r = el.getBoundingClientRect();
+            return {
+              radius: Math.round(parseFloat(cs.borderTopLeftRadius)),
+              w: +r.width.toFixed(1),
+              h: +r.height.toFixed(1),
+              border: cs.borderTopColor,
+              bg: cs.backgroundColor,
+            };
+          });
+          const round = shapes.filter((d) => d.radius > 2 || d.radius >= Math.min(d.w, d.h) / 2);
+          const sizes = [...new Set(shapes.map((d) => `${d.w}x${d.h}`))];
+          const pairs = [...new Set(shapes.map((d) => `${d.border}|${d.bg}`))];
+
+          /* 179: every anchor outside the phone screen, minus the gold CTA
+             pill (a button tier, not a link). */
+          const links = [...document.querySelectorAll("a")].filter(
+            (a) =>
+              !a.closest("[data-phone-screen]") &&
+              !a.hasAttribute("data-cta") &&
+              a.offsetParent != null,
+          );
+          const treatments = [
+            ...new Set(
+              links.map((a) => {
+                const cs = getComputedStyle(a);
+                return `${cs.color}|${cs.textDecorationColor}`;
+              }),
+            ),
+          ];
+          return {
+            dotCount: dots.length,
+            roundCount: round.length,
+            sizes,
+            pairs,
+            linkCount: links.length,
+            treatments,
+            samples: links.map((a) => (a.textContent || "").trim().slice(0, 14)),
+          };
+        }),
+      });
+      await ctx.close();
+    }
+    check(
+      178,
+      "one dot shape: every page-chrome dot (rail + section-3 switcher) is an 8px square — radius <= 2px, one size, the two C2 states and no third (the iOS typing indicator inside the phone screen stays round by design and is scoped out)",
+      reads.every(
+        (r) =>
+          r.g.dotCount >= 4 &&
+          r.g.roundCount === 0 &&
+          r.g.sizes.length === 1 &&
+          r.g.sizes[0] === "8x8" &&
+          r.g.pairs.length === 2,
+      ),
+      reads
+        .map((r) => `${r.vp}: ${r.g.dotCount} dot(s), ${r.g.roundCount} round (need 0), sizes ${JSON.stringify(r.g.sizes)}, states ${JSON.stringify(r.g.pairs)}`)
+        .join(" | "),
+    );
+    check(
+      179,
+      "one link treatment: every <a> outside the phone screen (excluding the gold CTA pill) resolves to ONE {color, text-decoration-color} pair — no gray underlined links",
+      reads.every((r) => r.g.linkCount >= 3 && r.g.treatments.length === 1),
+      reads
+        .map((r) => `${r.vp}: ${r.g.linkCount} link(s) ${JSON.stringify(r.g.samples)} -> ${r.g.treatments.length} treatment(s) ${JSON.stringify(r.g.treatments)}`)
+        .join(" | "),
+    );
+
+    /* 180: SOURCE + shipped-bundle scan — every glyph is hand-written. */
+    const LIBS = ["lucide", "feather-icons", "react-feather", "heroicons", "react-icons", "@tabler/icons", "font-awesome", "@fortawesome", "bootstrap-icons", "material-icons", "phosphor-icons"];
+    /* SHIPPED source only — the gate harness is not part of the product
+       and necessarily carries these library names as string literals. */
+    const roots = ["components", "app", "lib"];
+    const srcHits = [];
+    const walk = (dir) => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, e.name);
+        if (e.isDirectory()) {
+          walk(full);
+          continue;
+        }
+        if (!/.(tsx?|jsx?|css|mjs)$/.test(e.name)) continue;
+        const body = readFileSync(full, "utf8").toLowerCase();
+        for (const lib of LIBS) if (body.includes(lib)) srcHits.push(`${full}: ${lib}`);
+      }
+    };
+    for (const r of roots) if (existsSync(r)) walk(r);
+    const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+    const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
+    const depHits = Object.keys(deps).filter((d) => LIBS.some((lib) => d.toLowerCase().includes(lib.replace("@", ""))));
+    /* The shipped client bundle — a library pulled in transitively would
+       still land here even with a clean source tree. */
+    const bundleHits = [];
+    const chunkDir = join(".next", "static", "chunks");
+    if (existsSync(chunkDir)) {
+      const scanDir = (dir) => {
+        for (const e of readdirSync(dir, { withFileTypes: true })) {
+          const full = join(dir, e.name);
+          if (e.isDirectory()) {
+            scanDir(full);
+            continue;
+          }
+          if (!e.name.endsWith(".js")) continue;
+          const body = readFileSync(full, "utf8").toLowerCase();
+          for (const lib of LIBS) if (body.includes(lib)) bundleHits.push(`${e.name}: ${lib}`);
+        }
+      };
+      scanDir(chunkDir);
+    }
+    check(
+      180,
+      `every glyph is hand-written SVG: no icon-library import in the shipped source (${roots.join(", ")}), no icon-library dependency, and none in the built client bundle`,
+      srcHits.length === 0 && depHits.length === 0 && bundleHits.length === 0,
+      `source hits ${JSON.stringify(srcHits.slice(0, 4))}; dependency hits ${JSON.stringify(depHits)}; ` +
+        `bundle hits ${JSON.stringify(bundleHits.slice(0, 4))} (scanned ${existsSync(chunkDir) ? "" : "NO "}client chunks)`,
     );
   });
 
