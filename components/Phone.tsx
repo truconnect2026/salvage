@@ -16,28 +16,19 @@ function SignalGlyph() {
 }
 
 function WifiGlyph() {
+  /* change 30 (B5): FILLED arcs — annular sectors, no strokes. */
   return (
-    <svg
-      width="16"
-      height="12"
-      viewBox="0 0 16 12"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinecap="round"
-      aria-hidden="true"
-    >
-      <path d="M0.9 3.5A9 9 0 0 1 15.1 3.5" />
-      <path d="M3.5 6.1A6 6 0 0 1 12.5 6.1" />
-      <path d="M6 8.7A3 3 0 0 1 10 8.7" />
-      <path d="M8 10.6a1 1 0 0 1 0 1.4a1 1 0 0 1 0-1.4z" fill="currentColor" stroke="none" />
+    <svg width="16" height="12" viewBox="0 0 16 12" fill="currentColor" aria-hidden="true">
+      <path d="M8 0C4.9 0 2.1 1.2 0 3.2l1.5 1.6C3.2 3.2 5.5 2.2 8 2.2s4.8 1 6.5 2.6L16 3.2C13.9 1.2 11.1 0 8 0z" />
+      <path d="M8 4.4c-2 0-3.8.8-5.1 2.1l1.5 1.6C5.3 7.2 6.6 6.6 8 6.6s2.7.6 3.6 1.5l1.5-1.6C11.8 5.2 10 4.4 8 4.4z" />
+      <path d="M8 8.8c-.9 0-1.7.4-2.3 1L8 12l2.3-2.2c-.6-.6-1.4-1-2.3-1z" />
     </svg>
   );
 }
 
 export function StatusGlyphs() {
   return (
-    <span data-status-cluster className="flex items-center gap-[6px] text-muted">
+    <span data-status-cluster className="flex items-center gap-[6px] text-white">
       <span data-glyph="signal" className="flex">
         <SignalGlyph />
       </span>
@@ -56,7 +47,7 @@ function BatteryGlyph() {
         d="M3.4 0.7h14.9a2.7 2.7 0 0 1 2.7 2.7v5.2a2.7 2.7 0 0 1-2.7 2.7H3.4a2.7 2.7 0 0 1-2.7-2.7V3.4A2.7 2.7 0 0 1 3.4 0.7z"
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.1"
+        strokeWidth="1"
         opacity="0.55"
       />
       <path
@@ -249,6 +240,23 @@ function TypingRow({ index, right }: { index: number; right: boolean }) {
 }
 
 /* The iOS Messages app mark: green squircle, white speech-bubble path. */
+/* change 30 (B2): the iMessage tail — a 6px curved hook at the bottom-outer
+   corner of a run's last bubble, drawn in the bubble's own fill. */
+function BubbleTail({ side, color }: { side: "left" | "right"; color: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      width="7"
+      height="6"
+      viewBox="0 0 7 6"
+      className={`absolute bottom-0 ${side === "right" ? "-right-[5px]" : "-left-[5px] -scale-x-100"}`}
+      style={{ fill: color }}
+    >
+      <path d="M0 0c0.4 2.6 1.8 4.6 4.4 5.6 0.9 0.35 1.05-0.3 0.4-0.9C2.9 3.1 2 1.7 2 0z" />
+    </svg>
+  );
+}
+
 function MessagesGlyph() {
   return (
     <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#34C759]">
@@ -339,7 +347,7 @@ function CallScreen({ preset, bizName, showBanner }: { preset: Preset; bizName: 
       {showBanner && (
       <div
         data-banner
-        className="absolute inset-x-3 top-[44px] z-40"
+        className="absolute inset-x-3 top-[56px] z-40"
         style={{ transform: "translateY(-140%)", opacity: 0 }}
       >
         <div
@@ -461,31 +469,31 @@ export default function Phone({
 
   const screenContent = (
     <>
-      {/* Notch (change 16, A2): 34% of the screen's design width, 30px tall
-          at design scale. Time and the status glyphs both live outside it at
-          every rendered width — the whole screen scales as one unit. */}
+      {/* change 30 (B1): the Dynamic Island — 126x37 pill, r18.5, pure
+          black, centered, 11px off the screen top. The status items sit
+          beside it at its height. */}
       <div
-        data-notch
-        className="absolute left-1/2 top-0 z-40 h-[30px] w-[34%] -translate-x-1/2 rounded-b-[14px] bg-[#05090F]"
+        data-island
+        className="absolute left-1/2 top-[11px] z-40 h-[37px] w-[126px] -translate-x-1/2 rounded-[18.5px] bg-black"
       />
 
-      {/* Status row */}
-      <div className="relative z-10 flex h-[36px] shrink-0 items-center justify-between px-6 pt-1">
-        <span className="text-[13px] font-semibold tabular-nums text-ink">
+      {/* Status row — centered on the Island's band. */}
+      <div className="relative z-10 flex h-[48px] shrink-0 items-center justify-between px-6 pt-[11px]">
+        <span className="text-[13px] font-semibold tabular-nums text-white">
           {COPY.chrome.phone.statusTime}
         </span>
         <StatusGlyphs />
       </div>
 
       {/* Contact header */}
-      <div className="shrink-0 border-b border-line bg-surface-2 px-6 pb-3 pt-2 text-center">
+      <div data-phone-header className="shrink-0 border-b border-line bg-surface-2 px-6 pb-3 pt-2 text-center">
         <div
           {...(live ? { "data-biz-name": true } : staticId ? { "data-crop-biz": staticId } : {})}
           className={`text-[15px] leading-tight ${headerGhost ? "font-normal italic text-muted" : "font-semibold text-ink"}`}
         >
           {effectiveBizName}
         </div>
-        <div className="mt-0.5 text-[11px] text-muted">{COPY.chrome.phone.threadLabel}</div>
+        <div className="mt-0.5 text-[11px] text-muted">{COPY.chrome.textMessageLabel}</div>
       </div>
 
       {/* The thread box. The call card is gone (change 11, step 3): it
@@ -547,22 +555,24 @@ export default function Phone({
                       <div className="flex justify-end">
                         <div
                           {...markEither("data-bubble", "data-s-bubble", "customer")}
-                          className={`max-w-[72%] rounded-[20px] bg-[#34C759] px-[14px] py-2 text-[17px] leading-[1.29] text-white ${
+                          className={`relative max-w-[72%] rounded-[20px] bg-[#34C759] px-[14px] py-2 text-[17px] leading-[1.29] text-white ${
                             runEnd ? "rounded-br-[6px]" : ""
                           }`}
                         >
                           {skinText(b.text)}
+                          {runEnd && <BubbleTail side="right" color="#34C759" />}
                         </div>
                       </div>
                     ) : (
                       <div className="flex flex-col items-start">
                         <div
                           {...markEither("data-bubble", "data-s-bubble", "business")}
-                          className={`max-w-[72%] rounded-[20px] bg-[var(--accent,#1E3A5C)] px-[14px] py-2 text-[17px] leading-[1.29] text-[var(--accent-ink,#E9EEF4)] ${
+                          className={`relative max-w-[72%] rounded-[20px] bg-[var(--accent,#1E3A5C)] px-[14px] py-2 text-[17px] leading-[1.29] text-[var(--accent-ink,#E9EEF4)] ${
                             runEnd ? "rounded-bl-[6px]" : ""
                           }`}
                         >
                           {skinText(b.text)}
+                          {runEnd && <BubbleTail side="left" color="var(--accent, #1E3A5C)" />}
                         </div>
                         {i === 0 && (
                           <div
@@ -591,10 +601,13 @@ export default function Phone({
           mic in the field's right end. Scenery; the call screen overlays
           it during the open. */}
       <div data-compose className="flex shrink-0 items-center gap-2.5 px-3 pb-8 pt-1.5 font-phone">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8AA0B4" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M3 8.5a2 2 0 0 1 2-2h1.6l1.2-1.8a1.5 1.5 0 0 1 1.25-.7h5.9a1.5 1.5 0 0 1 1.25.7l1.2 1.8H19a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-          <circle cx="12" cy="12.6" r="3.4" />
-        </svg>
+        {/* change 30 (B4): the circled "+" — 28px surface-3 disc, 14px
+            stroke plus. */}
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-3">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#8AA0B4" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+            <path d="M7 1.5v11M1.5 7h11" />
+          </svg>
+        </span>
         <div className="relative flex h-9 min-w-0 flex-1 items-center rounded-[18px] border border-line bg-surface-2 pl-3.5 pr-9">
           <span className="truncate text-[16px] text-ink opacity-60">{COPY.chrome.composePlaceholder}</span>
           <svg className="absolute right-2.5" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#8AA0B4" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
@@ -619,7 +632,7 @@ export default function Phone({
       {live && showConfirm && (
       <div
         data-notify-phone
-        className="absolute inset-x-3 top-3 z-40"
+        className="absolute inset-x-3 top-[52px] z-40"
         style={
           showNotification
             ? { transform: "none", opacity: 1 }
@@ -715,7 +728,8 @@ export default function Phone({
         <div
           aria-hidden="true"
           data-accent-slab
-          className="absolute -left-[29%] -z-1 w-[62%] bg-[var(--accent-soft,#0F1E33)]"
+          data-slab
+          className="absolute -left-[31.1%] -z-1 w-[62%] bg-[var(--accent-soft,#0F1E33)]"
           style={{ top: "-150vh", bottom: "-150vh" }}
         />
       )}

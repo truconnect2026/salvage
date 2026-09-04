@@ -549,7 +549,7 @@ const BROWSER_GATES = [
   131, 132, 133, 134, 135, 136, 137, 138, 139,
   140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151,
   152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163,
-  164, 165, 166, 167, 168, 169, 170,
+  164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177,
 ];
 
 if (!chromium) {
@@ -853,6 +853,7 @@ if (!chromium) {
           yoursGold.every((el) => el.hasAttribute("data-ticket")),
         ticketCount: tickets.length,
         pageGoldCount: pageGold.length,
+        receiptGoldCount: [...document.querySelectorAll("[data-receipt], [data-receipt-m]")].filter(isGold).length,
       };
     });
 
@@ -893,11 +894,15 @@ if (!chromium) {
         tokens.yoursGoldCount === tokens.ticketCount &&
         tokens.ticketCount > 0 &&
         tokens.yoursGoldIsTickets &&
-        tokens.pageGoldCount === tokens.heroGoldCount + tokens.bandGoldCount + tokens.yoursGoldCount,
+        /* Amended (change 30, G1): the s1 slab receipt is the FOURTH gold
+           region — exactly one at settle (the off-viewport mount computes
+           transparent). */
+        tokens.receiptGoldCount === 1 &&
+        tokens.pageGoldCount === tokens.heroGoldCount + tokens.bandGoldCount + tokens.yoursGoldCount + tokens.receiptGoldCount,
       `hero panel: ${tokens.heroGoldCount} gold (need 1, on data-panel-recovered: ${tokens.heroGoldIsRecovered}); ` +
         `band: ${tokens.bandGoldCount} gold vs ${tokens.numeralCount} data-math-numeral (all gold: ${tokens.bandGoldIsNumerals}); ` +
         `preset track: ${tokens.yoursGoldCount} gold vs ${tokens.ticketCount} data-ticket (all gold: ${tokens.yoursGoldIsTickets}); ` +
-        `page-wide: ${tokens.pageGoldCount} gold total (must equal hero + band + track)`,
+        `receipt: ${tokens.receiptGoldCount} gold (need 1); page-wide: ${tokens.pageGoldCount} gold total (must equal hero + band + track + receipt)`,
     );
 
     /* 82 (change 13; census made preset-count-relative in change 19): one
@@ -905,14 +910,14 @@ if (!chromium) {
        figure + the two math numerals, nothing else. */
     check(
       82,
-      `section-3 gold is only the ticket value (1 per panel, ${presets.length} total); page-wide gold census is exactly ${presets.length + 3}`,
+      `section-3 gold is only the ticket value (1 per panel, ${presets.length} total); page-wide gold census is exactly ${presets.length + 4} (change 30: + the slab receipt)`,
       tokens.ticketCount === presets.length &&
         tokens.yoursGoldCount === presets.length &&
         tokens.yoursGoldIsTickets &&
-        tokens.pageGoldCount === presets.length + 3,
+        tokens.pageGoldCount === presets.length + 4,
       `${tokens.yoursGoldCount} gold element(s) in section 3 vs ${tokens.ticketCount} data-ticket ` +
         `(need ${presets.length} each, all on data-ticket: ${tokens.yoursGoldIsTickets}); ` +
-        `page-wide gold ${tokens.pageGoldCount} (need exactly ${presets.length + 3})`,
+        `page-wide gold ${tokens.pageGoldCount} (need exactly ${presets.length + 4})`,
     );
 
     await ctx.close();
@@ -1795,15 +1800,19 @@ if (!chromium) {
        rail gutter now, and the device centers in the guttered content
        column, not the viewport. The claim kept: fully inside the first
        frame, nothing under the rail. */
+    /* Amended (change 30, A1): the device right-aligns with a 28px bleed
+       into the rail gutter (clear of the rail itself) — the only geometry
+       where the slab ratio, the 30-36% cut, and 16px folio clearance on
+       both slab edges coexist at 390. */
     check(
       57,
-      "first load 390x844: phone device fully within the viewport, left margin >= 24px, right margin >= 56px (rail gutter), centered in the content column",
+      "first load 390x844: phone device fully within the viewport, left margin >= 24px, right-aligned with a 28px gutter bleed (right edge 350-368, clear of the rail)",
       g != null &&
         g.top >= 23.5 &&
         g.bottom <= g.vh - 23.5 + 0.5 &&
         g.left >= 23.5 &&
-        g.right <= g.vw - 55.5 &&
-        Math.abs((g.left - 24) - (g.vw - 56 - g.right)) <= 2,
+        g.right >= 350 &&
+        g.right <= 368,
       g == null
         ? "device not found"
         : `device top ${g.top.toFixed(1)}, bottom ${g.bottom.toFixed(1)}, left ${g.left.toFixed(1)}, ` +
@@ -2530,8 +2539,14 @@ if (!chromium) {
         if (el.closest("[data-scene]")) continue;
         /* Amended (change 26): D12 sets the ledger's Recovered figure at
            56px by spec — under the recalibrated mobile fit it renders ~46px,
-           and like the scene type it is excluded from the hierarchy scan. */
+           and like the scene type it is excluded from the hierarchy scan.
+           Amended (change 30, G1): the slab receipt is display-scale by
+           spec too. */
         if (el.closest("[data-ledger-recovered]")) continue;
+        if (el.closest("[data-receipt], [data-receipt-m]")) continue;
+        /* Amended (change 30, D1/D2): the flap board renders at its specced
+           44px on the 1x mobile ledger — figure furniture, not hierarchy. */
+        if (el.closest("[data-flap-board]")) continue;
         if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
         /* Amended (change 18): rendered size, not layout size — a figure laid
            out at 44px inside the mobile scale-fit or the zoomed phone screen
@@ -2573,8 +2588,14 @@ if (!chromium) {
         if (el.closest("[data-scene]")) continue;
         /* Amended (change 26): D12 sets the ledger's Recovered figure at
            56px by spec — under the recalibrated mobile fit it renders ~46px,
-           and like the scene type it is excluded from the hierarchy scan. */
+           and like the scene type it is excluded from the hierarchy scan.
+           Amended (change 30, G1): the slab receipt is display-scale by
+           spec too. */
         if (el.closest("[data-ledger-recovered]")) continue;
+        if (el.closest("[data-receipt], [data-receipt-m]")) continue;
+        /* Amended (change 30, D1/D2): the flap board renders at its specced
+           44px on the 1x mobile ledger — figure furniture, not hierarchy. */
+        if (el.closest("[data-flap-board]")) continue;
         if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
         /* Amended (change 18): rendered size, not layout size — a figure laid
            out at 44px inside the mobile scale-fit or the zoomed phone screen
@@ -2609,11 +2630,11 @@ if (!chromium) {
        circle now — the section-2 fill button it replaced is gone. */
     check(
       77,
-      "share control: teal 1px-stroke square in the top-right cluster — 28px at 390x844, 32px at 1440x900 (change 27, B5)",
-      m.shareBorder === m.teal &&
+      "share control: teal/70 1px-stroke square (change 30 C2 idle) — 28px at 390x844, 32px at 1440x900",
+      m.shareBorder === "rgba(44, 199, 182, 0.7)" &&
         Math.abs(m.shareW - 28) <= 1 &&
         Math.abs(m.shareW - m.shareH) <= 1 &&
-        tiles.shareBorder === tiles.teal &&
+        tiles.shareBorder === "rgba(44, 199, 182, 0.7)" &&
         Math.abs(tiles.shareW - 32) <= 1 &&
         Math.abs(tiles.shareW - tiles.shareH) <= 1,
       `390: border ${m.shareBorder}, ${m.shareW.toFixed(1)}x${m.shareH.toFixed(1)}px (need 28); ` +
@@ -2865,26 +2886,33 @@ if (!chromium) {
     const starts = await pageOn.evaluate(() => window.__oscStarts);
     await ctxOn.close();
 
-    const rings = starts.filter((r) => r.type === "custom");
-    const chimes = starts.filter((r) => r.type === "triangle");
-    const lands = starts.filter((r) => r.type === "sine");
+    /* Amended (change 30, G6): the flap ticks are 1200Hz sines riding the
+       count-up — a separate, sanctioned voice. The 5-beat census counts
+       everything EXCEPT them. */
+    const ticks = starts.filter((r) => r.type === "sine" && Math.round(r.freq) === 1200);
+    const core = starts.filter((r) => !(r.type === "sine" && Math.round(r.freq) === 1200));
+    const rings = core.filter((r) => r.type === "custom");
+    const chimes = core.filter((r) => r.type === "triangle");
+    const lands = core.filter((r) => r.type === "sine");
 
     check(
       88,
-      "sound OFF: zero AudioContexts and zero oscillator starts after full playback; sound ON (toggle then replay): exactly 5 oscillator starts — 3 ring, 1 chime, 1 land",
+      "sound OFF: zero AudioContexts and zero oscillator starts after full playback; sound ON (toggle then replay): exactly 5 beat oscillators — 3 ring, 1 chime, 1 land — plus the change-30 flap-tick voice (1200Hz sines only)",
       off.acCount === 0 &&
         off.oscStarts === 0 &&
-        starts.length === 5 &&
+        core.length === 5 &&
         rings.length === 3 &&
         chimes.length === 1 &&
-        lands.length === 1,
+        lands.length === 1 &&
+        ticks.length > 0 &&
+        ticks.every((r) => r.type === "sine"),
       `OFF: ${off.acCount} AudioContext(s), ${off.oscStarts} start(s) (need 0/0); ` +
-        `ON: ${starts.length} start(s) — ${rings.length} ring, ${chimes.length} chime, ${lands.length} land (need 3/1/1); ` +
-        `schedule: ${starts.map((r) => `${r.type}@phase ${Number.isFinite(r.phase) ? r.phase.toFixed(3) : "?"}`).join(", ")}`,
+        `ON: ${core.length} beat start(s) — ${rings.length} ring, ${chimes.length} chime, ${lands.length} land (need 3/1/1) + ${ticks.length} flap tick(s); ` +
+        `beat schedule: ${core.map((r) => `${r.type}@phase ${Number.isFinite(r.phase) ? r.phase.toFixed(3) : "?"}`).join(", ")}`,
     );
 
     const BEATS_15 = [0.2, 1.4, 2.6, 4.4, 10.0];
-    const byPhase = [...starts].sort((a, b) => a.phase - b.phase);
+    const byPhase = [...core].sort((a, b) => a.phase - b.phase);
     const rows = byPhase.map((r, i) => {
       const beat = BEATS_15[i];
       const phaseAtStart = r.phase + (r.when - r.ctxTime);
@@ -3011,10 +3039,11 @@ if (!chromium) {
         const zoom = bubble.offsetWidth > 0 ? brect.width / bubble.offsetWidth : NaN;
         const renderedFS = parseFloat(getComputedStyle(bubble).fontSize) * zoom;
 
-        /* 92: notch vs signal/wifi in every rendered phone screen. */
+        /* 92: island vs signal/wifi in every rendered phone screen
+           (amended, change 30 B1: the Dynamic Island replaced the notch). */
         const notchHits = [];
         for (const scr of document.querySelectorAll("[data-phone-screen]")) {
-          const notch = scr.querySelector("[data-notch]");
+          const notch = scr.querySelector("[data-island]");
           if (!notch) continue;
           const nr = notch.getBoundingClientRect();
           if (nr.width === 0) continue;
@@ -3025,7 +3054,7 @@ if (!chromium) {
             if (hit) notchHits.push(`${glyph.dataset.glyph}@${Math.round(gr.left)},${Math.round(gr.top)}`);
           }
         }
-        const notchCount = document.querySelectorAll("[data-notch]").length;
+        const notchCount = document.querySelectorAll("[data-island]").length;
 
         /* 96: kicker tracking + mark vs device/headline boxes, all sections.
            Sections stack in one coordinate space — no scrolling needed. */
@@ -3470,7 +3499,7 @@ if (!chromium) {
       const sec1 = document.querySelector('[data-section="call"]');
       const body = sec1?.querySelector("[data-banner-body]");
       const banner = sec1?.querySelector("[data-banner]");
-      const notch = sec1?.querySelector("[data-notch]");
+      const notch = sec1?.querySelector("[data-island]");
       if (!body || !banner || !notch) return null;
       const lh = parseFloat(getComputedStyle(body).lineHeight);
       const lines = Math.round(body.getBoundingClientRect().height / (lh * (body.getBoundingClientRect().width / body.offsetWidth)));
@@ -3829,12 +3858,17 @@ if (!chromium) {
                 hard,
             };
           }
-          const ratio = sr.width / secR.width;
+          /* Amended (change 30, A1): the mobile band widens so the folio
+             (and the preset labels) sit fully ON it with >= 16px clearance —
+             left 0, right >= folio right + 16, <= 70% of the section. */
+          const folio3 = sec.querySelector("[data-folio]");
+          const fr = folio3 ? folio3.getBoundingClientRect().right : 0;
           return {
             id,
-            ratio: +ratio.toFixed(3),
             left: +(sr.left - secR.left).toFixed(1),
-            ok: Math.abs(ratio - 0.4) <= 0.02 && Math.abs(sr.left - secR.left) <= 1 && hard,
+            right: +sr.right.toFixed(1),
+            folioRight: +fr.toFixed(1),
+            ok: Math.abs(sr.left - secR.left) <= 1 && sr.right >= fr + 16 && sr.width <= 0.7 * secR.width && hard,
           };
         });
 
@@ -3849,6 +3883,7 @@ if (!chromium) {
           return {
             bottom: cs.borderBottomWidth,
             left: cs.borderLeftWidth,
+            leftClear: cs.borderLeftColor === "rgba(0, 0, 0, 0)",
             right: cs.borderRightWidth,
           };
         });
@@ -3973,7 +4008,9 @@ if (!chromium) {
       both(
         (g) =>
           g.rowBorders.every((b) => b != null && b.bottom === "1px" && b.right === "0px") &&
-          g.rowBorders.slice(1).every((b) => b.left === "0px") &&
+          /* Amended (change 30, D5): rows 1-3 carry a transparent 2px left
+             rule — box metrics match row 0 and the heads exactly. */
+          g.rowBorders.slice(1).every((b) => b.left === "0px" || (b.left === "2px" && b.leftClear)) &&
           g.edgeSpread != null &&
           g.edgeSpread <= 1,
       ),
@@ -4171,7 +4208,7 @@ if (!chromium) {
       "SALVAGED stamp on row[0] after insert, rotated -3° (computed matrix), absent on rows 1-3; no \"Just now\" text anywhere",
       g116.present &&
         g116.angle != null &&
-        Math.abs(g116.angle - -3) <= 0.5 &&
+        Math.abs(g116.angle - -6) <= 0.5 &&
         g116.opacity === "1" &&
         g116.others.length === 0 &&
         g116.justNow === false,
@@ -4648,8 +4685,8 @@ if (!chromium) {
 
     check(
       137,
-      'rail share border stays teal; caret animation-name "none" before settle, NOT "none" after',
-      early.shareBorder === teal && early.caretAnim === "none" && late.caretAnim !== "none" && late.caretAnim != null,
+      'rail share border stays teal/70 (change 30 C2 idle); caret animation-name "none" before settle, NOT "none" after',
+      early.shareBorder === "rgba(44, 199, 182, 0.7)" && early.caretAnim === "none" && late.caretAnim !== "none" && late.caretAnim != null,
       `share border ${early.shareBorder} (teal ${teal}); caret at t=0.5 ${JSON.stringify(early.caretAnim)} (need "none"), ` +
         `at t=11.3 ${JSON.stringify(late.caretAnim)} (need not "none")`,
     );
@@ -5499,7 +5536,7 @@ if (!chromium) {
         clone.remove();
         return Math.round(el.getBoundingClientRect().height / one);
       };
-      const clock = document.querySelector("[data-scene] p[data-figure]");
+      const clock = document.querySelector("[data-scene-clock] p[data-figure]");
       const h1 = document.querySelector("h1");
       const math = document.querySelector("[data-math]");
       const tiles = [...document.querySelectorAll("[data-tile-value]")];
@@ -5605,7 +5642,7 @@ if (!chromium) {
       const colLeft = Math.max(48, (innerWidth - 1240) / 2 + 48);
       const edges = {
         folio1: L(document.querySelector('[data-section="call"] [data-section-mark]')),
-        sceneTime: L(document.querySelector("[data-scene] p[data-figure]")),
+        sceneTime: L(document.querySelector("[data-scene-clock] p[data-figure]")),
         headline: L(document.querySelector("h1")),
         nameField: L(document.querySelector("[data-name-input]")),
         math: L(document.querySelector("[data-math]")),
@@ -5724,6 +5761,331 @@ if (!chromium) {
         g170.hits.includes("s4:data-loop") &&
         g170.stale === false,
       `config replay ${JSON.stringify(replayLabel)} / loop ${JSON.stringify(loopLabel)}; rendered "Watch again" on ${JSON.stringify(g170.hits)} (need exactly the two controls); "Watch it again" present ${g170.stale} (need false)`,
+    );
+  });
+
+  /* --- 171-177: change 30 — execution pass + moments. --- */
+  await block("execution-30", async () => {
+    /* 171: the boundary law — the A1 text set vs every visible clipped
+       [data-slab] box: fully inside or fully outside, 16px clearance. */
+    const TEXT_SEL = [
+      "[data-folio]",
+      "[data-scene-line]",
+      "[data-controls] button",
+      "[data-scroll-up]",
+      "[data-yours-cueband] p",
+      "[data-name-label]",
+      "[data-name-hint]",
+      "[data-name-input]",
+      "[data-panel-label]",
+      "[data-tagline]",
+      "[data-rows-head]",
+      "[data-tile] span",
+    ].join(", ");
+    const reads171 = [];
+    for (const vp of [
+      { w: 390, h: 844 },
+      { w: 1440, h: 900 },
+    ]) {
+      for (const biz of ["salon", "home", "dental", "other"]) {
+        const cm = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, reducedMotion: "reduce" });
+        const pm = await cm.newPage();
+        await pm.goto(`${base}/?biz=${biz}`, { waitUntil: "domcontentloaded" });
+        await pm.evaluate(() => document.fonts.ready);
+        const g = await pm.evaluate((sel) => {
+          const clip = (el) => {
+            const r = el.getBoundingClientRect();
+            const sec = el.closest("[data-section]");
+            if (!sec) return r;
+            const sr = sec.getBoundingClientRect();
+            return {
+              left: Math.max(r.left, sr.left),
+              right: Math.min(r.right, sr.right),
+              top: Math.max(r.top, sr.top),
+              bottom: Math.min(r.bottom, sr.bottom),
+            };
+          };
+          const slabs = [...document.querySelectorAll("[data-slab]")]
+            .filter((el) => getComputedStyle(el).display !== "none" && el.getBoundingClientRect().width > 0)
+            .map((el) => ({ sec: el.closest("[data-section]")?.getAttribute("data-section"), box: clip(el) }));
+          const texts = [...document.querySelectorAll(sel)].filter((el) => {
+            const cs = getComputedStyle(el);
+            const r = el.getBoundingClientRect();
+            return cs.display !== "none" && cs.visibility !== "hidden" && r.width > 0 && r.height > 0;
+          });
+          const bad = [];
+          for (const t of texts) {
+            const tr = t.getBoundingClientRect();
+            for (const sl of slabs) {
+              const b = sl.box;
+              const inside =
+                tr.left >= b.left + 16 && tr.right <= b.right - 16 && tr.top >= b.top + 16 && tr.bottom <= b.bottom - 16;
+              const outside =
+                tr.right <= b.left - 16 || tr.left >= b.right + 16 || tr.bottom <= b.top - 16 || tr.top >= b.bottom + 16;
+              if (!inside && !outside)
+                bad.push(
+                  `${sl.sec}:${(t.textContent || t.getAttribute("placeholder") || "").trim().slice(0, 18)}@${Math.round(tr.left)}-${Math.round(tr.right)} vs ${Math.round(b.left)}-${Math.round(b.right)}`,
+                );
+            }
+          }
+          return { slabCount: slabs.length, textCount: texts.length, bad: bad.slice(0, 6) };
+        }, TEXT_SEL);
+        reads171.push({ vp: `${vp.w}`, biz, g });
+        await cm.close();
+      }
+    }
+    check(
+      171,
+      "boundary law (A1): every enumerated text box is fully inside or fully outside every visible clipped [data-slab] box with >= 16px clearance — 390x844 and 1440x900, all four presets",
+      reads171.every((r) => r.g.slabCount >= 2 && r.g.textCount > 5 && r.g.bad.length === 0),
+      reads171
+        .filter((r) => r.g.bad.length > 0)
+        .map((r) => `${r.vp}/${r.biz}: ${JSON.stringify(r.g.bad)}`)
+        .join(" | ") || `clean: ${reads171.length} contexts, e.g. ${reads171[0].g.textCount} text boxes vs ${reads171[0].g.slabCount} slabs`,
+    );
+
+    /* 172 + 173 + 174 partly share loads. 172: stamp at rest, zero height
+       impact, over the amount. */
+    const ctx172 = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+    const page172 = await ctx172.newPage();
+    await page172.goto(base, { waitUntil: "domcontentloaded" });
+    await page172.evaluate(() => document.fonts.ready);
+    const g172 = await page172.evaluate(() => {
+      const r0 = document.querySelector('[data-caught-row="0"]');
+      const r1 = document.querySelector('[data-caught-row="1"]');
+      const stamp = document.querySelector("[data-stamp]");
+      const amount = document.querySelector('[data-caught-amount="0"]');
+      const sr = stamp?.getBoundingClientRect();
+      const ar = amount?.getBoundingClientRect();
+      const intersects = sr && ar && !(sr.right <= ar.left || ar.right <= sr.left || sr.bottom <= ar.top || ar.bottom <= sr.top);
+      return {
+        h0: r0?.getBoundingClientRect().height ?? null,
+        h1: r1?.getBoundingClientRect().height ?? null,
+        transform: stamp?.style.transform ?? null,
+        intersects: !!intersects,
+      };
+    });
+    await ctx172.close();
+    check(
+      172,
+      "stamp (D3): row[0] height === row[1] height ±1 with the stamp present; inline transform contains rotate(-6deg) at rest; the stamp box intersects the amount cell",
+      g172.h0 != null &&
+        g172.h1 != null &&
+        Math.abs(g172.h0 - g172.h1) <= 1 &&
+        g172.transform != null &&
+        g172.transform.includes("rotate(-6deg)") &&
+        g172.intersects === true,
+      `row0 ${g172.h0?.toFixed?.(1)} vs row1 ${g172.h1?.toFixed?.(1)}; transform ${JSON.stringify(g172.transform)}; stamp ∩ amount ${g172.intersects}`,
+    );
+
+    /* 173: the mobile ledger at 1.0 — all four presets. */
+    const reads173 = [];
+    for (const biz of ["salon", "home", "dental", "other"]) {
+      const cm = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
+      const pm = await cm.newPage();
+      await pm.goto(`${base}/?biz=${biz}`, { waitUntil: "domcontentloaded" });
+      await pm.evaluate(() => document.fonts.ready);
+      reads173.push({
+        biz,
+        g: await pm.evaluate(() => {
+          const stack = document.querySelector("[data-save-stack]");
+          const col = stack?.parentElement;
+          const cs = col ? getComputedStyle(col) : null;
+          const colW = col ? col.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) : null;
+          const rows = [...document.querySelectorAll("[data-caught-row]")].filter((el) => el.offsetParent != null).length;
+          const caught = document.querySelectorAll("[data-caught-row]").length;
+          const more = document.querySelector("[data-more-rows]");
+          return {
+            transform: stack ? getComputedStyle(stack).transform : null,
+            stackW: stack ? +stack.getBoundingClientRect().width.toFixed(1) : null,
+            colW: colW != null ? +colW.toFixed(1) : null,
+            rows,
+            caught,
+            moreVisible: more ? more.offsetParent != null : false,
+            moreText: more?.textContent?.trim() ?? null,
+          };
+        }),
+      });
+      await cm.close();
+    }
+    check(
+      173,
+      'mobile ledger at 1.0 (390): computed transform "none"; stack width === content column ±1; exactly 3 visible rows, with the moreRows footnote where rows were folded (the 3-row "other" preset has nothing to fold — data-honest carve-out)',
+      reads173.every(
+        (r) =>
+          r.g.transform === "none" &&
+          r.g.stackW != null &&
+          r.g.colW != null &&
+          Math.abs(r.g.stackW - r.g.colW) <= 1 &&
+          r.g.rows === 3 &&
+          (r.g.caught > 3 ? r.g.moreVisible && /^\+\d+ more this month$/.test(r.g.moreText ?? "") : !r.g.moreVisible),
+      ),
+      reads173
+        .map((r) => `${r.biz}: t=${JSON.stringify(r.g.transform)} w ${r.g.stackW}/${r.g.colW} rows ${r.g.rows}/${r.g.caught} more ${JSON.stringify(r.g.moreText)}`)
+        .join(" | "),
+    );
+
+    /* 174: the control system — settled motion so both s1 buttons render. */
+    const ctx174 = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page174 = await ctx174.newPage();
+    await page174.goto(base, { waitUntil: "domcontentloaded" });
+    await page174.evaluate(() => document.fonts.ready);
+    await waitT(page174, 11.6);
+    const g174 = await page174.evaluate(() => {
+      const chrome = [
+        ...document.querySelectorAll("[data-pager-dot], [data-panel-dot], [data-rail-share], [data-sound-toggle]"),
+      ].filter((el) => el.offsetParent != null);
+      const pairs = new Set(
+        chrome.map((el) => {
+          const cs = getComputedStyle(el);
+          return `${cs.borderTopColor}|${cs.backgroundColor}`;
+        }),
+      );
+      const teals = ["rgb(44, 199, 182)", "rgba(44, 199, 182"];
+      const isTealBorder = (el) => {
+        const c = getComputedStyle(el).borderTopColor;
+        return teals.some((t) => c.startsWith(t.replace("rgb(", "rgb(").slice(0, 12)));
+      };
+      const chromeSet = new Set(chrome);
+      const tealButtons = [...document.querySelectorAll("button")]
+        .filter((b) => !chromeSet.has(b) && b.offsetParent != null)
+        .filter((b) => {
+          const cs = getComputedStyle(b);
+          if (parseFloat(cs.borderTopWidth) < 1) return false;
+          const c = cs.borderTopColor;
+          return c.includes("44, 199, 182") || c.includes("116, 233, 220");
+        })
+        .map((b) => b.textContent.trim().slice(0, 14));
+      const replay = document.querySelector("[data-replay]");
+      const yourSide = document.querySelector("[data-your-side]");
+      const st = (el) => {
+        const cs = getComputedStyle(el);
+        return {
+          h: +el.getBoundingClientRect().height.toFixed(1),
+          fs: cs.fontSize,
+          radius: cs.borderTopLeftRadius,
+          bg: cs.backgroundColor,
+          border: cs.borderTopColor,
+          bw: cs.borderTopWidth,
+          color: cs.color,
+        };
+      };
+      const accent = getComputedStyle(document.querySelector("[data-demo]")).getPropertyValue("--accent").trim();
+      return { pairs: [...pairs], tealButtons, replay: st(replay), yourSide: st(yourSide), accent };
+    });
+    await ctx174.close();
+    const hexToRgb = (hex) => {
+      const h = hex.replace("#", "");
+      return `rgb(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)})`;
+    };
+    check(
+      174,
+      "control system (C2/C3): the chrome set renders exactly 2 {border, background} pairs; no non-chrome button carries a teal border; s1 buttons match C3 (primary = accent fill/accent-ink 44px/15px/r0; secondary = ink-stroke 60% 44px/15px/r0)",
+      g174.pairs.length === 2 &&
+        g174.tealButtons.length === 0 &&
+        g174.yourSide.h === 44 &&
+        g174.yourSide.fs === "15px" &&
+        g174.yourSide.radius === "0px" &&
+        g174.yourSide.bg === hexToRgb(g174.accent) &&
+        g174.replay.h === 44 &&
+        g174.replay.fs === "15px" &&
+        g174.replay.radius === "0px" &&
+        g174.replay.bw === "1px" &&
+        g174.replay.border === "rgba(233, 238, 244, 0.6)" &&
+        g174.replay.color === "rgb(233, 238, 244)",
+      `chrome pairs ${JSON.stringify(g174.pairs)} (need 2); teal-border buttons ${JSON.stringify(g174.tealButtons)} (need none); ` +
+        `your-side ${JSON.stringify(g174.yourSide)} vs accent ${g174.accent}; replay ${JSON.stringify(g174.replay)}`,
+    );
+
+    /* 175 + 176: the receipt and the stamp hit, one motion run. */
+    const ctx175 = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page175 = await ctx175.newPage();
+    await page175.goto(base, { waitUntil: "domcontentloaded" });
+    await page175.evaluate(() => document.fonts.ready);
+    await waitT(page175, 8.5);
+    const before175 = await page175.evaluate(() => document.querySelector("[data-receipt]") != null);
+    /* 176: the stamp lands at 10.44 global. */
+    await waitT(page175, 10.46);
+    const hit176 = await page175.evaluate(() => {
+      const t = document.querySelector("[data-demo]")?.getAttribute("data-t");
+      const tr = document.querySelector("[data-stamp]")?.style.transform ?? "";
+      const m = tr.match(/scale\(([\d.]+)\)/);
+      return { t, tr, scale: m ? parseFloat(m[1]) : null };
+    });
+    await waitT(page175, 10.8);
+    const rest176 = await page175.evaluate(() => document.querySelector("[data-stamp]")?.style.transform ?? "");
+    await waitT(page175, 12.0);
+    const settle175 = await page175.evaluate(() => {
+      const receipt = document.querySelector("[data-receipt]");
+      const clock = document.querySelector("[data-scene-clock]");
+      const gold = (() => {
+        const root = getComputedStyle(document.documentElement);
+        const h = root.getPropertyValue("--color-gold").trim().replace("#", "");
+        return `rgb(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)})`;
+      })();
+      const goldCount = [...document.querySelectorAll("*")].filter((el) => getComputedStyle(el).color === gold).length;
+      return {
+        text: receipt?.textContent?.trim() ?? null,
+        color: receipt ? getComputedStyle(receipt).color : null,
+        gold,
+        goldCount,
+        clockOpacity: clock ? getComputedStyle(clock).opacity : null,
+      };
+    });
+    await ctx175.close();
+    const wantTicket = need(/id: "salon"[\s\S]*?ticket:\s*(\d+)/, "salon ticket");
+    check(
+      175,
+      `slab receipt (G1): absent before the booking beat; at settle text === "+$${wantTicket}" in gold, the desktop clock faded out beneath it; page gold census === prior + 1 (8)`,
+      before175 === false &&
+        settle175.text === `+$${wantTicket}` &&
+        settle175.color === settle175.gold &&
+        parseFloat(settle175.clockOpacity ?? "1") <= 0.05 &&
+        settle175.goldCount === 8,
+      `present at t=8.5 ${before175} (need false); settle text ${JSON.stringify(settle175.text)} color ${settle175.color} (gold ${settle175.gold}); ` +
+        `clock opacity ${settle175.clockOpacity} (need <= 0.05); page gold ${settle175.goldCount} (need 8)`,
+    );
+    check(
+      176,
+      "stamp hit (G3): ~60ms after landing the inline scale > 1.05; by +300ms the transform rests at exactly rotate(-6deg)",
+      hit176.scale != null && hit176.scale > 1.05 && rest176 === "rotate(-6deg)",
+      `at t=${hit176.t}: transform ${JSON.stringify(hit176.tr)} scale ${hit176.scale} (need > 1.05); at rest ${JSON.stringify(rest176)} (need "rotate(-6deg)")`,
+    );
+
+    /* 177: the math roll — first entry only. */
+    const ctx177 = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page177 = await ctx177.newPage();
+    await page177.goto(base, { waitUntil: "domcontentloaded" });
+    await page177.evaluate(() => document.fonts.ready);
+    await waitHydrated(page177);
+    const finals = await page177.evaluate(() =>
+      [...document.querySelectorAll("[data-math-numeral]")].map((el) => el.textContent.trim()),
+    );
+    await goSection(page177, 3);
+    await page177.waitForTimeout(100);
+    const mid177 = await page177.evaluate(() =>
+      [...document.querySelectorAll("[data-math-numeral]")].map((el) => el.textContent.trim()),
+    );
+    await page177.waitForTimeout(700);
+    const end177 = await page177.evaluate(() =>
+      [...document.querySelectorAll("[data-math-numeral]")].map((el) => el.textContent.trim()),
+    );
+    await goSection(page177, 0);
+    await page177.waitForTimeout(300);
+    await goSection(page177, 3);
+    await page177.waitForTimeout(150);
+    const re177 = await page177.evaluate(() =>
+      [...document.querySelectorAll("[data-math-numeral]")].map((el) => el.textContent.trim()),
+    );
+    await ctx177.close();
+    check(
+      177,
+      "math roll (G5): numerals at entry+100ms differ from the finals; at entry+800ms equal them; a second entry never re-rolls",
+      finals.length > 0 &&
+        JSON.stringify(mid177) !== JSON.stringify(finals) &&
+        JSON.stringify(end177) === JSON.stringify(finals) &&
+        JSON.stringify(re177) === JSON.stringify(finals),
+      `finals ${JSON.stringify(finals)}; +100ms ${JSON.stringify(mid177)} (must differ); +800ms ${JSON.stringify(end177)}; re-entry+150ms ${JSON.stringify(re177)} (both must equal finals)`,
     );
   });
 

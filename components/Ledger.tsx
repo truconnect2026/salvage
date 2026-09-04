@@ -52,13 +52,17 @@ function FlapBoard({ value, compact }: { value: number; compact: boolean }) {
             key={i}
             data-flap="static"
             data-figure
-            className={`inline-flex justify-center px-[1px] font-medium leading-[1.15] text-ember ${
+            className={`relative inline-flex justify-center overflow-hidden bg-surface-2 px-[3px] font-medium leading-[1.15] text-ember ${
               compact ? "text-[24px]" : "text-[44px] min-[1100px]:text-[56px]"
             }`}
           >
             <span data-flap-face style={{ display: "inline-block" }}>
               {g}
             </span>
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute left-0 right-0 top-1/2 h-px bg-abyss/70"
+            />
           </span>
         );
       })}
@@ -106,7 +110,7 @@ export default function Ledger({
           hairline; the flap board at 44px; labels centered on figures. The
           reply row left for the footnote (D6). */}
       <div data-money>
-        <div data-ink className="flex items-center justify-between gap-3 py-1.5">
+        <div data-ink className={`flex items-center justify-between gap-3 ${compact ? "py-1.5" : "h-14 min-[1100px]:h-auto min-[1100px]:py-1.5"}`}>
           <p className="text-[14px] text-muted">
             {L.recoveredLabel}
             {!compact && (
@@ -122,7 +126,7 @@ export default function Ledger({
           </p>
         </div>
         <div className="hairline2" aria-hidden="true" />
-        <div data-ink className="flex items-center justify-between gap-3 border-b border-line py-1.5">
+        <div data-ink className={`flex items-center justify-between gap-3 border-b border-line ${compact ? "py-1.5" : "h-14 min-[1100px]:h-auto min-[1100px]:py-1.5"}`}>
           <p className="text-[14px] text-muted">
             {L.lostLabel}
             {!compact && (
@@ -150,7 +154,7 @@ export default function Ledger({
           className={`grid ${
             compact
               ? "grid-cols-[20px_minmax(0,1.1fr)_minmax(0,1.3fr)_auto]"
-              : "grid-cols-[20px_minmax(0,0.8fr)_minmax(0,1.7fr)_auto] min-[600px]:grid-cols-[20px_minmax(0,1.1fr)_minmax(0,1.3fr)_auto_76px]"
+              : "border-l-2 border-l-transparent grid-cols-[20px_minmax(0,0.8fr)_minmax(0,1.7fr)_auto] min-[600px]:grid-cols-[20px_minmax(0,1.1fr)_minmax(0,1.3fr)_auto_76px]"
           } items-baseline gap-x-2 border-b border-line pb-1 text-[11px] tracking-[0.04em] text-muted`}
         >
           <span />
@@ -171,14 +175,14 @@ export default function Ledger({
         {/* change 28 (D1): the desktop table runs 3 rows at 1x — the rest
             fold into a mono footnote. Mobile and the OG keep every row. */}
         {!compact && preset.caught.length > 3 && (
-          <p data-more-rows data-figure className="mt-1 hidden text-[12px] text-muted min-[1100px]:block">
+          <p data-more-rows data-figure className="mt-1 hidden text-[12px] text-muted max-[599.98px]:block min-[1100px]:block">
             {L.moreRows.replace("{n}", String(preset.caught.length - 3))}
           </p>
         )}
       </div>
 
       {/* D6: the reply time, demoted to a mono footnote under the table. */}
-      <p data-ink data-reply-foot data-figure className="mt-1.5 text-[12px] text-muted">
+      <p data-ink data-reply-foot data-figure className="mt-1.5 hidden text-[12px] text-muted min-[600px]:block">
         {L.replyFoot}
       </p>
 
@@ -227,9 +231,7 @@ function CaughtRow({
         compact
           ? "grid-cols-[20px_minmax(0,1.1fr)_minmax(0,1.3fr)_auto]"
           : "grid-cols-[20px_minmax(0,0.8fr)_minmax(0,1.7fr)_auto] min-[600px]:grid-cols-[20px_minmax(0,1.1fr)_minmax(0,1.3fr)_auto_76px]"
-      } items-start gap-x-2 py-1.5 ${compact ? "" : "min-[500px]:py-2"} ${
-        isFirst ? "pl-2" : ""
-      }`}
+      } items-start gap-x-2 py-1.5 ${compact ? "" : "min-[500px]:py-2"}`}
     >
       {/* D5: the gutter line number. */}
       <span data-figure className="pt-0.5 text-[12px] leading-none text-muted">
@@ -248,22 +250,8 @@ function CaughtRow({
             {entry.number}
           </div>
         )}
-        {/* change 27 (C1): below 600 the stamp docks under the name — the
-            date column that carried it is gone there. Styled as the one
-            [data-stamp]; only one of the two mounts ever renders. */}
-        {isFirst && !compact && (
-          <div className="mt-0.5 min-[600px]:hidden">
-            <span
-              data-figure
-              className="inline-block rounded-[4px] border border-[var(--accent,#2CC7B6)] px-1.5 text-[11px] tracking-[0.12em] text-[var(--accent,#74E9DC)]"
-              style={{ transform: "rotate(-3deg)", opacity: 1 }}
-            >
-              {COPY.ledger.stamp}
-            </span>
-          </div>
-        )}
       </div>
-      <div data-caught-detail={index} className={`min-w-0 truncate text-muted ${compact ? "text-[17px]" : "text-[12px]"}`}>
+      <div data-caught-detail={index} className={`min-w-0 truncate text-muted max-[599.98px]:whitespace-normal ${compact ? "text-[17px]" : "text-[12px]"}`}>
         {entry.detail}
       </div>
       <div data-caught-amount={index} data-figure className={`text-right text-ink ${compact ? "text-[15px]" : "text-[13px] min-[1100px]:text-[14px]"}`}>
@@ -271,24 +259,23 @@ function CaughtRow({
       </div>
       {!compact && (
       <div className="hidden text-right min-[600px]:block">
-        {/* D9: the stamp rides ABOVE the date cell, right-aligned — never
-            over the amount. */}
-        {isFirst && (
-          <div className="flex justify-end whitespace-nowrap">
-            <span
-              data-stamp
-              data-figure
-              className="inline-block rounded-[4px] border border-[var(--accent,#2CC7B6)] px-1.5 text-[11px] tracking-[0.12em] text-[var(--accent,#74E9DC)]"
-              style={{ transform: "rotate(-3deg)", opacity: 1 }}
-            >
-              {COPY.ledger.stamp}
-            </span>
-          </div>
-        )}
         <div data-caught-date={index} data-figure className="mt-0.5 text-[13px] text-muted min-[1100px]:text-[14px]">
           {date ?? entry.date}
         </div>
       </div>
+      )}
+      {/* change 30 (D3): ONE stamp — absolute at the row's right end,
+          overlapping the amount's top-right by ~30%, -6deg, stroke only,
+          zero row-height impact. The engine drives its hit (G3). */}
+      {isFirst && !compact && (
+        <span
+          data-stamp
+          data-figure
+          className="absolute right-1 top-0.5 inline-block rounded-[4px] border border-[var(--accent,#2CC7B6)] bg-transparent px-1.5 text-[11px] tracking-[0.12em] text-[var(--accent,#74E9DC)] min-[600px]:right-10"
+          style={{ transform: "rotate(-6deg)", opacity: 1 }}
+        >
+          {COPY.ledger.stamp}
+        </span>
       )}
     </div>
   );
@@ -298,7 +285,7 @@ function CaughtRow({
       <div
         data-caught-row={0}
         data-client-world
-        className="overflow-hidden border-b border-line border-l-2 border-l-[var(--accent,#2CC7B6)] bg-surface"
+        className="relative overflow-hidden border-b border-line border-l-2 border-l-[var(--accent,#2CC7B6)] bg-surface"
       >
         {cells}
       </div>
@@ -307,7 +294,7 @@ function CaughtRow({
   return (
     /* change 28 (D1): rows past the third leave the desktop render (the
        moreRows footnote carries the count); mobile and the OG keep them. */
-    <div data-caught-row={index} className={`border-b border-line ${!compact && index >= 3 ? "min-[1100px]:hidden" : ""}`}>
+    <div data-caught-row={index} className={`border-b border-line ${compact ? "" : "border-l-2 border-l-transparent"} ${!compact && index >= 3 ? "max-[599.98px]:hidden min-[1100px]:hidden" : ""}`}>
       {cells}
     </div>
   );

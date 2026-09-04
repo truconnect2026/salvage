@@ -162,16 +162,22 @@ body {
    the device inside the same column. */
 @media (max-width: 1099.98px) {
   [data-section="call"] [data-phone-device] {
-    max-width: min(390px, calc((100vh - 244px) * 9 / 19.5));
-    max-width: min(390px, calc((100dvh - 244px) * 9 / 19.5));
+    max-width: min(390px, calc((100vh - 254px) * 9 / 19.5));
+    max-width: min(390px, calc((100dvh - 254px) * 9 / 19.5));
+    /* change 30 (A1): right-aligned with a 28px bleed into the rail
+       gutter (12px clear of the rail) — the only geometry where the 62-64%
+       slab, the 30-36% cut, and 16px folio clearance on BOTH slab edges
+       coexist at 390x844. Objects may bleed; text may not. */
+    margin-left: auto;
+    margin-right: -28px;
   }
 }
 /* change 17 review (WebKit 375x667): on short phones the reserve also
    clears the Replay control band. */
 @media (max-width: 1099.98px) and (max-height: 720px) {
   [data-section="call"] [data-phone-device] {
-    max-width: min(390px, calc((100vh - 300px) * 9 / 19.5));
-    max-width: min(390px, calc((100dvh - 300px) * 9 / 19.5));
+    max-width: min(390px, calc((100vh - 310px) * 9 / 19.5));
+    max-width: min(390px, calc((100dvh - 310px) * 9 / 19.5));
   }
 }
 
@@ -260,6 +266,16 @@ body {
     left: calc(var(--col-left) - 48px);
     width: calc(40vw - var(--col-left) + 48px);
   }
+  /* change 30 (A3): the settled pair sits fully ON the band — right edge
+     at the band's right - 24 (the band right = col-left - 48 + width). */
+  [data-controls] {
+    position: absolute;
+    bottom: 47px;
+    left: 0;
+    z-index: 20;
+    width: calc(0.58 * (min(1240px, 100vw) - 96px) - 0.17 * var(--dev-w) + 24px);
+    justify-content: flex-end;
+  }
 }
 
 /* change 28 (D1, short-desktop guard): the 1x ledger stack measures ~796px —
@@ -282,8 +298,12 @@ body {
   }
 }
 
-@media (max-width: 1099.98px) {
-  [data-save-fit] {
+/* change 30 (D1): the mobile ledger lays out at 1.0 — the change-26
+   scale-fit is gone; the height is bought by the 3-row table, the folded
+   reply footnote, and the 56px money rows (496px natural vs 524 available
+   at 390x844). */
+@media (max-width: 0px) {
+  [data-save-fit-retired] {
     container-type: size;
     position: relative;
   }
@@ -333,6 +353,20 @@ body {
    only rules and slabs. Newsreader keeps optical sizing on. */
 .font-display {
   font-optical-sizing: auto;
+}
+
+/* change 30 (G1): the receipt inks in over 300ms when it mounts on the
+   booking beat; reduced motion (and SSR) show it settled, instantly. */
+@keyframes receipt-ink {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-receipt],
+  [data-receipt-m] {
+    animation: receipt-ink 300ms ease-out;
+  }
 }
 
 /* change 26 (G4): one focus language — 2px teal, 2px offset. Declared

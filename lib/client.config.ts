@@ -192,6 +192,8 @@ export const COPY = {
     autoReplyTag: "Salvage · auto-reply",
     // change 26 (C1, APPROVED).
     composePlaceholder: "Text Message",
+    // change 30 (B3, APPROVED): the contact header's sub-label.
+    textMessageLabel: "Text Message",
     phone: {
       statusTime: "8:47",
       // change 17 (D1, APPROVED): March 14, 2026 is a Saturday; the

@@ -11,6 +11,7 @@ import { usd } from "@/lib/format";
 import {
   BANNER_AT,
   BANNER_IN,
+  RECEIPT_AT,
   BEATS,
   BUBBLE_ENTER,
   BUBBLE_RISE,
@@ -106,6 +107,9 @@ type Nodes = {
   controls: HTMLElement | null;
   /* change 19 (B1): arrays — the desktop scene type and the mobile caption
      share slots and beats; whichever the viewport renders, one clock. */
+  sceneClock: HTMLElement | null;
+  clockSeconds: HTMLElement | null;
+  mathNumerals: { el: HTMLElement; final: string }[];
   sceneClosed: HTMLElement[];
   sceneDialing: HTMLElement[];
   sceneCaught: HTMLElement[];
@@ -282,6 +286,16 @@ type Ctx = {
      (land 10.3 + 3.0). Gate 169. */
   confirmLatched: boolean;
   setConfirmGone: (gone: boolean) => void;
+  /* change 30 (G1): the slab receipt mounts on the booking beat; the
+     desktop clock crossfades out under it. */
+  receiptLatched: boolean;
+  setReceiptShown: (shown: boolean) => void;
+  /* change 30 (G5): the section-4 math roll — entry-latched, ridden on the
+     one rAF (the tick keeps scheduling until the roll parks). */
+  mathRoll: { started: boolean; at: number | null; done: boolean };
+  /* change 30 (G6): flap-step ticks, rate-limited to one per 16ms. */
+  lastFlapValue: number;
+  lastFlapTickAt: number;
 };
 
 /* Beat crossings -> Web Audio schedules, on the rAF phase and nothing else.
@@ -289,6 +303,22 @@ type Ctx = {
    crossing is observed), so events land at most one frame after their beat
    — inside gate 89's 50ms envelope. The haptic (B3) rides the same chime
    crossing. */
+/* change 30 (G6): one flap step = one 12ms sine at 1200Hz, gain 0.04,
+   through the shared master gain. */
+function playFlapTick(actx: AudioContext) {
+  if (!sharedMasterGain) return;
+  const osc = actx.createOscillator();
+  const g = actx.createGain();
+  osc.type = "sine";
+  osc.frequency.value = 1200;
+  g.gain.setValueAtTime(0.04, actx.currentTime);
+  g.gain.linearRampToValueAtTime(0, actx.currentTime + 0.012);
+  osc.connect(g);
+  g.connect(sharedMasterGain);
+  osc.start(actx.currentTime);
+  osc.stop(actx.currentTime + 0.014);
+}
+
 function scheduleAudio(ctx: Ctx, prevT: number, t: number) {
   const a = ctx.audio;
   if (!a.enabled || !a.actx || a.actx.state !== "running") return;
@@ -336,6 +366,12 @@ function collect(root: HTMLElement): Nodes {
     threadArea: q("[data-thread-area]"),
     leak: q("[data-leak-lost]"),
     controls: q("[data-controls]"),
+    sceneClock: q("[data-scene-clock]"),
+    clockSeconds: q("[data-clock-seconds]"),
+    mathNumerals: Array.from(root.querySelectorAll<HTMLElement>("[data-math-numeral]")).map((el) => ({
+      el,
+      final: (el.textContent ?? "").trim(),
+    })),
     sceneClosed: Array.from(root.querySelectorAll<HTMLElement>('[data-scene-line="closed"]')),
     sceneDialing: Array.from(root.querySelectorAll<HTMLElement>('[data-scene-line="dialing"]')),
     sceneCaught: Array.from(root.querySelectorAll<HTMLElement>('[data-scene-line="caught"]')),
@@ -565,8 +601,20 @@ function paintScene(ctx: Ctx, t: number) {
 
   /* --- The SALVAGED stamp (change 18, D3): lands with the row insert,
          120ms fade on the same clock. --- */
-  /* change 26 (B4): the stamp lands 120ms after the slide settles. */
-  if (n.stamp) n.stamp.style.opacity = String(clamp01((tt - (CAUGHT_ROW_AT + 0.32 + 0.12)) / STAMP_IN));
+  /* change 26 (B4): the stamp lands 120ms after the slide settles.
+     change 30 (G3): the HIT — scale 1.15 -> 1, rotate -10deg -> -6deg over
+     180ms (quadratic ease-out so +60ms still reads > 1.05, gate 176);
+     opacity lands in the first 60ms. */
+  if (n.stamp) {
+    const lt = tt - (CAUGHT_ROW_AT + 0.32 + 0.12);
+    n.stamp.style.opacity = String(clamp01(lt / 0.06));
+    if (lt >= 0.18) {
+      n.stamp.style.transform = "rotate(-6deg)";
+    } else {
+      const hp = 1 - Math.pow(1 - clamp01(lt / 0.18), 2);
+      n.stamp.style.transform = `rotate(${(-10 + 4 * hp).toFixed(2)}deg) scale(${(1.15 - 0.15 * hp).toFixed(3)})`;
+    }
+  }
 }
 
 function schedule(ctx: Ctx) {
@@ -586,6 +634,11 @@ function park(ctx: Ctx) {
   ctx.setBannerGone(false);
   ctx.confirmLatched = false;
   ctx.setConfirmGone(false);
+  ctx.receiptLatched = false;
+  ctx.setReceiptShown(false);
+  if (ctx.nodes.sceneClock) ctx.nodes.sceneClock.style.opacity = "1";
+  if (ctx.nodes.clockSeconds) ctx.nodes.clockSeconds.textContent = ":00";
+  ctx.lastFlapValue = -1;
   paintScene(ctx, 0);
   paintFade(ctx, 1);
   paintNumbers(
@@ -616,6 +669,27 @@ function beginPlayback(ctx: Ctx) {
 
 function tick(ctx: Ctx, now: number) {
   ctx.raf = null;
+
+  /* change 30 (G5): a math roll fired while the demo is PARKED must not
+     start the playback clock — paint the roll alone and return. */
+  if (ctx.armed && ctx.mathRoll.started && !ctx.mathRoll.done) {
+    if (ctx.mathRoll.at == null) ctx.mathRoll.at = now;
+    const e = (now - ctx.mathRoll.at) / 1000;
+    const p5 = easeOut(clamp01(e / 0.6));
+    ctx.nodes.mathNumerals.forEach(({ el, final }) => {
+      const num = Number(final.replace(/[^0-9]/g, ""));
+      el.textContent = final.replace(/[\d,]+/, Math.round(num * p5).toLocaleString("en-US"));
+    });
+    if (e >= 0.6) {
+      ctx.mathRoll.done = true;
+      ctx.nodes.mathNumerals.forEach(({ el, final }) => {
+        el.textContent = final;
+      });
+    } else {
+      schedule(ctx);
+    }
+    return;
+  }
 
   const tr = ctx.transition;
   if (tr) {
@@ -700,6 +774,32 @@ function tick(ctx: Ctx, now: number) {
   paintFade(ctx, 1);
   paintNumbers(ctx, leakAt(tt, p.lost), panelRecoveredAt(tt, p.recovered, p.caught[0].amount));
   paintFlaps(ctx, tt, (q) => leakAt(q, p.lost));
+  /* change 30 (G6): one 12ms 1200Hz tick per digit-flap step, sound on,
+     rate-limited across all flaps. */
+  const flapNow = leakAt(tt, p.lost);
+  if (
+    flapNow !== ctx.lastFlapValue &&
+    ctx.lastFlapValue >= 0 &&
+    ctx.audio.enabled &&
+    ctx.audio.actx &&
+    ctx.audio.actx.state === "running" &&
+    now - ctx.lastFlapTickAt >= 16
+  ) {
+    playFlapTick(ctx.audio.actx);
+    ctx.lastFlapTickAt = now;
+  }
+  ctx.lastFlapValue = flapNow;
+  /* change 30 (G2): the clock seconds — one step per phase-second, frozen
+     at the miss beat (":03"). */
+  if (ctx.nodes.clockSeconds)
+    ctx.nodes.clockSeconds.textContent = ":0" + Math.min(3, Math.max(0, Math.floor(t)));
+  /* change 30 (G1): the desktop clock crossfades out under the receipt. */
+  if (ctx.nodes.sceneClock)
+    ctx.nodes.sceneClock.style.opacity = String(1 - clamp01((t - RECEIPT_AT) / 0.4));
+  if (!ctx.receiptLatched && t >= RECEIPT_AT) {
+    ctx.receiptLatched = true;
+    ctx.setReceiptShown(true);
+  }
   ctx.root.dataset.t = t.toFixed(3);
 
   /* change 26 (G5): announce the settled figures ONCE, politely. */
@@ -735,7 +835,26 @@ function tick(ctx: Ctx, now: number) {
   scheduleAudio(ctx, ctx.audio.lastT, t);
   ctx.audio.lastT = t;
 
-  if (t < LOOP_UNTIL) schedule(ctx);
+  /* change 30 (G5): the math roll — 600ms, once, on the same rAF. */
+  const mr = ctx.mathRoll;
+  if (mr.started && !mr.done) {
+    if (mr.at == null) mr.at = now;
+    const e = (now - mr.at) / 1000;
+    const p5 = easeOut(clamp01(e / 0.6));
+    ctx.nodes.mathNumerals.forEach(({ el, final }) => {
+      const num = Number(final.replace(/[^0-9]/g, ""));
+      const rolled = Math.round(num * p5);
+      el.textContent = final.replace(/[\d,]+/, rolled.toLocaleString("en-US"));
+    });
+    if (e >= 0.6) {
+      mr.done = true;
+      ctx.nodes.mathNumerals.forEach(({ el, final }) => {
+        el.textContent = final;
+      });
+    }
+  }
+
+  if (t < LOOP_UNTIL || (mr.started && !mr.done)) schedule(ctx);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -752,16 +871,18 @@ const beatZeroTotals = (p: Preset): Totals => ({
   panelRecovered: panelRecoveredAt(0, p.recovered, p.caught[0].amount),
 });
 
-/* change 26 (C7): the accent twin of the ghost button. */
-const ghostAccent =
-  "rounded-[2px] border border-[var(--accent,#2CC7B6)] px-5 py-2.5 text-[13px] font-medium text-[var(--accent,#74E9DC)] " +
-  "transition-colors hover:bg-white/5 outline-none " +
+/* change 30 (C3): the button system — PRIMARY is the accent fill. */
+const btnPrimary =
+  "h-9 rounded-none bg-[var(--accent,#2CC7B6)] px-3 text-[12px] font-medium text-[var(--accent-ink,#06121F)] min-[1100px]:h-11 min-[1100px]:px-5 min-[1100px]:text-[15px] " +
+  "transition-opacity hover:opacity-90 outline-none " +
   "focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2";
 
-/* change 18 (A4): square-corner — the CTA keeps the page's one pill. */
-const ghost =
-  "rounded-[2px] border border-teal px-5 py-2.5 text-[13px] font-medium text-teal-bright " +
-  "transition-colors hover:bg-teal/10 outline-none " +
+/* change 30 (C3): SECONDARY — 1px ink stroke at 60%, ink text, hard
+   corners, 44px tall. The gold CTA keeps the page's one pill; no teal
+   buttons anywhere. */
+const btnSecondary =
+  "h-9 rounded-none border border-[rgba(233,238,244,0.6)] bg-transparent px-3 text-[12px] font-medium text-ink min-[1100px]:h-11 min-[1100px]:px-5 min-[1100px]:text-[15px] " +
+  "transition-colors hover:bg-white/5 outline-none " +
   "focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2";
 
 const buildQuery = (biz: string, name: string, refDjl = false) =>
@@ -777,7 +898,7 @@ const buildQuery = (biz: string, name: string, refDjl = false) =>
 function SectionMark({ kicker, title }: { kicker: string; title: string }) {
   return (
     <div data-section-mark className="pointer-events-none absolute left-8 top-8 z-20">
-      <p data-folio data-figure data-ink className="text-[13px] uppercase tracking-[0.04em] text-muted min-[1100px]:text-[15px]" style={{ transitionDuration: "200ms" }}>
+      <p data-folio data-figure data-ink className="text-[12px] uppercase tracking-[0.04em] text-muted min-[600px]:text-[13px] min-[1100px]:text-[15px]" style={{ transitionDuration: "200ms" }}>
         {kicker} — {title}
       </p>
     </div>
@@ -786,6 +907,7 @@ function SectionMark({ kicker, title }: { kicker: string; title: string }) {
 
 /* Rail glyphs (change 15, A3/B2). Hand-written SVG, no icon library. */
 function ShareGlyph() {
+  /* change 30 (C1): the iOS share — open square, arrow up. 1.5px. */
   return (
     <svg
       width="16"
@@ -798,10 +920,8 @@ function ShareGlyph() {
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <circle cx="4" cy="8" r="2.1" />
-      <circle cx="12" cy="3.4" r="2.1" />
-      <circle cx="12" cy="12.6" r="2.1" />
-      <path d="M5.9 7L10.1 4.5M5.9 9L10.1 11.5" />
+      <path d="M5 6.2H4a1.2 1.2 0 0 0-1.2 1.2v5.4A1.2 1.2 0 0 0 4 14h8a1.2 1.2 0 0 0 1.2-1.2V7.4A1.2 1.2 0 0 0 12 6.2h-1" />
+      <path d="M8 9.8V1.6M5.4 4.1L8 1.5l2.6 2.6" />
     </svg>
   );
 }
@@ -819,14 +939,17 @@ function SpeakerGlyph({ on }: { on: boolean }) {
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <path d="M2 6v4h2.6L8.5 13V3L4.6 6H2z" fill="currentColor" stroke="none" />
+      {/* change 30 (C1): OUTLINE speaker at full optical size; two arcs
+          when on, one 1.5px slash THROUGH it when off (review lens: the
+          small cone + corner slash read as a paper-plane). */}
+      <path d="M1.5 5.8v4.4h2.9L9 14.4V1.6L4.4 5.8H1.5z" />
       {on ? (
         <>
-          <path d="M10.7 5.6a3.4 3.4 0 0 1 0 4.8" />
-          <path d="M12.6 3.8a6 6 0 0 1 0 8.4" />
+          <path d="M11 5.2a4 4 0 0 1 0 5.6" />
+          <path d="M13.2 3.2a6.8 6.8 0 0 1 0 9.6" />
         </>
       ) : (
-        <path d="M10.6 6.2l3.6 3.6M14.2 6.2l-3.6 3.6" />
+        <path d="M2.5 14L13.5 2" />
       )}
     </svg>
   );
@@ -891,6 +1014,9 @@ export default function Demo({
   const [bannerGone, setBannerGone] = useState(false);
   /* change 29: same contract for the booking-confirmation card. */
   const [confirmGone, setConfirmGone] = useState(false);
+  /* change 30 (G1): the receipt mounts on the booking beat; SSR (and
+     reduced motion) render it settled — park hides it for a motion run. */
+  const [receiptShown, setReceiptShown] = useState(true);
   /* Sound (change 15, B2): off until the rail toggle's tap. Restored from
      sessionStorage in the mount effect — never under reduced motion. */
   const [soundOn, setSoundOn] = useState(false);
@@ -994,10 +1120,25 @@ export default function Demo({
   /* A name commit is a re-skin, not a reset: React swaps text nodes in place,
      playback's clock never moves. Re-collect in case any marked node was
      re-created. */
+  const nameFlashArmed = useRef(false);
   useLayoutEffect(() => {
     const ctx = ctxRef.current;
     if (!ctx) return;
     ctx.nodes = collect(ctx.root);
+    /* change 30 (G4): the section-3 contact header flashes accent 40% -> 0
+       over 300ms when a typed name lands. Event-driven UI (same sanction as
+       the fonts fade); never under reduced motion; never on mount. */
+    if (nameFlashArmed.current && !ctx.reduced) {
+      const hdr = ctx.root.querySelector<HTMLElement>('[data-section="yours"] [data-phone-header]');
+      hdr?.animate(
+        [
+          { backgroundColor: "color-mix(in srgb, var(--accent, #2CC7B6) 40%, var(--color-surface-2))" },
+          { backgroundColor: "var(--color-surface-2)" },
+        ],
+        { duration: 300, easing: "ease-out" },
+      );
+    }
+    nameFlashArmed.current = true;
   }, [name]);
 
   /* change 27 (C2) / change 29: the banner and the confirmation card mount
@@ -1007,7 +1148,7 @@ export default function Demo({
     const ctx = ctxRef.current;
     if (!ctx) return;
     ctx.nodes = collect(ctx.root);
-  }, [bannerGone, confirmGone]);
+  }, [bannerGone, confirmGone, receiptShown]);
 
   /* Mount. Reduced motion means zero timers: the SSR settled state stands.
      Otherwise the clock PARKS at t=0 (change 12) — the section observer
@@ -1039,6 +1180,11 @@ export default function Demo({
       setBannerGone,
       confirmLatched: false,
       setConfirmGone,
+      receiptLatched: false,
+      setReceiptShown,
+      mathRoll: { started: false, at: null, done: false },
+      lastFlapValue: -1,
+      lastFlapTickAt: 0,
       fireToast: () => {
         let seen = false;
         try {
@@ -1384,6 +1530,16 @@ export default function Demo({
     return () => window.clearTimeout(timer);
   }, [activeSection]);
 
+  /* change 30 (G5): the math roll fires on section 4's FIRST entry —
+     the entered[] latch is one-shot, so a second entry never re-rolls. */
+  useEffect(() => {
+    const ctx = ctxRef.current;
+    if (!ctx || ctx.reduced || !entered[3] || ctx.mathRoll.started) return;
+    ctx.mathRoll.started = true;
+    schedule(ctx);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entered]);
+
   /* Cue timer: the swipe cue starts its 4s dismissal when section 3 first
      becomes active. UI plumbing (React state), not an animation clock. */
   useEffect(() => {
@@ -1474,6 +1630,8 @@ export default function Demo({
     setBannerGone(false);
     ctx.confirmLatched = false;
     setConfirmGone(false);
+    ctx.receiptLatched = false;
+    setReceiptShown(false);
     schedule(ctx);
   };
 
@@ -1611,13 +1769,13 @@ export default function Demo({
   /* change 18 (C6/A4): dots are 6px teal-stroke SQUARES now — the rail and
      the panel switcher speak the same 1px-rule language as the log. */
   const pagerDot = (active: boolean) =>
-    `h-[7px] w-[7px] rounded-[2px] border border-teal transition-colors outline-none min-[1100px]:h-2 min-[1100px]:w-2 focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
-      active ? "bg-teal" : "bg-transparent opacity-60"
+    `h-[7px] w-[7px] rounded-[2px] border transition-colors outline-none min-[1100px]:h-2 min-[1100px]:w-2 focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
+      active ? "border-teal bg-teal" : "border-[rgba(44,199,182,0.7)] bg-transparent"
     }`;
 
   const panelDot = (active: boolean) =>
-    `h-1.5 w-1.5 rounded-[2px] border border-teal transition-opacity outline-none focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
-      active ? "bg-teal opacity-100" : "bg-transparent opacity-60"
+    `h-1.5 w-1.5 rounded-[2px] border transition-colors outline-none focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
+      active ? "border-teal bg-teal" : "border-[rgba(44,199,182,0.7)] bg-transparent"
     }`;
 
   return (
@@ -1639,7 +1797,7 @@ export default function Demo({
         {/* change 28 (A2): the desktop slab is a section band keyed off the
             column edge (globals positions it); the in-device slab serves
             below 1100. */}
-        <div aria-hidden="true" data-accent-slab data-call-band className="absolute inset-y-0 z-0 hidden bg-[var(--accent-soft,#0F1E33)] min-[1100px]:block" />
+        <div aria-hidden="true" data-accent-slab data-slab data-call-band className="absolute inset-y-0 z-0 hidden bg-[var(--accent-soft,#0F1E33)] min-[1100px]:block" />
         <SectionMark {...COPY.sections.call} />
 
         {/* change 16 (B1/B2): below 1100px the right padding clears the
@@ -1650,12 +1808,30 @@ export default function Demo({
             centered column, the scene type right-aligned in the left third,
             vertically centered on the phone. */}
         <div className="relative z-10 flex h-full w-full items-center justify-center gap-16 pb-6 pl-6 pr-14 pt-[112px] min-[1100px]:mx-auto min-[1100px]:grid min-[1100px]:max-w-[1240px] min-[1100px]:grid-cols-[61fr_auto_39fr] min-[1100px]:gap-x-0 min-[1100px]:px-12 min-[1100px]:py-6">
-          <div data-scene data-client-world className="hidden shrink-0 min-[1100px]:block min-[1100px]:justify-self-start min-[1100px]:self-center min-[1100px]:-translate-y-8">
+          <div data-scene data-client-world className="relative hidden shrink-0 min-[1100px]:block min-[1100px]:justify-self-start min-[1100px]:self-center min-[1100px]:-translate-y-8">
+            {/* change 30 (G1): the slab receipt — the clock crossfades out
+                beneath it on the booking beat. Gold census +1 (gate 175);
+                the off-viewport mount computes transparent so the census
+                stays exact. */}
+            {receiptShown && (
+              <p
+                data-receipt
+                data-figure
+                className="pointer-events-none absolute inset-y-0 left-0 z-10 hidden items-center text-[120px] font-medium leading-none text-gold max-[1099.98px]:text-transparent min-[1100px]:flex"
+              >
+                +${preset.ticket}
+              </p>
+            )}
+            <div data-scene-clock>
             {/* change 18 (B4): the clock is a timestamp — it runs in mono
                 like every figure on the page. change 27 (A): 160px — it
                 wraps at the space into a clock lockup. */}
             <p data-figure className="text-[160px] font-medium leading-none text-ink">
               {preset.thread[0].time}
+              {/* change 30 (G2): phase seconds — frozen at the miss beat. */}
+              <span data-clock-seconds className="mt-2 block text-[28px] leading-none text-muted">
+                :00
+              </span>
             </p>
             {/* Three stacked lines; the engine crossfades opacity on the
                 miss (3.6) and the thread's first beat (5.6). SSR seeds the
@@ -1685,6 +1861,7 @@ export default function Demo({
                 {COPY.scene.mobile.caught.post}
               </p>
             </div>
+            </div>
           </div>
 
           {/* change 27 (B1): the stage column carries an explicit width — a
@@ -1695,24 +1872,24 @@ export default function Demo({
                 centered above the phone, height reserved, riding the same
                 three beats as the desktop scene type (same slots, one
                 clock). SSR seeds the settled "caught" line. */}
-            <div data-scene-mobile data-client-world className="relative mx-auto mb-2 h-[30px] text-center min-[1100px]:hidden">
+            <div data-scene-mobile data-client-world className="relative mb-2 h-[30px] text-left min-[1100px]:hidden">
               <p
                 data-scene-line="closed"
-                className="absolute inset-x-0 top-0 font-caption text-[22px] font-normal italic leading-[30px] text-ink"
+                className="absolute left-0 top-0 w-fit max-w-[145px] whitespace-nowrap font-caption text-[15px] font-normal italic leading-[30px] text-ink"
                 style={{ opacity: 0 }}
               >
                 {COPY.scene.mobile.calls}
               </p>
               <p
                 data-scene-line="dialing"
-                className="absolute inset-x-0 top-0 font-caption text-[22px] font-normal italic leading-[30px] text-ink"
+                className="absolute left-0 top-0 w-fit max-w-[145px] whitespace-nowrap font-caption text-[15px] font-normal italic leading-[30px] text-ink"
                 style={{ opacity: 0 }}
               >
                 {COPY.scene.mobile.nobody}
               </p>
               <p
                 data-scene-line="caught"
-                className="absolute inset-x-0 top-0 font-caption text-[22px] font-normal italic leading-[30px] text-ink"
+                className="absolute left-0 top-0 w-fit max-w-[145px] whitespace-nowrap font-caption text-[15px] font-normal italic leading-[30px] text-ink"
                 style={{ opacity: 1 }}
               >
                 {COPY.scene.mobile.caught.pre}
@@ -1720,15 +1897,28 @@ export default function Demo({
                 {COPY.scene.mobile.caught.post}
               </p>
             </div>
-            <Phone preset={preset} bizName={bizName} typingBefore={[2]} slab sonar showBanner={!bannerGone} showConfirm={!confirmGone} />
+            <div className="relative">
+              <Phone preset={preset} bizName={bizName} typingBefore={[2]} slab sonar showBanner={!bannerGone} showConfirm={!confirmGone} />
+              {/* change 30 (G1): the mobile receipt — 72px over the device,
+                  spine-left, vertically centered on it. */}
+              {receiptShown && (
+                <p
+                  data-receipt-m
+                  data-figure
+                  className="pointer-events-none absolute inset-0 z-30 flex items-center justify-start text-[72px] font-medium leading-none text-gold [text-shadow:0_0_3px_rgba(6,11,20,0.85),0_2px_18px_rgba(6,11,20,0.9)] min-[1100px]:hidden min-[1100px]:text-transparent"
+                >
+                  +${preset.ticket}
+                </p>
+              )}
+            </div>
             {/* change 26 (C7): the settled pair — centered under the
                 phone, 24px below the bezel, 12px apart. The engine lands
                 them at settle. */}
-            <div data-controls className="mt-6 flex justify-center gap-3">
-              <button data-replay type="button" onClick={onReplay} className={ghost}>
+            <div data-controls className="mt-2 flex flex-col items-start gap-1.5 min-[1100px]:mt-6 min-[1100px]:flex-row min-[1100px]:items-center min-[1100px]:gap-3">
+              <button data-replay type="button" onClick={onReplay} className={btnSecondary}>
                 {COPY.replayLabel}
               </button>
-              <button data-your-side data-client-world type="button" onClick={() => goSection(1)} className={ghostAccent}>
+              <button data-your-side data-client-world type="button" onClick={() => goSection(1)} className={btnPrimary}>
                 {COPY.yourSideLabel}
               </button>
             </div>
@@ -1868,7 +2058,8 @@ export default function Demo({
         <div
           aria-hidden="true"
           data-accent-slab
-          className="absolute inset-y-0 left-0 z-0 w-2/5 bg-[var(--accent-soft,#0F1E33)]"
+          data-slab
+          className="absolute inset-y-0 left-0 z-0 w-2/5 bg-[var(--accent-soft,#0F1E33)] max-[1099.98px]:w-[244px]"
         />
         <SectionMark {...COPY.sections.yours} />
 
@@ -1877,9 +2068,9 @@ export default function Demo({
           data-yours-panel
           className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pl-6 pr-14 pt-[112px] min-[1100px]:grid min-[1100px]:max-w-[1240px] min-[1100px]:grid-cols-2 min-[1100px]:grid-rows-[auto_minmax(0,1fr)] min-[1100px]:gap-x-12 min-[1100px]:px-12 min-[1100px]:pb-8 min-[1100px]:pt-[124px]"
         >
-          <div className="shrink-0 max-w-md min-[1100px]:col-start-1 min-[1100px]:row-start-1 min-[1100px]:max-w-[400px]">
+          <div className="max-w-[200px] shrink-0 min-[600px]:max-w-md min-[1100px]:col-start-1 min-[1100px]:row-start-1 min-[1100px]:max-w-[400px]">
             <label className="block">
-              <span className="text-[13px] text-muted">{COPY.name.label}</span>
+              <span data-name-label className="text-[13px] text-muted">{COPY.name.label}</span>
               {/* change 26 (E3/E4): pencil glyph before the placeholder;
                   the placeholder IS the active preset's name (ink; italic
                   secondary for "Something else"); secondary underline at
@@ -1911,13 +2102,13 @@ export default function Demo({
                   placeholder={preset.bizName}
                   maxLength={MAX_NAME_LEN}
                   autoComplete="off"
-                  className={`mt-2 block w-full border-x-0 border-b border-t-0 border-solid border-muted bg-transparent pb-1.5 font-display font-medium text-[22px] text-ink caret-teal outline-none transition-colors focus:border-teal focus-visible:outline-none ${
+                  className={`mt-2 block w-full border-x-0 border-b border-t-0 border-solid border-muted bg-transparent pb-1.5 font-display font-medium text-[19px] text-ink caret-teal outline-none transition-colors focus:border-teal focus-visible:outline-none min-[600px]:text-[22px] ${
                     nameInput ? "" : "pl-5"
                   } ${preset.id === "other" ? "placeholder:font-normal placeholder:italic placeholder:text-muted" : "placeholder:text-ink"}`}
                 />
               </span>
             </label>
-            <p className="mt-1.5 text-[12px] text-muted">{COPY.yours.hint}</p>
+            <p data-name-hint className="mt-1.5 text-[12px] text-muted">{COPY.yours.hint}</p>
             {/* change 26 (E5): the rule between hint and preset label. */}
             <div className="mt-3 border-t border-line" />
           </div>
@@ -1957,30 +2148,30 @@ export default function Demo({
                     className="flex min-h-0 flex-col justify-start min-[1100px]:h-full"
                     style={{ "--accent": p.accent, "--accent-soft": p.accentSoft, "--accent-ink": p.accentInk } as CSSProperties}
                   >
-                    <p data-panel-label className="font-display text-[28px] font-medium leading-[1.02] tracking-[-0.01em] text-[var(--accent,#E9EEF4)] min-[1100px]:text-[44px]">{p.label}</p>
+                    <p data-panel-label className="w-fit font-display text-[28px] font-medium leading-[1.02] tracking-[-0.01em] text-[var(--accent,#E9EEF4)] min-[1100px]:text-[44px]">{p.label}</p>
                     {/* change 19 (B9): the fourth preset explains itself. */}
-                    {p.tagline && <p className="mt-0.5 text-[13px] text-muted">{p.tagline}</p>}
+                    {p.tagline && <p data-tagline className="mt-0.5 w-fit text-[13px] text-muted">{p.tagline}</p>}
                     {/* change 26 (E1): a ruled mono head over the double
                         hairline, then labeled rows. Ticket stays the one
                         gold element per panel (gates 79/82). */}
                     <div className="mt-2 min-[1100px]:mt-5 min-[1100px]:flex min-[1100px]:min-h-0 min-[1100px]:flex-1 min-[1100px]:flex-col">
-                      <p data-figure className="pb-1 text-[11px] tracking-[0.04em] text-muted">
+                      <p data-rows-head data-figure className="w-fit pb-1 text-[11px] tracking-[0.04em] text-muted">
                         {COPY.yours.rowsHead}
                       </p>
-                      <div className="hairline2" aria-hidden="true" style={{ borderColor: "var(--accent-soft, #22384F)" }} />
-                      <div data-tile="ticket" className="flex items-baseline justify-between gap-3 border-b border-[var(--accent-soft,#22384F)] py-2 min-[1100px]:flex-1 min-[1100px]:items-center min-[1100px]:py-8">
+                      <div className="hairline2" aria-hidden="true" />
+                      <div data-tile="ticket" className="flex items-baseline justify-between gap-3 border-b border-line py-2 max-[599.98px]:flex-col max-[599.98px]:items-start max-[599.98px]:gap-0 min-[1100px]:flex-1 min-[1100px]:items-center min-[1100px]:py-8">
                         <span className="whitespace-nowrap text-[13px] text-ink min-[1100px]:text-[17px]">{COPY.yours.rows.ticket}</span>
                         <span data-ticket data-tile-value data-figure className="font-medium leading-none text-gold text-[32px] min-[1100px]:text-[96px]">
                           ${p.ticket}
                         </span>
                       </div>
-                      <div data-tile="missed" className="flex items-baseline justify-between gap-3 border-b border-[var(--accent-soft,#22384F)] py-2 min-[1100px]:flex-1 min-[1100px]:items-center min-[1100px]:py-8">
+                      <div data-tile="missed" className="flex items-baseline justify-between gap-3 border-b border-line py-2 max-[599.98px]:flex-col max-[599.98px]:items-start max-[599.98px]:gap-0 min-[1100px]:flex-1 min-[1100px]:items-center min-[1100px]:py-8">
                         <span className="whitespace-nowrap text-[13px] text-ink min-[1100px]:text-[17px]">{COPY.yours.rows.missed}</span>
                         <span data-tile-value data-figure className="font-medium leading-none text-ink text-[32px] min-[1100px]:text-[96px]">
                           {p.missedPerMonth}
                         </span>
                       </div>
-                      <div data-tile="lost" className="flex items-baseline justify-between gap-3 border-b border-[var(--accent-soft,#22384F)] py-2 min-[1100px]:flex-1 min-[1100px]:items-center min-[1100px]:py-8">
+                      <div data-tile="lost" className="flex items-baseline justify-between gap-3 border-b border-line py-2 max-[599.98px]:flex-col max-[599.98px]:items-start max-[599.98px]:gap-0 min-[1100px]:flex-1 min-[1100px]:items-center min-[1100px]:py-8">
                         <span className="whitespace-nowrap text-[13px] text-muted min-[1100px]:text-[17px]">{COPY.yours.rows.lost}</span>
                         <span data-tile-value data-figure className="font-medium leading-none text-muted text-[32px] min-[1100px]:text-[96px]">
                           {usd(p.lost)}
@@ -1996,7 +2187,7 @@ export default function Demo({
                 (change 16, B4) so the phone's top edge is deterministic. */}
             <div
               data-yours-cueband
-              className="order-2 mt-2 flex h-9 shrink-0 flex-col items-center justify-center gap-1 min-[1100px]:hidden"
+              className="order-2 mt-2 flex h-9 shrink-0 flex-col items-start justify-center gap-1 min-[1100px]:hidden"
             >
               {/* change 26 (E2 / gate 156): the cue LEAVES the DOM when
                   dismissed — a faded ghost is still a text node. */}
@@ -2017,7 +2208,7 @@ export default function Demo({
             </div>
             {/* change 19 (B7): the payoff pointer — its own line below the
                 band. */}
-            <p data-scroll-up className="order-2 mt-1 shrink-0 text-center text-[12px] text-muted min-[1100px]:hidden">
+            <p data-scroll-up className="order-2 mt-1 w-fit max-w-[200px] shrink-0 text-left text-[12px] text-muted min-[1100px]:hidden">
               {COPY.yours.scrollUp.replace("{bizName}", bizName)}
             </p>
           </div>
@@ -2055,10 +2246,12 @@ export default function Demo({
       {/* change 16 (B8): section 4 stands on the SAME ground as sections
           1-3 — the surface band read as a different page bolted on. The
           border-t stays: a rule is structure, not ground. */}
-      <section data-section="math" data-bottom-band data-entry-fx={fxReady ? (entered[3] ? "run" : "pending") : undefined} className="border-t border-line">
+      <section data-section="math" data-bottom-band data-entry-fx={fxReady ? (entered[3] ? "run" : "pending") : undefined}>
         <SectionMark {...COPY.sections.math} />
 
-        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col items-center justify-center gap-10 pl-6 pr-14 text-center min-[1100px]:max-w-[1240px] min-[1100px]:items-stretch min-[1100px]:gap-14 min-[1100px]:px-12 min-[1100px]:text-left">
+        {/* change 30 (F1/F2): flowed from the folio — folio bottom + 16 ->
+            the 2px rule; mobile left-aligns on the spine like desktop. */}
+        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col items-start justify-start gap-8 pb-8 pl-6 pr-14 pt-[68px] text-left min-[1100px]:max-w-[1240px] min-[1100px]:items-stretch min-[1100px]:gap-14 min-[1100px]:px-12 min-[1100px]:pt-[68px]">
           {/* change 18 (C5): the math line is the ledger's TOTAL — a 2px
               rule above, 1px below, numerals in mono at display size. */}
           <div data-total className="w-full border-b border-t-2 border-line py-4">
@@ -2072,7 +2265,7 @@ export default function Demo({
                 const midPart = afterName.split("{missed}")[1]?.split("${ticket}")[0] ?? "";
                 const tailPart = afterName.split("${ticket}")[1] ?? "";
                 return (
-                  <p data-math className="mx-auto max-w-[24ch] font-display font-medium leading-[1.08] tracking-[-0.01em] text-ink [font-size:clamp(40px,6vw,72px)] min-[1100px]:mx-0 min-[1100px]:max-w-none min-[1100px]:[font-size:112px] min-[1100px]:[text-wrap:balance]">
+                  <p data-math className="mx-0 max-w-[24ch] font-display font-medium leading-[1.08] tracking-[-0.01em] text-ink [font-size:clamp(40px,6vw,72px)] min-[1100px]:max-w-none min-[1100px]:[font-size:112px] min-[1100px]:[text-wrap:balance]">
                     <span data-math-name>{name}</span>
                     {beforeMissed}
                     <span data-math-numeral data-figure className="font-medium text-gold">
@@ -2087,7 +2280,7 @@ export default function Demo({
                 );
               })()
             ) : (
-              <p data-math className="mx-auto max-w-[20ch] font-display font-medium leading-[1.08] tracking-[-0.01em] text-ink [font-size:clamp(40px,6vw,72px)] min-[1100px]:mx-0 min-[1100px]:max-w-none min-[1100px]:[font-size:112px] min-[1100px]:[text-wrap:balance]">
+              <p data-math className="mx-0 max-w-[20ch] font-display font-medium leading-[1.08] tracking-[-0.01em] text-ink [font-size:clamp(40px,6vw,72px)] min-[1100px]:max-w-none min-[1100px]:[font-size:112px] min-[1100px]:[text-wrap:balance]">
                 {COPY.mathLead}{" "}
                 <span data-math-numeral data-figure className="font-medium text-gold">
                   {preset.missedPerMonth}
@@ -2108,8 +2301,8 @@ export default function Demo({
               of a two-row section — CTA block left, builtBy/loop/wordmark/
               stack right-aligned right. The ?ref=djl variant runs the same
               grid. */}
-          <div className="flex w-full max-w-md flex-col items-center gap-2.5 min-[1100px]:grid min-[1100px]:max-w-none min-[1100px]:grid-cols-[55fr_45fr] min-[1100px]:items-start min-[1100px]:gap-x-16 min-[1100px]:text-left">
-            <div data-close-left className="flex w-full flex-col items-center gap-2.5 min-[1100px]:items-start">
+          <div className="flex w-full max-w-md flex-col items-start gap-2.5 text-left min-[1100px]:grid min-[1100px]:max-w-none min-[1100px]:grid-cols-[55fr_45fr] min-[1100px]:items-start min-[1100px]:gap-x-16">
+            <div data-close-left className="flex w-full flex-col items-start gap-2.5">
             {refDjl ? (
               <>
                 <a
@@ -2152,8 +2345,16 @@ export default function Demo({
                     {COPY.contact.phone}
                   </a>
                 </p>
-                <p data-price-line data-figure className="text-[15px] text-ink min-[1100px]:text-[22px]">
-                  {COPY.close.priceLine}
+                {/* change 30 (F4): figures mono, words sans — the approved
+                    string split on its dollar figures. */}
+                <p data-price-line className="text-[15px] text-ink min-[1100px]:text-[22px]">
+                  {COPY.close.priceLine.split(/(\$[\d,]+)/).map((part, i) =>
+                    /^\$[\d,]+$/.test(part) ? (
+                      <span key={i} data-figure>{part}</span>
+                    ) : (
+                      <span key={i}>{part}</span>
+                    ),
+                  )}
                 </p>
               </>
             )}
@@ -2161,7 +2362,7 @@ export default function Demo({
 
             <div data-close-rule className="mt-2 w-full border-t border-line min-[1100px]:hidden" />
 
-            <div data-close-right className="flex w-full flex-col items-center gap-1 min-[1100px]:items-start min-[1100px]:text-left">
+            <div data-close-right className="flex w-full flex-col items-start gap-1 text-left">
 
             {/* change 26 (F4): 56px portrait; the name and the wordmark both
                 link home. */}
@@ -2184,17 +2385,23 @@ export default function Demo({
                   <span className="font-display text-[24px] font-semibold leading-none text-abyss">S</span>
                 </span>
               )}
-              <a
-                href={COPY.portfolio.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[13px] text-muted underline decoration-line underline-offset-2 outline-none hover:text-ink focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2"
-              >
-                {COPY.close.builtBy}
-              </a>
+              {/* change 30 (F3): the approved builtBy line split on the
+                  name — only "Andy Jones" is the anchor. */}
+              <p className="text-[13px] text-muted">
+                {COPY.close.builtBy.split("Andy Jones")[0]}
+                <a
+                  href={COPY.portfolio.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline decoration-line underline-offset-2 outline-none hover:text-ink focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2"
+                >
+                  Andy Jones
+                </a>
+                {COPY.close.builtBy.split("Andy Jones")[1]}
+              </p>
             </div>
 
-            <button data-loop type="button" onClick={onLoop} className={`mt-1 ${ghost}`}>
+            <button data-loop type="button" onClick={onLoop} className={`mt-1 ${btnSecondary}`}>
               {COPY.close.loopLabel}
             </button>
 
@@ -2232,8 +2439,8 @@ export default function Demo({
           onClick={onShare}
           title={COPY.shareLabel}
           aria-label={COPY.a11y.share}
-          className={`flex h-7 w-7 items-center justify-center rounded-[2px] border border-teal bg-transparent text-teal-bright outline-none transition-opacity min-[1100px]:h-8 min-[1100px]:w-8 hover:opacity-100 focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
-            share === "copied" ? "opacity-100" : "opacity-70"
+          className={`flex h-7 w-7 items-center justify-center rounded-[2px] border border-[rgba(44,199,182,0.7)] bg-transparent text-teal-bright outline-none transition-opacity min-[1100px]:h-8 min-[1100px]:w-8 hover:opacity-100 focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
+            share === "copied" ? "opacity-100" : "opacity-90"
           }`}
         >
           <ShareGlyph />
@@ -2247,8 +2454,8 @@ export default function Demo({
           title={soundOn ? COPY.a11y.soundOn : COPY.a11y.soundOff}
           aria-label={soundOn ? COPY.a11y.soundOn : COPY.a11y.soundOff}
           aria-pressed={soundOn}
-          className={`flex h-7 w-7 items-center justify-center rounded-[2px] border border-teal outline-none transition-colors min-[1100px]:h-8 min-[1100px]:w-8 focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
-            soundOn ? "bg-teal text-abyss" : "bg-transparent text-teal-bright opacity-70 hover:opacity-100"
+          className={`flex h-7 w-7 items-center justify-center rounded-[2px] outline-none transition-colors min-[1100px]:h-8 min-[1100px]:w-8 focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
+            soundOn ? "border border-teal bg-teal text-abyss" : "border border-[rgba(44,199,182,0.7)] bg-transparent text-teal-bright hover:opacity-100"
           }`}
         >
           <SpeakerGlyph on={soundOn} />
@@ -2287,7 +2494,7 @@ export default function Demo({
           type="button"
           onClick={() => goSection(activeSection + 1)}
           aria-label={COPY.a11y.next}
-          className={`flex h-8 w-8 items-center justify-center text-teal outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-teal-bright ${
+          className={`flex h-8 w-5 items-center justify-center text-teal outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-teal-bright ${
             activeSection >= SECTIONS.length - 1 ? "hidden" : ""
           }`}
         >

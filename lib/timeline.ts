@@ -48,6 +48,10 @@ export const BUBBLE_RISE = 12;
 
 export const DELIVERED_AT = 4.0;
 
+/** change 30 (G1): the slab receipt lands on the customer's closing bubble
+ *  beat — BEATS[3] thread-relative, 9.6 global. */
+export const RECEIPT_AT = 9.6;
+
 /** The owner-side caught row: it slides in the beat the thread closes. */
 export const CAUGHT_ROW_AT = 4.4;
 export const CAUGHT_ROW_ENTER = 0.3;
