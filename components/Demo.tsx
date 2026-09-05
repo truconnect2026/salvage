@@ -1142,8 +1142,17 @@ export default function Demo({
     positionedRef.current = true;
     const track = yoursTrackRef.current;
     const idx = presetList.findIndex((p) => p.id === presetId);
-    if (track && idx > 0)
-      track.scrollLeft = idx * (track.querySelector<HTMLElement>("[data-panel]")?.offsetWidth ?? track.clientWidth);
+    if (track && idx > 0) {
+      /* change 33 (D2): with 94% panels the peek means scrollLeft arithmetic
+         lands NEAR the snap point, not on it, and mandatory snap then nudges
+         the track — a visible settle, and a rendered position that depends on
+         when you look. The panel's own offsetLeft IS its snap point, and
+         assigning scrollLeft touches only the track: scrollIntoView would
+         drag the PAGER too and playback would never arm. */
+      const panels = track.querySelectorAll<HTMLElement>("[data-panel]");
+      const target = panels[idx];
+      if (target && panels[0]) track.scrollLeft = target.offsetLeft - panels[0].offsetLeft;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [presetList]);
 
