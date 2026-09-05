@@ -18,7 +18,8 @@
  *   NODE_PATH=<somewhere-outside-this-repo>/node_modules \
  *     node scripts/gate.mjs http://localhost:3000
  */
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
+import { tmpdir } from "node:os";
 import zlib from "node:zlib";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -550,7 +551,8 @@ const BROWSER_GATES = [
   140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151,
   152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163,
   164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177,
-  178, 179, 180, 181,
+  178, 179, 180, 181, 190,
+  182, 183, 184, 185, 186, 187, 188, 189,
 ];
 
 if (!chromium) {
@@ -1801,19 +1803,18 @@ if (!chromium) {
        rail gutter now, and the device centers in the guttered content
        column, not the viewport. The claim kept: fully inside the first
        frame, nothing under the rail. */
-    /* Amended (change 30, A1): the device right-aligns with a 28px bleed
-       into the rail gutter (clear of the rail itself) — the only geometry
-       where the slab ratio, the 30-36% cut, and 16px folio clearance on
-       both slab edges coexist at 390. */
+    /* Amended (change 33, B2): the device CENTERS in the guttered content
+       column again — the slab is a section band at the viewport edge now, so
+       the phone no longer buys folio clearance with a gutter bleed. */
     check(
       57,
-      "first load 390x844: phone device fully within the viewport, left margin >= 24px, right-aligned with a 28px gutter bleed (right edge 350-368, clear of the rail)",
+      "first load 390x844: phone device fully within the viewport, left margin >= 24px, clear of the 56px rail gutter, centered in the content column",
       g != null &&
         g.top >= 23.5 &&
         g.bottom <= g.vh - 23.5 + 0.5 &&
         g.left >= 23.5 &&
-        g.right >= 350 &&
-        g.right <= 368,
+        g.right <= g.vw - 55.5 &&
+        Math.abs((g.left - 24) - (g.vw - 56 - g.right)) <= 2,
       g == null
         ? "device not found"
         : `device top ${g.top.toFixed(1)}, bottom ${g.bottom.toFixed(1)}, left ${g.left.toFixed(1)}, ` +
@@ -1967,11 +1968,11 @@ if (!chromium) {
        the input sits fully LEFT of the track (or above it, below 1100). */
     check(
       62,
-      "desktop section 3: name input beside (fully left of) or above the preset track, never overlapping; one full-track-width panel per preset",
+      "desktop section 3: name input beside (fully left of) or above the preset track, never overlapping; one panel per preset at 94% of the track (change 33, D2: the next panel peeks)",
       layout != null &&
         (layout.inputBottom <= layout.trackTop + 1 || layout.inputRight <= layout.trackLeft + 1) &&
         layout.panelCount === presets.length &&
-        layout.panelWs.every((w) => Math.abs(w - layout.trackW) <= 2),
+        layout.panelWs.every((w) => Math.abs(w - layout.trackW * 0.94) <= 2),
       layout == null
         ? "device/input/track not found"
         : `input bottom ${layout.inputBottom.toFixed(1)} vs track top ${layout.trackTop.toFixed(1)}; input right ${layout.inputRight.toFixed(1)} vs track left ${layout.trackLeft.toFixed(1)} (above OR fully left); ` +
@@ -2216,7 +2217,14 @@ if (!chromium) {
     });
     await page.waitForTimeout(300);
     const before67 = await state();
-    const end67 = await drag(330, 300, -200, 0, state);
+    /* Amended (change 33): the drag lands on the track's own centre rather
+       than a fixed y — section 3's stack moved when the tab strip landed. */
+    const trackY = await page.evaluate(() => {
+      const t = document.querySelector('[data-section="yours"] [data-track]');
+      const r = t.getBoundingClientRect();
+      return Math.round(r.top + r.height / 2);
+    });
+    const end67 = await drag(330, trackY, -200, 0, state);
 
     check(
       67,
@@ -2343,7 +2351,8 @@ if (!chromium) {
     await page.waitForTimeout(900);
     const afterRight = await page.evaluate(() => {
       const track = document.querySelector('[data-section="yours"] [data-track]');
-      return { left: track.scrollLeft, w: track.clientWidth };
+      const panel = track.querySelector("[data-panel]");
+      return { left: track.scrollLeft, w: panel ? panel.offsetWidth : track.clientWidth };
     });
 
     check(
@@ -3709,7 +3718,19 @@ if (!chromium) {
       check(151, "Lighthouse perf >= 75, CLS <= 0.05", false, `lighthouse unavailable: ${err.message}`);
       return;
     }
-    const chrome = await launcher.launch({ chromeFlags: ["--headless=new", "--no-sandbox"] });
+    /* ISOLATION (standing rule): this launch gets its OWN profile directory,
+       so it shares nothing with the browser the person at this machine is
+       using. It is closed by its own handle below — never by process name.
+       Killing Chrome by name would take the user's windows down with it. */
+    const profileDir = join(tmpdir(), `salvage-${process.pid}-lh`);
+    /* chrome-launcher writes chrome-out.log / chrome-err.log INTO the
+       userDataDir it is handed, and does not create it — so make it. */
+    mkdirSync(profileDir, { recursive: true });
+    const chrome = await launcher.launch({
+      chromeFlags: ["--headless=new", "--no-sandbox"],
+      // chrome-launcher turns this into --user-data-dir=<profileDir>.
+      userDataDir: profileDir,
+    });
     try {
       const result = await lighthouse(base + "/", {
         port: chrome.port,
@@ -3728,11 +3749,14 @@ if (!chromium) {
       );
     } finally {
       /* chrome-launcher's temp cleanup intermittently throws EPERM on
-         Windows (a straggler process holds the profile dir) — that must
-         never take the whole suite down. */
+         Windows (a straggler process holds the profile dir). Catch it and
+         say so — NEVER fall back to a process-name kill, which would close
+         the user's own browser. This handle is the only thing we close. */
       try {
         await chrome.kill();
-      } catch {}
+      } catch (err) {
+        console.log(`  note   151: chrome-launcher cleanup threw ${err.code ?? err.message} on its own profile dir (${profileDir}); the browser handle is closed, the temp dir will be swept by the OS.`);
+      }
     }
   });
 
@@ -3790,7 +3814,7 @@ if (!chromium) {
         }
 
         /* 110: the [data-figure] contract. */
-        const figures = [...document.querySelectorAll("[data-figure]")];
+        const figures = [...document.querySelectorAll('[data-figure="data"]')];
         const badFigures = figures
           .filter((el) => {
             const cs = getComputedStyle(el);
@@ -3824,6 +3848,7 @@ if (!chromium) {
         const colLeft = Math.max(48, (innerWidth - 1240) / 2 + 48);
         const slabs = ["call", "yours"].map((id) => {
           const sec = document.querySelector(`[data-section="${id}"]`);
+          const secR = sec.getBoundingClientRect();
           const slab = [...(sec?.querySelectorAll("[data-accent-slab]") ?? [])].find(
             (el) => getComputedStyle(el).display !== "none",
           );
@@ -3836,6 +3861,17 @@ if (!chromium) {
             if (!dev) return { id, ok: false, why: "no device" };
             const dr = dev.getBoundingClientRect();
             const cut = (sr.right - dr.left) / dr.width;
+            if (!desktop) {
+              /* Amended (change 33, B1): below 1100 the section-1 slab is a
+                 BAND at the left viewport edge, 60% wide — the same shape
+                 section 3 uses. The in-device slab is retired. */
+              return {
+                id,
+                left: +sr.left.toFixed(1),
+                widthPct: +((sr.width / secR.width) * 100).toFixed(1),
+                ok: Math.abs(sr.left - secR.left) <= 1 && Math.abs(sr.width / secR.width - 0.6) <= 0.01 && hard,
+              };
+            }
             if (desktop) {
               return {
                 id,
@@ -3852,7 +3888,6 @@ if (!chromium) {
               ok: Math.abs(ratio - 0.62) <= 0.02 && cut >= 0.3 && cut <= 0.36 && hard,
             };
           }
-          const secR = sec.getBoundingClientRect();
           if (desktop) {
             return {
               id,
@@ -3898,8 +3933,12 @@ if (!chromium) {
           if (!el || !el.firstChild || el.offsetParent == null) return null;
           /* The TEXT's right edge, not the box's — a left-aligned figure
              keeps its cell box but breaks the shared column edge. */
+          /* Amended (change 33, C3): the stamp is a child of this cell and
+             overhangs it by design — measure the AMOUNT TEXT alone. */
+          const textNode = [...el.childNodes].find((nd) => nd.nodeType === 3 && nd.textContent.trim());
+          if (!textNode) return null;
           const range = document.createRange();
-          range.selectNodeContents(el);
+          range.selectNodeContents(textNode);
           return range.getBoundingClientRect().right;
         });
         const visRights = amountRights.filter((x) => x != null);
@@ -3989,7 +4028,7 @@ if (!chromium) {
 
     check(
       110,
-      "display font resolves to Newsreader; every [data-figure] resolves to IBM Plex Mono with tabular-nums",
+      "display font resolves to Newsreader; every DATA figure resolves to IBM Plex Mono with tabular-nums (change 33, A1: hero figures are Newsreader and gate 182 owns them)",
       both((g) => g.displayFont != null && g.displayFont.includes("Newsreader") && g.figureCount > 10 && g.badFigures.length === 0),
       detail((g) => `display ${JSON.stringify(g.displayFont?.slice(0, 40))}; ${g.figureCount} figure(s), bad ${JSON.stringify(g.badFigures)}`),
     );
@@ -4003,7 +4042,7 @@ if (!chromium) {
 
     check(
       112,
-      "accent slabs — 390: s1 62%±2 of the device (cut 30-36%), s3 a 40%±2 band at left 0; 1440 (change 28): both bands at column-left − 48, s1 cut 30-36%, s3 right at 40vw±2; hard edges",
+      "accent slabs — 390 (change 33): s1 a 60%±1 band at left 0, s3 a band at left 0 clearing the folio; 1440 (change 28): both bands at column-left − 48, s1 cut 30-36%, s3 right at 40vw±2; hard edges",
       both((g) => g.slabs.every((s) => s.ok)),
       detail((g) => g.slabs.map((sl) => `${sl.id}: ${JSON.stringify(sl)}`).join(", ")),
     );
@@ -4766,13 +4805,23 @@ if (!chromium) {
           "[data-cta-sub]",
           "[data-sms-line]",
           "[data-price-line]",
+          "[data-price-line]",
           "[data-close-rule]",
           "[data-builtby]",
           "[data-loop]",
           "[data-wordmark]",
           "[data-stack-line]",
         ];
-        const els = order.map((sel) => document.querySelector(`[data-section="math"] ${sel}`));
+        /* Amended (change 33, E1): the price is TWO lines — resolve each
+           selector against its own occurrence so a repeated selector reads
+           the next matching element, not the first one twice. */
+        const seen = {};
+        const els = order.map((sel) => {
+          const all = [...document.querySelectorAll(`[data-section="math"] ${sel}`)];
+          const i = seen[sel] ?? 0;
+          seen[sel] = i + 1;
+          return all[i] ?? null;
+        });
         const tops = els.map((el) => (el ? el.getBoundingClientRect().top : null));
         const ordered = tops.every((t, i) => t != null && (i === 0 || t >= tops[i - 1] - 0.5));
         const cta = document.querySelector("[data-cta]");
@@ -5779,7 +5828,6 @@ if (!chromium) {
     const TEXT_SEL = [
       "[data-folio]",
       "[data-scene-line]",
-      "[data-controls] button",
       "[data-scroll-up]",
       "[data-yours-cueband] p",
       "[data-name-label]",
@@ -5850,7 +5898,15 @@ if (!chromium) {
                 );
             }
           }
-          return { slabCount: slabs.length, textCount: texts.length, offscreen: skipped, bad: bad.slice(0, 6) };
+          /* change 33: the settled controls sit ACROSS the section band by
+             design (B5 centres them under the phone). They are objects, not
+             raw text — so each one must carry an opaque ground of its own,
+             and then its label never sits on the band's edge. */
+          const opaque = (c) => c !== "transparent" && !/rgba\(0,\s*0,\s*0,\s*0\)/.test(c);
+          const bareControls = [...document.querySelectorAll("[data-controls] button")]
+            .filter((b) => b.offsetParent != null && !opaque(getComputedStyle(b).backgroundColor))
+            .map((b) => (b.textContent || "").trim().slice(0, 14));
+          return { slabCount: slabs.length, textCount: texts.length, offscreen: skipped, bad: bad.slice(0, 6), bareControls };
         }, TEXT_SEL);
         reads171.push({ vp: `${vp.w}`, biz, g });
         await cm.close();
@@ -5858,8 +5914,8 @@ if (!chromium) {
     }
     check(
       171,
-      "boundary law (A1): every enumerated text box is fully inside or fully outside every visible clipped [data-slab] box with >= 16px clearance — 390x844 and 1440x900, all four presets",
-      reads171.every((r) => r.g.slabCount >= 2 && r.g.textCount > 5 && r.g.bad.length === 0),
+      "boundary law (A1): every enumerated text box is fully inside or fully outside every visible clipped [data-slab] box with >= 16px clearance, and every settled control carries an opaque ground of its own — 390x844 and 1440x900, all four presets",
+      reads171.every((r) => r.g.slabCount >= 2 && r.g.textCount > 5 && r.g.bad.length === 0 && r.g.bareControls.length === 0),
       reads171
         .filter((r) => r.g.bad.length > 0)
         .map((r) => `${r.vp}/${r.biz}: ${JSON.stringify(r.g.bad)}`)
@@ -5880,30 +5936,34 @@ if (!chromium) {
       const sr = stamp?.getBoundingClientRect();
       const ar = amount?.getBoundingClientRect();
       const intersects = sr && ar && !(sr.right <= ar.left || ar.right <= sr.left || sr.bottom <= ar.top || ar.bottom <= sr.top);
+      const gapAbove = sr && ar ? ar.top - sr.bottom : null;
       return {
         h0: r0?.getBoundingClientRect().height ?? null,
         h1: r1?.getBoundingClientRect().height ?? null,
         transform: stamp?.style.transform ?? null,
         intersects: !!intersects,
+        gapAbove: gapAbove == null ? null : +gapAbove.toFixed(1),
       };
     });
     await ctx172.close();
     check(
       172,
-      "stamp (D3): row[0] height === row[1] height ±1 with the stamp present; inline transform contains rotate(-6deg) at rest; the stamp box intersects the amount cell",
+      "stamp: row[0] height === row[1] height ±1 with the stamp present (zero layout impact); inline transform rotate(-6deg) at rest; the stamp overlaps the amount's top-right at 1440 (C3 scopes the above-the-amount placement to <1100, where gate 187 owns it)",
       g172.h0 != null &&
         g172.h1 != null &&
         Math.abs(g172.h0 - g172.h1) <= 1 &&
         g172.transform != null &&
         g172.transform.includes("rotate(-6deg)") &&
         g172.intersects === true,
-      `row0 ${g172.h0?.toFixed?.(1)} vs row1 ${g172.h1?.toFixed?.(1)}; transform ${JSON.stringify(g172.transform)}; stamp ∩ amount ${g172.intersects}`,
+      `row0 ${g172.h0?.toFixed?.(1)} vs row1 ${g172.h1?.toFixed?.(1)}; transform ${JSON.stringify(g172.transform)}; stamp ∩ amount ${g172.intersects} (need false); gap above amount ${g172.gapAbove?.toFixed?.(1)}px (need 0..8)`,
     );
 
     /* 173: the mobile ledger at 1.0 — all four presets. */
     const reads173 = [];
     for (const biz of ["salon", "home", "dental", "other"]) {
-      const cm = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
+      /* Amended (change 33, C4): 744 = 844 minus Safari's 100px bar — the
+         SMALL viewport, which is the state a visitor lands in. */
+      const cm = await browser.newContext({ viewport: { width: 390, height: 744 }, reducedMotion: "reduce" });
       const pm = await cm.newPage();
       await pm.goto(`${base}/?biz=${biz}`, { waitUntil: "domcontentloaded" });
       await pm.evaluate(() => document.fonts.ready);
@@ -5932,7 +5992,7 @@ if (!chromium) {
     }
     check(
       173,
-      'mobile ledger at 1.0 (390): computed transform "none"; stack width === content column ±1; exactly 3 visible rows, with the moreRows footnote where rows were folded (the 3-row "other" preset has nothing to fold — data-honest carve-out)',
+      'mobile ledger at 1.0 (390x744, the small viewport): computed transform "none"; stack width === content column ±1; exactly 3 visible rows, with the moreRows footnote where rows were folded (the 3-row "other" preset has nothing to fold — data-honest carve-out)',
       reads173.every(
         (r) =>
           r.g.transform === "none" &&
@@ -6281,6 +6341,297 @@ if (!chromium) {
         g.svgWidths[0] === "1.5px",
       `${g.glyphCount} glyph(s) ${JSON.stringify(g.labels)} (need 6), ${g.shapeCount} drawable shape(s); ` +
         `svg widths ${JSON.stringify(g.svgWidths)}, shape widths ${JSON.stringify(g.widths)} (need exactly ["1.5px"])`,
+    );
+  });
+
+  /* --- 182-189: change 33 — structural corrections. --- */
+  await block("structure-33", async () => {
+    const ticket = need(/id: "salon"[\s\S]*?ticket:\s*(\d+)/, "salon ticket");
+
+    /* 182 + 186 + 187: one reduced 390x744 load. */
+    const ctxM = await browser.newContext({ viewport: { width: 390, height: 744 }, reducedMotion: "reduce" });
+    const pageM = await ctxM.newPage();
+    await pageM.goto(base, { waitUntil: "domcontentloaded" });
+    await pageM.evaluate(() => document.fonts.ready);
+    const gM = await pageM.evaluate(() => {
+      const fam = (el) => getComputedStyle(el).fontFamily;
+      const hero = [...document.querySelectorAll('[data-figure="hero"]')];
+      const data = [...document.querySelectorAll('[data-figure="data"]')].filter((el) => el.offsetParent != null);
+      const heroBad = hero
+        .filter((el) => !fam(el).includes("Newsreader") || !getComputedStyle(el).fontVariantNumeric.includes("tabular-nums"))
+        .map((el) => (el.textContent || "").trim().slice(0, 12) + "=" + fam(el).slice(0, 24));
+      const dataBad = data
+        .filter((el) => !fam(el).includes("Plex Mono"))
+        .map((el) => (el.textContent || "").trim().slice(0, 12) + "=" + fam(el).slice(0, 24));
+      /* 186 */
+      const h1 = document.querySelector('[data-section="save"] h1');
+      const entry = document.querySelector("[data-owner-entry]");
+      const ecs = entry ? getComputedStyle(entry) : null;
+      const flaps = [...document.querySelectorAll('[data-flap="digit"]')];
+      const flapBg = [...new Set(flaps.map((el) => getComputedStyle(el).backgroundColor))];
+      const since = document.querySelector("[data-since-strip]");
+      const saveSec = document.querySelector('[data-section="save"]');
+      const saveBottom = saveSec ? saveSec.getBoundingClientRect().bottom : null;
+      /* 187 */
+      const stamp = document.querySelector("[data-stamp]");
+      const amount = document.querySelector('[data-caught-amount="0"]');
+      const sr = stamp?.getBoundingClientRect();
+      const ar = amount?.getBoundingClientRect();
+      const hit = sr && ar && !(sr.right <= ar.left || ar.right <= sr.left || sr.bottom <= ar.top || ar.bottom <= sr.top);
+      return {
+        heroCount: hero.length,
+        dataCount: data.length,
+        heroBad: heroBad.slice(0, 4),
+        dataBad: dataBad.slice(0, 4),
+        h1Visible: h1 ? h1.offsetParent != null : false,
+        entryRule: ecs ? ecs.borderLeftWidth : null,
+        entryRuleColor: ecs ? ecs.borderLeftColor : null,
+        accent: getComputedStyle(document.querySelector("[data-demo]")).getPropertyValue("--accent").trim(),
+        flapBg,
+        sinceBottom: since ? +since.getBoundingClientRect().bottom.toFixed(1) : null,
+        sectionBottom: saveBottom == null ? null : +saveBottom.toFixed(1),
+        vh: innerHeight,
+        stampHit: !!hit,
+        gapAbove: sr && ar ? +(ar.top - sr.bottom).toFixed(1) : null,
+      };
+    });
+    await ctxM.close();
+    check(
+      182,
+      'the two figure registers (A1): every [data-figure="hero"] resolves to Newsreader with tabular numerals; every visible [data-figure="data"] resolves to IBM Plex Mono — zero hero figures in mono',
+      gM.heroCount >= 4 && gM.dataCount >= 6 && gM.heroBad.length === 0 && gM.dataBad.length === 0,
+      `${gM.heroCount} hero / ${gM.dataCount} data figure(s); hero in the wrong face ${JSON.stringify(gM.heroBad)}; data in the wrong face ${JSON.stringify(gM.dataBad)}`,
+    );
+    const hexToRgb = (hex) => {
+      const h = String(hex).replace("#", "");
+      return `rgb(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)})`;
+    };
+    check(
+      186,
+      "mobile section 2 (390x744): no h1; the owner entry carries a 2px accent left rule; the flap tiles share no container fill; the since-install row closes >= 16px above the fold",
+      gM.h1Visible === false &&
+        gM.entryRule === "2px" &&
+        gM.entryRuleColor === hexToRgb(gM.accent) &&
+        gM.flapBg.length === 1 &&
+        gM.flapBg[0] === "rgba(0, 0, 0, 0)" &&
+        gM.sinceBottom != null &&
+        gM.sectionBottom != null &&
+        gM.sinceBottom <= gM.sectionBottom - 16,
+      `h1 visible ${gM.h1Visible} (need false); entry rule ${gM.entryRule} ${gM.entryRuleColor} (need 2px ${hexToRgb(gM.accent)}); ` +
+        `flap backgrounds ${JSON.stringify(gM.flapBg)} (need one, transparent); since-install bottom ${gM.sinceBottom} vs section fold ${gM.sectionBottom == null ? "?" : gM.sectionBottom - 16}`,
+    );
+    check(
+      187,
+      "the stamp CLEARS the amount: stamp box ∩ amount box = ∅, stamp bottom within 8px above the amount's top",
+      gM.stampHit === false && gM.gapAbove != null && gM.gapAbove >= 0 && gM.gapAbove <= 8,
+      `stamp ∩ amount ${gM.stampHit} (need false); gap above ${gM.gapAbove}px (need 0..8)`,
+    );
+
+    /* 183 + 185: the s1 band and the settled pair, both narrow widths. */
+    const reads183 = [];
+    for (const w of [390, 360]) {
+      for (const biz of ["salon", "home", "dental", "other"]) {
+        const c = await browser.newContext({ viewport: { width: w, height: 744 } });
+        const pg = await c.newPage();
+        await pg.goto(`${base}/?biz=${biz}`, { waitUntil: "domcontentloaded" });
+        await pg.evaluate(() => document.fonts.ready);
+        await waitT(pg, 11.6);
+        reads183.push({
+          w,
+          biz,
+          g: await pg.evaluate(() => {
+            const sec = document.querySelector('[data-section="call"]');
+            const band = sec.querySelector("[data-slab]");
+            const dev = sec.querySelector("[data-phone-device]");
+            const rail = document.querySelector("[data-rail]");
+            const br = band.getBoundingClientRect();
+            const dr = dev.getBoundingClientRect();
+            const rr = rail.getBoundingClientRect();
+            const btns = [...document.querySelectorAll("[data-controls] button")].map((b) => {
+              const r = b.getBoundingClientRect();
+              return { top: +r.top.toFixed(1), w: +r.width.toFixed(1) };
+            });
+            return {
+              bandLeft: +br.left.toFixed(1),
+              bandPct: +((br.width / innerWidth) * 100).toFixed(1),
+              devLeft: +dr.left.toFixed(1),
+              devRight: +dr.right.toFixed(1),
+              railLeft: +rr.left.toFixed(1),
+              btns,
+            };
+          }),
+        });
+        await c.close();
+      }
+    }
+    check(
+      183,
+      "mobile section 1: the slab is a band at the viewport's left edge, 60%±1 wide; the phone's full bezel box sits inside the content column and never reaches the rail",
+      reads183.every(
+        (r) =>
+          Math.abs(r.g.bandLeft) <= 1 &&
+          Math.abs(r.g.bandPct - 60) <= 1 &&
+          r.g.devLeft >= 0 &&
+          r.g.devRight <= r.g.railLeft,
+      ),
+      reads183
+        .filter((r) => !(Math.abs(r.g.bandLeft) <= 1 && Math.abs(r.g.bandPct - 60) <= 1 && r.g.devLeft >= 0 && r.g.devRight <= r.g.railLeft))
+        .map((r) => `${r.w}/${r.biz}: band ${r.g.bandLeft}@${r.g.bandPct}%, device ${r.g.devLeft}..${r.g.devRight} vs rail ${r.g.railLeft}`)
+        .join(" | ") || `clean: band ${reads183[0].g.bandLeft}@${reads183[0].g.bandPct}%, device ${reads183[0].g.devLeft}..${reads183[0].g.devRight} vs rail ${reads183[0].g.railLeft}`,
+    );
+    check(
+      185,
+      "the settled pair is ONE row: exactly two buttons, same top edge ±1, equal width ±1 — all four presets at 390 and 360",
+      reads183.every((r) => r.g.btns.length === 2 && Math.abs(r.g.btns[0].top - r.g.btns[1].top) <= 1 && Math.abs(r.g.btns[0].w - r.g.btns[1].w) <= 1),
+      reads183
+        .filter((r) => !(r.g.btns.length === 2 && Math.abs(r.g.btns[0].top - r.g.btns[1].top) <= 1 && Math.abs(r.g.btns[0].w - r.g.btns[1].w) <= 1))
+        .map((r) => `${r.w}/${r.biz}: ${JSON.stringify(r.g.btns)}`)
+        .join(" | ") || `clean: e.g. ${JSON.stringify(reads183[0].g.btns)}`,
+    );
+
+    /* 184: the receipt is a beat, not a default. */
+    const ssr = await getPage("");
+    const ssrHasReceipt = /<p[^>]*\sdata-receipt/.test(ssr.html);
+    const ctxR = await browser.newContext({ viewport: { width: 390, height: 744 } });
+    const pageR = await ctxR.newPage();
+    await pageR.goto(base, { waitUntil: "domcontentloaded" });
+    await pageR.evaluate(() => document.fonts.ready);
+    await waitT(pageR, 0.2);
+    const at02 = await pageR.evaluate(() => document.querySelector("[data-receipt-m], [data-receipt]") != null);
+    await waitT(pageR, 4.0);
+    const at40 = await pageR.evaluate(() => document.querySelector("[data-receipt-m], [data-receipt]") != null);
+    await waitT(pageR, 12.0);
+    const settled = await pageR.evaluate(() => {
+      const r = document.querySelector("[data-receipt-m]");
+      const cap = document.querySelector('[data-scene-mobile] [data-scene-line="caught"]');
+      if (!r || !cap) return null;
+      return {
+        text: r.textContent.trim(),
+        left: +r.getBoundingClientRect().left.toFixed(1),
+        capLeft: +cap.getBoundingClientRect().left.toFixed(1),
+      };
+    });
+    await ctxR.close();
+    check(
+      184,
+      `the receipt is a BEAT: absent from the SSR HTML and from the DOM at t=0.2 and t=4.0; at settle it holds the caption slot reading "+$${ticket}" on the caption's own left edge (±1)`,
+      ssrHasReceipt === false &&
+        at02 === false &&
+        at40 === false &&
+        settled != null &&
+        settled.text === `+$${ticket}` &&
+        Math.abs(settled.left - settled.capLeft) <= 1,
+      `SSR carries a receipt ${ssrHasReceipt} (need false); present at t=0.2 ${at02}, t=4.0 ${at40} (need false); ` +
+        `settled ${JSON.stringify(settled)}`,
+    );
+
+    /* 188 + 189: the tab strip, the peek, the drawing glyph. */
+    const ctxT = await browser.newContext({ viewport: { width: 390, height: 744 } });
+    const pageT = await ctxT.newPage();
+    await pageT.goto(base, { waitUntil: "domcontentloaded" });
+    await pageT.evaluate(() => document.fonts.ready);
+    await waitHydrated(pageT);
+    await goSection(pageT, 2);
+    await pageT.waitForTimeout(400);
+    const tabsBefore = await pageT.evaluate(() => {
+      const tabs = [...document.querySelectorAll("[data-tab]")];
+      const track = document.querySelector('[data-section="yours"] [data-track]');
+      const panels = [...track.querySelectorAll("[data-panel]")];
+      const tr = track.getBoundingClientRect();
+      const p1 = panels[1].getBoundingClientRect();
+      const active = tabs.find((t) => t.getAttribute("aria-selected") === "true");
+      return {
+        count: tabs.length,
+        activeColor: active ? getComputedStyle(active).color : null,
+        accent: getComputedStyle(document.querySelector("[data-demo]")).getPropertyValue("--accent").trim(),
+        peekPct: +(((tr.right - p1.left) / tr.width) * 100).toFixed(1),
+      };
+    });
+    await pageT.click('[data-tab="home"]');
+    await pageT.waitForTimeout(900);
+    const afterTab = await pageT.evaluate(() => {
+      const track = document.querySelector('[data-section="yours"] [data-track]');
+      const panels = [...track.querySelectorAll("[data-panel]")];
+      const w = panels[0].offsetWidth;
+      return { idx: Math.round(track.scrollLeft / Math.max(1, w)), url: location.search };
+    });
+    /* 189: the glyph unrolls on entry. */
+    const draw = await pageT.evaluate(async () => {
+      const svg = document.querySelector('[data-panel][data-preset="dental"] [data-trade-glyph]');
+      if (!svg) return null;
+      const path = svg.querySelector("path");
+      const track = document.querySelector('[data-section="yours"] [data-track]');
+      const panels = [...track.querySelectorAll("[data-panel]")];
+      track.scrollTo({ left: 2 * panels[0].offsetWidth, behavior: "instant" });
+      const samples = [];
+      for (let i = 0; i < 9; i++) {
+        await new Promise((r) => setTimeout(r, 80));
+        samples.push(Math.round(parseFloat(getComputedStyle(path).strokeDashoffset) || 0));
+      }
+      return { samples, len: Math.round(path.getTotalLength()) };
+    });
+    await ctxT.close();
+    check(
+      188,
+      "section 3 tabs (D1/D2): four tab buttons, the active one in the panel's accent; tapping the second tab snaps the track to panel 2 and updates ?biz; at rest the next panel peeks 6%±1",
+      tabsBefore.count === 4 &&
+        tabsBefore.activeColor === hexToRgb(tabsBefore.accent) &&
+        afterTab.idx === 1 &&
+        /biz=home/.test(afterTab.url) &&
+        Math.abs(tabsBefore.peekPct - 6) <= 1,
+      `${tabsBefore.count} tab(s); active ${tabsBefore.activeColor} vs accent ${hexToRgb(tabsBefore.accent)}; ` +
+        `after tap panel ${afterTab.idx} url ${JSON.stringify(afterTab.url)}; peek ${tabsBefore.peekPct}% (need 6±1)`,
+    );
+    check(
+      189,
+      "section 3 trade glyph (D4): on panel entry the stroke-dashoffset runs from the path's length to 0 within 700ms",
+      draw != null &&
+        draw.samples.length > 0 &&
+        draw.samples[0] > draw.len * 0.4 &&
+        draw.samples.slice(-2).every((v) => v === 0),
+      draw == null ? "no [data-trade-glyph] found" : `path length ${draw.len}; dashoffset samples @80ms ${JSON.stringify(draw.samples)} (must start high, end 0)`,
+    );
+  });
+
+  /* --- 190: no process-name browser kills anywhere in the project. --- */
+  await block("no-browser-kill", async () => {
+    /* A process-name kill closes EVERY Chrome on the machine, including the
+       one the person at this desk is reading in. It is never needed here:
+       Playwright and chrome-launcher each own their handle, and freeing port
+       3000 is a PID-scoped kill. This gate is a static scan of the project's
+       own sources — the harness included. */
+    const PATTERNS = [
+      /taskkill[^\n]*\/\/?IM\s+(chrome|msedge|firefox)/i,
+      /Stop-Process[^\n]*-Name\s+(chrome|msedge)/i,
+      /(pkill|killall)\s+[^\n]*(chrome|msedge)/i,
+    ];
+    const SKIP = new Set(["node_modules", ".next", ".git", ".vercel", "review"]);
+    const EXT = /\.(mjs|js|ts|tsx|jsx|json|md|ps1|bat|sh|cjs|yml|yaml)$/i;
+    const hits = [];
+    const walk = (rel) => {
+      const abs = rel ? join(ROOT, rel) : ROOT;
+      for (const e of readdirSync(abs, { withFileTypes: true })) {
+        if (SKIP.has(e.name)) continue;
+        const next = rel ? `${rel}/${e.name}` : e.name;
+        if (e.isDirectory()) {
+          walk(next);
+          continue;
+        }
+        if (!EXT.test(e.name)) continue;
+        const body = readFileSync(join(ROOT, next), "utf8");
+        body.split("\n").forEach((line, i) => {
+          /* The gate's own pattern table is the one sanctioned mention. */
+          if (next === "scripts/gate.mjs" && /PATTERNS|\/taskkill\[/.test(line)) return;
+          for (const re of PATTERNS) if (re.test(line)) hits.push(`${next}:${i + 1}: ${line.trim().slice(0, 90)}`);
+        });
+      }
+    };
+    walk("");
+    check(
+      190,
+      "no process-name browser kill anywhere in the project: zero matches for an image-name taskkill, a Stop-Process by browser name, or a pkill/killall of a browser (patterns in the table above) — port-scoped PID kills and own-handle closes only",
+      hits.length === 0,
+      hits.length === 0 ? "clean: 0 hit(s) across the scanned tree" : `${hits.length} hit(s): ${JSON.stringify(hits.slice(0, 6))}`,
     );
   });
 
