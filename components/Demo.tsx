@@ -544,8 +544,13 @@ function paintScene(ctx: Ctx, t: number) {
     if (p >= 1) {
       n.caughtRow0.style.height = "";
       n.caughtRow0.style.visibility = "";
+      n.caughtRow0.style.overflow = "";
       n.row0Inner.style.transform = "";
     } else {
+      /* change 33 (C3): the clip belongs to the SLIDE, not to the settled
+         row — the stamp reaches above the amount cell and must not be shorn
+         off at the row's top edge once it lands. */
+      n.caughtRow0.style.overflow = "hidden";
       n.caughtRow0.style.height = `${(p * n.row0H).toFixed(1)}px`;
       n.caughtRow0.style.visibility = p === 0 ? "hidden" : "";
       n.row0Inner.style.transform = `translateY(${((p - 1) * 100).toFixed(2)}%)`;
@@ -567,7 +572,10 @@ function paintScene(ctx: Ctx, t: number) {
   const caughtIn = easeOut(clamp01((t - SCENE_CAUGHT_AT) / SCENE_FADE));
   n.sceneClosed.forEach((el) => (el.style.opacity = String(1 - dialingIn)));
   n.sceneDialing.forEach((el) => (el.style.opacity = String(Math.min(dialingIn, 1 - caughtIn))));
-  n.sceneCaught.forEach((el) => (el.style.opacity = String(caughtIn)));
+  /* change 33 (B3): the receipt takes this slot on the booking beat — the
+     caught line fades out under it over 400ms, so the two never stack. */
+  const receiptIn = clamp01((t - RECEIPT_AT) / 0.4);
+  n.sceneCaught.forEach((el) => (el.style.opacity = String(caughtIn * (1 - receiptIn))));
 
   /* --- The customer's closing beat: the booking confirmation on her phone.
          (The owner's ledger-side card is a static dock now — change 12, B2 —
@@ -881,7 +889,9 @@ const btnPrimary =
    corners, 44px tall. The gold CTA keeps the page's one pill; no teal
    buttons anywhere. */
 const btnSecondary =
-  "h-9 rounded-none border border-[rgba(233,238,244,0.6)] bg-transparent px-3 text-[12px] font-medium text-ink min-[1100px]:h-11 min-[1100px]:px-5 min-[1100px]:text-[15px] " +
+  /* change 33: an OPAQUE ground — a control that crosses the section band
+     must carry its own field, never let the band split its label. */
+  "h-9 rounded-none border border-[rgba(233,238,244,0.6)] bg-abyss px-3 text-[12px] font-medium text-ink min-[1100px]:h-11 min-[1100px]:px-5 min-[1100px]:text-[15px] " +
   "transition-colors hover:bg-white/5 outline-none " +
   "focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2";
 
@@ -905,10 +915,51 @@ const buildQuery = (biz: string, name: string, refDjl = false) =>
 function SectionMark({ kicker, title }: { kicker: string; title: string }) {
   return (
     <div data-section-mark className="pointer-events-none absolute left-8 top-8 z-20">
-      <p data-folio data-figure data-ink className="text-[12px] uppercase tracking-[0.04em] text-muted min-[600px]:text-[13px] min-[1100px]:text-[15px]" style={{ transitionDuration: "200ms" }}>
+      <p data-folio data-figure="data" data-ink className="text-[12px] uppercase tracking-[0.04em] text-muted min-[600px]:text-[13px] min-[1100px]:text-[15px]" style={{ transitionDuration: "200ms" }}>
         {kicker} — {title}
       </p>
     </div>
+  );
+}
+
+/* change 33 (D4): the trade glyphs — one per vertical, hand-written at
+   1.5px in the panel's own accent. They DRAW themselves on panel entry
+   (stroke-dashoffset, driven by the track observer). */
+function TradeGlyph({ id }: { id: string }) {
+  const d: Record<string, string[]> = {
+    salon: [
+      "M6 6l20 24M26 6L6 30",
+      "M9.5 34.5a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM26.5 34.5a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
+    ],
+    home: [
+      "M31 9.5a6.5 6.5 0 0 1-8.7 6.1L12 25.9a3.6 3.6 0 0 1-5.1-5.1L17.2 10.5A6.5 6.5 0 0 1 25.8 3l-4.3 4.3 1.6 5 5 1.6L32.4 9.6",
+      "M9.2 23.6h.02",
+    ],
+    dental: [
+      "M9 12.5c0-4 3-6.5 6-6.5 2 0 3 .8 4 .8s2-.8 4-.8c3 0 6 2.5 6 6.5 0 6-2.4 8.5-3.4 13.5-.6 3-1.1 5-2.6 5-1.7 0-2-3-2.4-6-.3-2-.6-3-1.6-3s-1.3 1-1.6 3c-.4 3-.7 6-2.4 6-1.5 0-2-2-2.6-5C11.4 21 9 18.5 9 12.5z",
+    ],
+    other: [
+      "M8.6 6.5h5.2l2.4 6-3 2.2a17 17 0 0 0 8.1 8.1l2.2-3 6 2.4v5.2a2.2 2.2 0 0 1-2.4 2.2A25.5 25.5 0 0 1 6.4 8.9a2.2 2.2 0 0 1 2.2-2.4z",
+    ],
+  };
+  const paths = d[id] ?? d.other;
+  return (
+    <svg
+      data-trade-glyph={id}
+      aria-hidden="true"
+      width="48"
+      height="48"
+      viewBox="0 0 38 38"
+      fill="none"
+      stroke="var(--accent, #2CC7B6)"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {paths.map((p, i) => (
+        <path key={i} d={p} />
+      ))}
+    </svg>
   );
 }
 
@@ -1023,7 +1074,7 @@ export default function Demo({
   const [confirmGone, setConfirmGone] = useState(false);
   /* change 30 (G1): the receipt mounts on the booking beat; SSR (and
      reduced motion) render it settled — park hides it for a motion run. */
-  const [receiptShown, setReceiptShown] = useState(true);
+  const [receiptShown, setReceiptShown] = useState(false);
   /* Sound (change 15, B2): off until the rail toggle's tap. Restored from
      sessionStorage in the mount effect — never under reduced motion. */
   const [soundOn, setSoundOn] = useState(false);
@@ -1091,7 +1142,8 @@ export default function Demo({
     positionedRef.current = true;
     const track = yoursTrackRef.current;
     const idx = presetList.findIndex((p) => p.id === presetId);
-    if (track && idx > 0) track.scrollLeft = idx * track.clientWidth;
+    if (track && idx > 0)
+      track.scrollLeft = idx * (track.querySelector<HTMLElement>("[data-panel]")?.offsetWidth ?? track.clientWidth);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [presetList]);
 
@@ -1227,6 +1279,9 @@ export default function Demo({
 
     if (ctx.reduced) {
       root.dataset.t = "settled";
+      /* change 33 (B4): reduced motion has no beats — the receipt is simply
+         already there, at settle. */
+      setReceiptShown(true);
       return;
     }
 
@@ -1467,7 +1522,7 @@ export default function Demo({
         const cur =
           kbdTarget && kbdTarget.track === track && now - kbdTarget.at < 800
             ? kbdTarget.idx
-            : Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+            : Math.round(track.scrollLeft / Math.max(1, panels[0]?.offsetWidth ?? track.clientWidth));
         const next = Math.max(0, Math.min(panels.length - 1, cur + delta));
         kbdTarget = { track, idx: next, at: now };
         panels[next]?.scrollIntoView({ behavior, block: "nearest", inline: "start" });
@@ -1536,6 +1591,27 @@ export default function Demo({
     const timer = window.setTimeout(() => setCaretBob(true), 800);
     return () => window.clearTimeout(timer);
   }, [activeSection]);
+
+  /* change 33 (D4): the trade glyph unrolls the first time its panel lands.
+     One shot per panel, off the track's own active-panel signal; reduced
+     motion gets it already drawn. */
+  const drawnGlyphs = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const root = rootRef.current;
+    const p = presetList[yoursPanel];
+    if (!root || !p || drawnGlyphs.current.has(p.id)) return;
+    const svg = root.querySelector<SVGSVGElement>(
+      '[data-section="yours"] [data-panel][data-preset="' + p.id + '"] [data-trade-glyph]',
+    );
+    if (!svg) return;
+    drawnGlyphs.current.add(p.id);
+    svg.querySelectorAll("path").forEach((path) => {
+      path.style.setProperty("--len", String(Math.ceil(path.getTotalLength())));
+    });
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    svg.setAttribute("data-drawn", "pending");
+    requestAnimationFrame(() => requestAnimationFrame(() => svg.setAttribute("data-drawn", "run")));
+  }, [yoursPanel, presetList]);
 
   /* change 30 (G5): the math roll fires on section 4's FIRST entry —
      the entered[] latch is one-shot, so a second entry never re-rolls. */
@@ -1802,7 +1878,7 @@ export default function Demo({
         {/* change 28 (A2): the desktop slab is a section band keyed off the
             column edge (globals positions it); the in-device slab serves
             below 1100. */}
-        <div aria-hidden="true" data-accent-slab data-slab data-call-band className="absolute inset-y-0 z-0 hidden bg-[var(--accent-soft,#0F1E33)] min-[1100px]:block" />
+        <div aria-hidden="true" data-accent-slab data-slab data-call-band className="absolute inset-y-0 left-0 z-0 w-[60%] bg-[var(--accent-soft,#0F1E33)] min-[1100px]:w-auto" />
         <SectionMark {...COPY.sections.call} />
 
         {/* change 16 (B1/B2): below 1100px the right padding clears the
@@ -1821,7 +1897,7 @@ export default function Demo({
             {receiptShown && (
               <p
                 data-receipt
-                data-figure
+                data-figure="hero"
                 className="pointer-events-none absolute inset-y-0 left-0 z-10 hidden items-center text-[120px] font-medium leading-none text-gold max-[1099.98px]:text-transparent min-[1100px]:flex"
               >
                 +${preset.ticket}
@@ -1831,7 +1907,7 @@ export default function Demo({
             {/* change 18 (B4): the clock is a timestamp — it runs in mono
                 like every figure on the page. change 27 (A): 160px — it
                 wraps at the space into a clock lockup. */}
-            <p data-figure className="text-[160px] font-medium leading-none text-ink">
+            <p data-scene-time data-figure="hero" className="text-[160px] font-medium leading-none text-ink">
               {preset.thread[0].time}
               {/* change 30 (G2): phase seconds — frozen at the miss beat. */}
               <span data-clock-seconds className="mt-2 block text-[28px] leading-none text-muted">
@@ -1877,7 +1953,7 @@ export default function Demo({
                 centered above the phone, height reserved, riding the same
                 three beats as the desktop scene type (same slots, one
                 clock). SSR seeds the settled "caught" line. */}
-            <div data-scene-mobile data-client-world className="relative mb-2 h-[30px] text-left min-[1100px]:hidden">
+            <div data-scene-mobile data-client-world className="relative mb-2 h-[56px] text-left min-[1100px]:hidden">
               <p
                 data-scene-line="closed"
                 className="absolute left-0 top-0 w-fit max-w-[145px] whitespace-nowrap font-caption text-[15px] font-normal italic leading-[30px] text-ink"
@@ -1892,6 +1968,18 @@ export default function Demo({
               >
                 {COPY.scene.mobile.nobody}
               </p>
+              {/* change 33 (B3): the receipt IS the caption's fourth line —
+                  same slot, same left edge; the engine crossfades it in on
+                  the booking beat and the "caught" line out. */}
+              {receiptShown && (
+                <p
+                  data-receipt-m
+                  data-figure="hero"
+                  className="absolute left-0 top-0 w-fit whitespace-nowrap text-[56px] font-medium leading-[56px] text-gold min-[1100px]:text-transparent"
+                >
+                  +${preset.ticket}
+                </p>
+              )}
               <p
                 data-scene-line="caught"
                 className="absolute left-0 top-0 w-fit max-w-[145px] whitespace-nowrap font-caption text-[15px] font-normal italic leading-[30px] text-ink"
@@ -1902,14 +1990,14 @@ export default function Demo({
                 {COPY.scene.mobile.caught.post}
               </p>
             </div>
-            <div className="relative">
-              <Phone preset={preset} bizName={bizName} typingBefore={[2]} slab sonar showBanner={!bannerGone} showConfirm={!confirmGone} />
+            <Phone preset={preset} bizName={bizName} typingBefore={[2]} slab sonar showBanner={!bannerGone} showConfirm={!confirmGone} />
+            <div className="hidden">
               {/* change 30 (G1): the mobile receipt — 72px over the device,
                   spine-left, vertically centered on it. */}
               {receiptShown && (
                 <p
                   data-receipt-m
-                  data-figure
+                  data-figure="data"
                   className="pointer-events-none absolute inset-0 z-30 flex items-center justify-start text-[72px] font-medium leading-none text-gold [text-shadow:0_0_3px_rgba(6,11,20,0.85),0_2px_18px_rgba(6,11,20,0.9)] min-[1100px]:hidden min-[1100px]:text-transparent"
                 >
                   +${preset.ticket}
@@ -1919,11 +2007,13 @@ export default function Demo({
             {/* change 26 (C7): the settled pair — centered under the
                 phone, 24px below the bezel, 12px apart. The engine lands
                 them at settle. */}
-            <div data-controls className="mt-2 flex flex-col items-start gap-1.5 min-[1100px]:mt-6 min-[1100px]:flex-row min-[1100px]:items-center min-[1100px]:gap-3">
-              <button data-replay type="button" onClick={onReplay} className={btnSecondary}>
+            {/* change 33 (B5): ONE row, two equal-width buttons, centered
+                under the phone with a 12px gap — never stacked. */}
+            <div data-controls className="mt-3 flex flex-row items-center justify-center gap-3 min-[1100px]:mt-6">
+              <button data-replay type="button" onClick={onReplay} className={`w-[46%] max-w-[180px] ${btnSecondary}`}>
                 {COPY.replayLabel}
               </button>
-              <button data-your-side data-client-world type="button" onClick={() => goSection(1)} className={btnPrimary}>
+              <button data-your-side data-client-world type="button" onClick={() => goSection(1)} className={`w-[46%] max-w-[180px] ${btnPrimary}`}>
                 {COPY.yourSideLabel}
               </button>
             </div>
@@ -1939,7 +2029,7 @@ export default function Demo({
       <section data-section="save" data-entry-fx={fxReady ? (entered[1] ? "run" : "pending") : undefined}>
         <SectionMark {...COPY.sections.save} />
 
-        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pb-8 pl-6 pr-14 pt-[112px] min-[1100px]:max-w-[1240px] min-[1100px]:px-12 min-[1100px]:pb-6 min-[1100px]:pt-[84px]">
+        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pb-4 pl-6 pr-14 pt-[76px] min-[1100px]:max-w-[1240px] min-[1100px]:px-12 min-[1100px]:pb-6 min-[1100px]:pt-[84px]">
           <div
             data-save-grid
             className="flex min-h-0 w-full flex-1 flex-col min-[1100px]:grid min-[1100px]:grid-cols-[42fr_58fr] min-[1100px]:grid-rows-[auto_minmax(0,1fr)] min-[1100px]:items-start min-[1100px]:gap-x-12"
@@ -1954,7 +2044,7 @@ export default function Demo({
                 {/* change 16 (B6): 26px at 390, <= 3 lines (gate 98).
                     change 18 (B1/B6): Newsreader 500, -0.01em, lh 1.02;
                     desktop <= 2 lines. */}
-                <h1 className="max-w-3xl font-display font-medium leading-[1.08] tracking-[-0.01em] text-ink text-[26px] min-[1100px]:text-[56px]">
+                <h1 className="hidden max-w-3xl font-display font-medium leading-[1.08] tracking-[-0.01em] text-ink text-[26px] min-[1100px]:block min-[1100px]:text-[56px]">
                   {COPY.headline.split(/(?<=\.)\s+/).map((line, i) => (
                     <span
                       key={line}
@@ -1968,12 +2058,10 @@ export default function Demo({
                 </h1>
                 {/* Mobile keeps the sub here; on desktop it lives in the
                     right column (change 14 — see data-save-stack below). */}
-                <p data-sub data-ink className="mt-2 max-w-xl text-[14px] leading-relaxed text-muted min-[1100px]:hidden">
+                {/* change 33 (C1): with the headline gone below 1100, the
+                    sub IS the lead — Newsreader 24, ink. */}
+                <p data-sub data-lead data-ink className="max-w-xl font-display text-[24px] font-medium leading-[1.15] tracking-[-0.01em] text-ink min-[1100px]:hidden">
                   {COPY.sub}
-                </p>
-                {/* change 19 (B6) / change 26 (D2): the honesty line. */}
-                <p data-fictional data-ink className="mt-1 font-caption text-[12px] italic text-muted min-[1100px]:hidden">
-                  {COPY.fictionalNote}
                 </p>
               </header>
 
@@ -2073,6 +2161,35 @@ export default function Demo({
           data-yours-panel
           className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pl-6 pr-14 pt-[112px] min-[1100px]:grid min-[1100px]:max-w-[1240px] min-[1100px]:grid-cols-2 min-[1100px]:grid-rows-[auto_minmax(0,1fr)] min-[1100px]:gap-x-12 min-[1100px]:px-12 min-[1100px]:pb-8 min-[1100px]:pt-[124px]"
         >
+          {/* change 33 (D1/D3): the tab strip is the switcher's label —
+              four trades under the folio, the active one accented and
+              underlined; the swipe cue sits directly beneath it. */}
+          <div data-tabs data-client-world role="tablist" aria-label={COPY.a11y.panelDot} className="col-span-full mb-2 flex shrink-0 flex-nowrap items-center gap-x-6 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-[1100px]:col-span-2 min-[1100px]:flex-wrap min-[1100px]:overflow-visible">
+            {presetList.map((p, i) => (
+              <button
+                key={p.id}
+                data-tab={p.id}
+                role="tab"
+                type="button"
+                aria-selected={yoursPanel === i}
+                onClick={() => goPanel(yoursTrackRef.current, i)}
+                className={
+                  "shrink-0 whitespace-nowrap border-b-2 pb-1 text-[14px] outline-none transition-colors focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 " +
+                  (yoursPanel === i
+                    ? "border-b-[var(--accent,#2CC7B6)] text-[var(--accent,#2CC7B6)]"
+                    : "border-b-transparent text-muted hover:text-ink")
+                }
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          {!yoursCueGone && (
+            <p data-yours-cue className="col-span-full -mt-1 mb-2 shrink-0 text-[12px] text-muted min-[1100px]:col-span-2">
+              {COPY.cues.presets.replace(" →", "")} <span data-cue-arrow>→</span>
+            </p>
+          )}
+
           <div className="max-w-[200px] shrink-0 min-[600px]:max-w-md min-[1100px]:col-start-1 min-[1100px]:row-start-1 min-[1100px]:max-w-[400px]">
             <label className="block">
               <span data-name-label className="text-[13px] text-muted">{COPY.name.label}</span>
@@ -2157,32 +2274,35 @@ export default function Demo({
                     className="flex min-h-0 flex-col justify-start min-[1100px]:h-full"
                     style={{ "--accent": p.accent, "--accent-soft": p.accentSoft, "--accent-ink": p.accentInk } as CSSProperties}
                   >
-                    <p data-panel-label className="w-fit font-display text-[28px] font-medium leading-[1.02] tracking-[-0.01em] text-[var(--accent,#E9EEF4)] min-[1100px]:text-[44px]">{p.label}</p>
+                    <div className="flex items-start justify-between gap-3">
+                      <p data-panel-label className="w-fit font-display text-[28px] font-medium leading-[1.02] tracking-[-0.01em] text-[var(--accent,#E9EEF4)] min-[1100px]:text-[44px]">{p.label}</p>
+                      <TradeGlyph id={p.id} />
+                    </div>
                     {/* change 19 (B9): the fourth preset explains itself. */}
                     {p.tagline && <p data-tagline className="mt-0.5 w-fit text-[13px] text-muted">{p.tagline}</p>}
                     {/* change 26 (E1): a ruled mono head over the double
                         hairline, then labeled rows. Ticket stays the one
                         gold element per panel (gates 79/82). */}
-                    <div className="mt-2 min-[1100px]:mt-5 min-[1100px]:flex min-[1100px]:min-h-0 min-[1100px]:flex-1 min-[1100px]:flex-col">
-                      <p data-rows-head data-figure className="w-fit pb-1 text-[11px] tracking-[0.04em] text-muted">
+                    <div className="mt-2 max-[599.98px]:max-w-[196px] min-[1100px]:mt-5 min-[1100px]:flex min-[1100px]:min-h-0 min-[1100px]:flex-1 min-[1100px]:flex-col">
+                      <p data-rows-head data-figure="data" className="w-fit pb-1 text-[11px] tracking-[0.04em] text-muted">
                         {COPY.yours.rowsHead}
                       </p>
                       <div className="hairline2" aria-hidden="true" />
-                      <div data-tile="ticket" className="flex items-baseline justify-between gap-3 border-b border-line py-2 max-[599.98px]:flex-col max-[599.98px]:items-start max-[599.98px]:gap-0 min-[1100px]:flex-1 min-[1100px]:items-center min-[1100px]:py-8">
+                      <div data-tile="ticket" className="flex items-baseline justify-between gap-3 border-b border-line py-2 max-[599.98px]:flex-col max-[599.98px]:items-stretch max-[599.98px]:gap-0 min-[1100px]:flex-1 min-[1100px]:items-center min-[1100px]:py-8">
                         <span className="whitespace-nowrap text-[13px] text-ink min-[1100px]:text-[17px]">{COPY.yours.rows.ticket}</span>
-                        <span data-ticket data-tile-value data-figure className="font-medium leading-none text-gold text-[32px] min-[1100px]:text-[96px]">
+                        <span data-ticket data-tile-value data-figure="hero" className="font-medium leading-none text-gold text-[32px] max-[599.98px]:self-end min-[1100px]:text-[96px]">
                           ${p.ticket}
                         </span>
                       </div>
-                      <div data-tile="missed" className="flex items-baseline justify-between gap-3 border-b border-line py-2 max-[599.98px]:flex-col max-[599.98px]:items-start max-[599.98px]:gap-0 min-[1100px]:flex-1 min-[1100px]:items-center min-[1100px]:py-8">
+                      <div data-tile="missed" className="flex items-baseline justify-between gap-3 border-b border-line py-2 max-[599.98px]:flex-col max-[599.98px]:items-stretch max-[599.98px]:gap-0 min-[1100px]:flex-1 min-[1100px]:items-center min-[1100px]:py-8">
                         <span className="whitespace-nowrap text-[13px] text-ink min-[1100px]:text-[17px]">{COPY.yours.rows.missed}</span>
-                        <span data-tile-value data-figure className="font-medium leading-none text-ink text-[32px] min-[1100px]:text-[96px]">
+                        <span data-tile-value data-figure="hero" className="font-medium leading-none text-ink text-[32px] max-[599.98px]:self-end min-[1100px]:text-[96px]">
                           {p.missedPerMonth}
                         </span>
                       </div>
-                      <div data-tile="lost" className="flex items-baseline justify-between gap-3 border-b border-line py-2 max-[599.98px]:flex-col max-[599.98px]:items-start max-[599.98px]:gap-0 min-[1100px]:flex-1 min-[1100px]:items-center min-[1100px]:py-8">
+                      <div data-tile="lost" className="flex items-baseline justify-between gap-3 border-b border-line py-2 max-[599.98px]:flex-col max-[599.98px]:items-stretch max-[599.98px]:gap-0 min-[1100px]:flex-1 min-[1100px]:items-center min-[1100px]:py-8">
                         <span className="whitespace-nowrap text-[13px] text-muted min-[1100px]:text-[17px]">{COPY.yours.rows.lost}</span>
-                        <span data-tile-value data-figure className="font-medium leading-none text-muted text-[32px] min-[1100px]:text-[96px]">
+                        <span data-tile-value data-figure="hero" className="font-medium leading-none text-muted text-[32px] max-[599.98px]:self-end min-[1100px]:text-[96px]">
                           {usd(p.lost)}
                         </span>
                       </div>
@@ -2198,9 +2318,6 @@ export default function Demo({
               data-yours-cueband
               className="order-2 mt-2 flex h-9 shrink-0 flex-col items-start justify-center gap-1 min-[1100px]:hidden"
             >
-              {/* change 26 (E2 / gate 156): the cue LEAVES the DOM when
-                  dismissed — a faded ghost is still a text node. */}
-              {!yoursCueGone && <p className="text-[12px] text-muted">{COPY.cues.presets}</p>}
               <div className="flex justify-center gap-2.5">
                 {presetList.map((p, i) => (
                   <button
@@ -2222,12 +2339,8 @@ export default function Demo({
             </p>
           </div>
 
-          {/* Desktop: dots + cue at the section's bottom center. */}
-          {!yoursCueGone && (
-            <div className="pointer-events-none absolute bottom-16 left-12 z-20 hidden min-[1100px]:flex">
-              <p className="text-[12px] text-muted">{COPY.cues.presets}</p>
-            </div>
-          )}
+          {/* Desktop: dots at the section's bottom left (change 33 (D3):
+              the cue moved under the tabs). */}
           <div className="absolute bottom-6 left-12 z-20 hidden flex-col items-start gap-1.5 min-[1100px]:flex">
             <div className="flex justify-center gap-2.5">
               {presetList.map((p, i) => (
@@ -2277,11 +2390,11 @@ export default function Demo({
                   <p data-math className="mx-0 max-w-[24ch] font-display font-medium leading-[1.08] tracking-[-0.01em] text-ink [font-size:clamp(40px,6vw,72px)] min-[1100px]:max-w-none min-[1100px]:[font-size:112px] min-[1100px]:[text-wrap:balance]">
                     <span data-math-name>{name}</span>
                     {beforeMissed}
-                    <span data-math-numeral data-figure className="font-medium text-gold">
+                    <span data-math-numeral data-figure="hero" className="font-medium text-gold">
                       {preset.missedPerMonth}
                     </span>
                     {midPart}
-                    <span data-math-numeral data-figure className="font-medium text-gold">
+                    <span data-math-numeral data-figure="hero" className="font-medium text-gold">
                       ${preset.ticket}
                     </span>
                     {tailPart}
@@ -2291,11 +2404,11 @@ export default function Demo({
             ) : (
               <p data-math className="mx-0 max-w-[20ch] font-display font-medium leading-[1.08] tracking-[-0.01em] text-ink [font-size:clamp(40px,6vw,72px)] min-[1100px]:max-w-none min-[1100px]:[font-size:112px] min-[1100px]:[text-wrap:balance]">
                 {COPY.mathLead}{" "}
-                <span data-math-numeral data-figure className="font-medium text-gold">
+                <span data-math-numeral data-figure="hero" className="font-medium text-gold">
                   {preset.missedPerMonth}
                 </span>{" "}
                 {COPY.mathMid}{" "}
-                <span data-math-numeral data-figure className="font-medium text-gold">
+                <span data-math-numeral data-figure="hero" className="font-medium text-gold">
                   ${preset.ticket}
                 </span>{" "}
                 {COPY.mathTail}
@@ -2346,7 +2459,7 @@ export default function Demo({
                   {COPY.close.textLead}{" "}
                   <a
                     data-sms
-                    data-figure
+                    data-figure="data"
                     href={COPY.contact.smsHref}
                     onClick={() => track("cta_sms", { preset: preset.id })}
                     className={linkStyle}
@@ -2356,15 +2469,18 @@ export default function Demo({
                 </p>
                 {/* change 30 (F4): figures mono, words sans — the approved
                     string split on its dollar figures. */}
-                <p data-price-line className="text-[15px] text-ink min-[1100px]:text-[22px]">
-                  {COPY.close.priceLine.split(/(\$[\d,]+)/).map((part, i) =>
-                    /^\$[\d,]+$/.test(part) ? (
-                      <span key={i} data-figure>{part}</span>
-                    ) : (
-                      <span key={i}>{part}</span>
-                    ),
-                  )}
-                </p>
+                {/* change 33 (E1): two lines; figures mono, words sans. */}
+                {[COPY.close.priceLine, COPY.close.priceLine2].map((line, li) => (
+                  <p key={li} data-price-line className="text-[15px] text-ink min-[1100px]:text-[22px]">
+                    {line.split(/(\$[\d,]+)/).map((part, i) =>
+                      /^\$[\d,]+$/.test(part) ? (
+                        <span key={i} data-figure="data">{part}</span>
+                      ) : (
+                        <span key={i}>{part}</span>
+                      ),
+                    )}
+                  </p>
+                ))}
               </>
             )}
             </div>
@@ -2423,10 +2539,10 @@ export default function Demo({
               >
                 {COPY.chrome.og.wordmark}
               </a>
-              <span className="normal-case"> · {COPY.footNote}</span>
+              <span className="normal-case"> · {COPY.footNote} <span data-fictional>{COPY.fictionalNote}</span></span>
             </p>
             {/* change 26 (F5). */}
-            <p data-stack-line data-figure className="text-[11px] text-muted">
+            <p data-stack-line data-figure="data" className="text-[11px] text-muted">
               {COPY.close.stack}
             </p>
             </div>

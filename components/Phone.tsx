@@ -193,7 +193,7 @@ export function NotifyCard({ bizName, entry }: { bizName: string; entry: CaughtE
      no fill, no radius, no blur. Same content; the Salvage S mark keeps
      teal (a 4px square now: the log stamps, it doesn't bead). */
   return (
-    <div className="border-y border-line py-2.5">
+    <div data-owner-entry className="border-y border-line border-l-2 border-l-[var(--accent,#2CC7B6)] py-2.5 pl-3 max-[1099.98px]:py-4">
       <div className="flex items-center gap-1.5">
         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] bg-teal">
           <span className="font-display text-[13px] font-semibold leading-none text-abyss">S</span>
@@ -203,8 +203,8 @@ export function NotifyCard({ bizName, entry }: { bizName: string; entry: CaughtE
       </div>
       {/* change 19 (B4): the entry names the CALLER — the owner reads who
           was caught, not their own shingle. */}
-      <div className="mt-1.5 truncate text-[14px] font-medium leading-snug text-ink">
-        {entry.name} · {entry.detail} · <span data-figure>${entry.amount}</span>
+      <div className="mt-1.5 truncate text-[18px] font-medium leading-snug text-ink min-[1100px]:text-[14px]">
+        {entry.name} · {entry.detail} · <span data-figure="data">${entry.amount}</span>
       </div>
       <div className="mt-0.5 flex items-center gap-1.5 text-[13px] leading-snug text-muted">
         <svg
@@ -762,14 +762,22 @@ export default function Phone({
       {/* change 17 (B1): hardware nubs — two volume (44px, 14px gap) left,
           one power (64px) right, 6px proud of the frame, one step lighter
           than the bezel. Aluminum, not UI. */}
-      <div aria-hidden="true" data-nub className="absolute -left-1.5 top-[168px] h-11 w-1.5 rounded-l-[3px] bg-[#0D1626]" />
-      <div aria-hidden="true" data-nub className="absolute -left-1.5 top-[226px] h-11 w-1.5 rounded-l-[3px] bg-[#0D1626]" />
-      <div aria-hidden="true" data-nub className="absolute -right-1.5 top-[186px] h-16 w-1.5 rounded-r-[3px] bg-[#0D1626]" />
+      {/* change 33 (B6): nubs sit 3px proud OUTSIDE the bezel silhouette,
+          in the bezel's own colour with a 1px lighter top edge. They never
+          reach the screen — the bezel's 12px padding is between. */}
+      <div aria-hidden="true" data-nub className="absolute -left-[3px] top-[168px] h-11 w-[3px] rounded-l-[2px] border-t border-t-[#1E3A5C] bg-[#0B1220]" />
+      <div aria-hidden="true" data-nub className="absolute -left-[3px] top-[226px] h-11 w-[3px] rounded-l-[2px] border-t border-t-[#1E3A5C] bg-[#0B1220]" />
+      <div aria-hidden="true" data-nub className="absolute -right-[3px] top-[186px] h-16 w-[3px] rounded-r-[2px] border-t border-t-[#1E3A5C] bg-[#0B1220]" />
 
+      {/* change 33 (B6): a TWO-TONE frame — a 1px surface-3 outer edge over
+          the darker #0B1220 bezel, so the device reads as an object with a
+          machined rim rather than one flat slab. */}
       <div
-        className="absolute inset-0 rounded-[56px] bg-[#05090F] p-3 ring-1 ring-inset ring-line/60"
+        data-phone-frame
+        className="absolute inset-0 rounded-[57px] bg-surface-3 p-px"
         style={bezelShadow}
       >
+      <div className="h-full w-full rounded-[56px] bg-[#0B1220] p-3">
         {/* change 17 (B1): 1px inner specular — white 8% fading out along
             the top and left edges only, drawn as a masked gradient border. */}
         <div
@@ -794,6 +802,7 @@ export default function Phone({
             {screenContent}
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

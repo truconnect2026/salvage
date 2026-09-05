@@ -34,9 +34,9 @@ function FlapBoard({ value, compact }: { value: number; compact: boolean }) {
           <span
             key={i}
             data-flap="digit"
-            data-figure
-            className={`relative inline-flex justify-center overflow-hidden bg-surface-2 px-[3px] font-medium leading-[1.15] text-ember ${
-              compact ? "text-[24px]" : "text-[44px] min-[1100px]:text-[56px]"
+            data-figure="hero"
+            className={`relative inline-flex justify-center overflow-hidden px-[3px] font-medium leading-[1.15] text-ember ${
+              compact ? "bg-surface-2 text-[24px]" : "text-[44px] min-[1100px]:bg-surface-2 min-[1100px]:text-[56px]"
             }`}
           >
             <span data-flap-face style={{ display: "inline-block" }}>
@@ -51,9 +51,9 @@ function FlapBoard({ value, compact }: { value: number; compact: boolean }) {
           <span
             key={i}
             data-flap="static"
-            data-figure
-            className={`relative inline-flex justify-center overflow-hidden bg-surface-2 px-[3px] font-medium leading-[1.15] text-ember ${
-              compact ? "text-[24px]" : "text-[44px] min-[1100px]:text-[56px]"
+            data-figure="hero"
+            className={`relative inline-flex justify-center overflow-hidden px-[3px] font-medium leading-[1.15] text-ember ${
+              compact ? "bg-surface-2 text-[24px]" : "text-[44px] min-[1100px]:bg-surface-2 min-[1100px]:text-[56px]"
             }`}
           >
             <span data-flap-face style={{ display: "inline-block" }}>
@@ -91,7 +91,7 @@ export default function Ledger({
           bizName + request-time month ride the title line. */}
       <div className="flex items-end justify-between gap-4">
         <div className="min-w-0">
-          <p className="font-display text-[24px] font-medium leading-[1.05] tracking-[-0.01em] text-ink">
+          <p data-panel-title className={`${compact ? "font-display text-[24px] font-medium leading-[1.05] tracking-[-0.01em] text-ink" : "text-[13px] text-muted min-[1100px]:font-display min-[1100px]:text-[24px] min-[1100px]:font-medium min-[1100px]:leading-[1.05] min-[1100px]:tracking-[-0.01em] min-[1100px]:text-ink"}`}>
             {L.screenLabel}
           </p>
           <div data-ledger-biz className="mt-0.5 truncate text-[13px] text-muted">
@@ -99,7 +99,7 @@ export default function Ledger({
           </div>
         </div>
         {!compact && dates && (
-          <div data-ledger-month data-figure className="shrink-0 pb-0.5 text-[13px] text-muted min-[1100px]:text-[14px]">
+          <div data-ledger-month data-figure="data" className="shrink-0 pb-0.5 text-[13px] text-muted min-[1100px]:text-[14px]">
             {dates.month}
           </div>
         )}
@@ -115,12 +115,12 @@ export default function Ledger({
             {L.recoveredLabel}
             {!compact && (
               <span data-calls-caught className="ml-2 hidden text-[12px] text-ink min-[500px]:inline">
-                <span data-figure>{preset.callsCaught}</span> calls booked
+                <span data-figure="data">{preset.callsCaught}</span> calls booked
               </span>
             )}
           </p>
-          <p className={`${compact ? "text-[24px]" : "text-[56px] min-[1100px]:text-[72px]"} font-medium leading-none`} aria-live="off">
-            <span data-panel-recovered data-ledger-recovered data-figure className="text-gold">
+          <p className={`${compact ? "text-[24px]" : "text-[64px] min-[1100px]:text-[72px]"} font-medium leading-none`} aria-live="off">
+            <span data-panel-recovered data-ledger-recovered data-figure="hero" className="text-gold">
               {usd(preset.recovered)}
             </span>
           </p>
@@ -131,7 +131,7 @@ export default function Ledger({
             {L.lostLabel}
             {!compact && (
               <span className="ml-2 hidden text-[12px] text-ink min-[500px]:inline">
-                <span data-figure>{preset.missedPerMonth}</span> rang out
+                <span data-figure="data">{preset.missedPerMonth}</span> rang out
               </span>
             )}
           </p>
@@ -158,14 +158,14 @@ export default function Ledger({
           } items-baseline gap-x-2 border-b border-line pb-1 text-[11px] tracking-[0.04em] text-muted`}
         >
           <span />
-          <span data-figure>{L.cols.name}</span>
-          <span data-figure>{L.cols.booking}</span>
-          <span data-figure className="text-right">{L.cols.amount}</span>
+          <span data-figure="data">{L.cols.name}</span>
+          <span data-figure="data">{L.cols.booking}</span>
+          <span data-figure="data" className="text-right">{L.cols.amount}</span>
           {/* compact (the OG card) hides row dates — a labeled empty column
               would be worse than no column. change 27 (C1): below 600 the
               table runs Name · Booking · Amount only. */}
           {!compact && (
-            <span data-figure className="hidden text-right min-[600px]:inline">{L.cols.date}</span>
+            <span data-figure="data" className="hidden text-right min-[600px]:inline">{L.cols.date}</span>
           )}
         </div>
         <CaughtRow index={0} entry={row0} compact={compact} date={dates?.rows[0]} />
@@ -175,14 +175,14 @@ export default function Ledger({
         {/* change 28 (D1): the desktop table runs 3 rows at 1x — the rest
             fold into a mono footnote. Mobile and the OG keep every row. */}
         {!compact && preset.caught.length > 3 && (
-          <p data-more-rows data-figure className="mt-1 hidden text-[12px] text-muted max-[599.98px]:block min-[1100px]:block">
+          <p data-more-rows data-figure="data" className="mt-1 hidden text-[12px] text-muted max-[599.98px]:block min-[1100px]:block">
             {L.moreRows.replace("{n}", String(preset.caught.length - 3))}
           </p>
         )}
       </div>
 
       {/* D6: the reply time, demoted to a mono footnote under the table. */}
-      <p data-ink data-reply-foot data-figure className="mt-1.5 hidden text-[12px] text-muted min-[600px]:block">
+      <p data-ink data-reply-foot data-figure="data" className="mt-1.5 hidden text-[12px] text-muted min-[600px]:block">
         {L.replyFoot}
       </p>
 
@@ -197,8 +197,8 @@ export default function Ledger({
       >
         <p className="text-[12px] text-muted">{L.sinceLabel}</p>
         <p data-since-strip className={`text-muted ${compact ? "text-[14px]" : "text-[13px] min-[1100px]:text-[14px]"}`}>
-          <span data-since-calls data-figure>{preset.sinceCalls}</span> calls caught ·{" "}
-          <span data-since-recovered data-figure className="font-medium text-ink">
+          <span data-since-calls data-figure="data">{preset.sinceCalls}</span> calls caught ·{" "}
+          <span data-since-recovered data-figure="data" className="font-medium text-ink">
             {usd(preset.sinceRecovered)}
           </span>{" "}
           recovered
@@ -231,10 +231,10 @@ function CaughtRow({
         compact
           ? "grid-cols-[20px_minmax(0,1.1fr)_minmax(0,1.3fr)_auto]"
           : "grid-cols-[20px_minmax(0,0.8fr)_minmax(0,1.7fr)_auto] min-[600px]:grid-cols-[20px_minmax(0,1.1fr)_minmax(0,1.3fr)_auto_76px]"
-      } items-start gap-x-2 py-1.5 ${compact ? "" : "min-[500px]:py-2"}`}
+      } items-start gap-x-2 ${compact ? "py-1.5" : "pb-1.5 pt-6 min-[600px]:py-2"}`}
     >
       {/* D5: the gutter line number. */}
-      <span data-figure className="pt-0.5 text-[12px] leading-none text-muted">
+      <span data-figure="data" className="pt-0.5 text-[12px] leading-none text-muted">
         {String(index + 1).padStart(2, "0")}
       </span>
       <div className="min-w-0">
@@ -246,7 +246,7 @@ function CaughtRow({
         </div>
         {/* change 27 (C1): the number line leaves the mobile table. */}
         {!compact && (
-          <div data-caught-number={index} data-figure className="mt-0.5 hidden text-[12px] text-muted min-[600px]:block">
+          <div data-caught-number={index} data-figure="data" className="mt-0.5 hidden text-[12px] text-muted min-[600px]:block">
             {entry.number}
           </div>
         )}
@@ -254,28 +254,28 @@ function CaughtRow({
       <div data-caught-detail={index} className={`min-w-0 truncate text-muted max-[599.98px]:whitespace-normal ${compact ? "text-[17px]" : "text-[12px]"}`}>
         {entry.detail}
       </div>
-      <div data-caught-amount={index} data-figure className={`text-right text-ink ${compact ? "text-[15px]" : "text-[13px] min-[1100px]:text-[14px]"}`}>
+      <div data-caught-amount={index} data-figure="data" className={`relative text-right text-ink ${compact ? "text-[15px]" : "text-[13px] min-[1100px]:text-[14px]"}`}>
         {usd(entry.amount)}
+        {/* change 33 (C3): the stamp sits ABOVE this cell, right-aligned to
+            it, bottom edge 4px clear of the figure's top — it certifies the
+            amount without ever crossing it. Absolute: zero height impact. */}
+        {isFirst && !compact && (
+          <span
+            data-stamp
+            data-figure="data"
+            className="absolute bottom-[calc(100%+4px)] right-0 inline-block whitespace-nowrap rounded-[4px] border border-[var(--accent,#2CC7B6)] bg-transparent px-1.5 text-[11px] tracking-[0.12em] text-[var(--accent,#74E9DC)] min-[600px]:bottom-auto min-[600px]:top-[-4px] min-[600px]:right-[-24px]"
+            style={{ transform: "rotate(-6deg)", opacity: 1 }}
+          >
+            {COPY.ledger.stamp}
+          </span>
+        )}
       </div>
       {!compact && (
       <div className="hidden text-right min-[600px]:block">
-        <div data-caught-date={index} data-figure className="mt-0.5 text-[13px] text-muted min-[1100px]:text-[14px]">
+        <div data-caught-date={index} data-figure="data" className="mt-0.5 text-[13px] text-muted min-[1100px]:text-[14px]">
           {date ?? entry.date}
         </div>
       </div>
-      )}
-      {/* change 30 (D3): ONE stamp — absolute at the row's right end,
-          overlapping the amount's top-right by ~30%, -6deg, stroke only,
-          zero row-height impact. The engine drives its hit (G3). */}
-      {isFirst && !compact && (
-        <span
-          data-stamp
-          data-figure
-          className="absolute right-1 top-0.5 inline-block rounded-[4px] border border-[var(--accent,#2CC7B6)] bg-transparent px-1.5 text-[11px] tracking-[0.12em] text-[var(--accent,#74E9DC)] min-[600px]:right-10"
-          style={{ transform: "rotate(-6deg)", opacity: 1 }}
-        >
-          {COPY.ledger.stamp}
-        </span>
       )}
     </div>
   );
@@ -285,7 +285,7 @@ function CaughtRow({
       <div
         data-caught-row={0}
         data-client-world
-        className="relative overflow-hidden border-b border-line border-l-2 border-l-[var(--accent,#2CC7B6)] bg-surface"
+        className="relative border-b border-line border-l-2 border-l-[var(--accent,#2CC7B6)] bg-surface"
       >
         {cells}
       </div>

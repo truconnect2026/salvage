@@ -30,12 +30,23 @@
 /* change 18 (B4): the figure contract. EVERY number, timestamp, date,
    phone number, and currency outside the phone screen carries
    [data-figure]: Plex Mono, tabular. Gate 110 holds the contract. */
+/* change 33 (A1): TWO figure registers. Data figures stay Plex Mono — the
+   ledger's table cells, timestamps, folio, column heads, since-install,
+   price/sms, stack line. HERO figures are Newsreader 500 with lining
+   tabular numerals: display type that happens to be numeric. */
 [data-figure] {
   font-family: var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
   font-variant-numeric: tabular-nums;
   /* change 23 (lever 1): Plex Mono ships 400 ONLY — the semibold figures
      dropped to 400 rather than synthesizing a fake 500. */
   font-weight: 400;
+}
+/* AFTER the data rule: both selectors carry the same specificity, so the
+   hero register only wins by source order. */
+[data-figure="hero"] {
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-weight: 500;
 }
 
 /* Change 12 (A1): the page itself never scrolls — the pager owns the one
@@ -59,6 +70,9 @@ body {
 [data-pager] {
   height: 100vh; /* iOS 15.0-15.3 fallback: without it nothing can scroll */
   height: 100dvh;
+  /* change 33 (C4): the SMALL viewport — the section must close with
+     Safari's bar UP, which is the state a visitor lands in. */
+  height: 100svh;
   overflow-y: auto;
   scroll-snap-type: y mandatory;
   overscroll-behavior: contain;
@@ -73,6 +87,7 @@ body {
   position: relative;
   height: 100vh;
   height: 100dvh;
+  height: 100svh;
   overflow: hidden;
   scroll-snap-align: start;
   scroll-snap-stop: always;
@@ -100,6 +115,57 @@ body {
   min-width: 0;
   height: 100%;
   scroll-snap-align: start;
+}
+
+/* change 33 (D2): the section-3 track PEEKS — each panel is 94% wide, so
+   6% of the next panel's left edge shows at rest and the track reads as a
+   deck of trades rather than a single screen. Snap still lands the active
+   panel on the spine. */
+[data-section="yours"] [data-track] > [data-panel] {
+  flex-basis: 94%;
+}
+
+/* change 33 review lens: the peeking panel FADES at the track's right edge
+   instead of being sliced mid-letter. */
+@media (max-width: 1099.98px) {
+  [data-section="yours"] [data-track] {
+    -webkit-mask-image: linear-gradient(to right, #000 86%, transparent 99%);
+    mask-image: linear-gradient(to right, #000 86%, transparent 99%);
+  }
+}
+
+/* change 33 (D4): the trade glyph draws itself on panel entry — the
+   observer sets data-drawn and the stroke unrolls once. Reduced motion
+   never hides it: it is simply already drawn. */
+[data-trade-glyph] path {
+  stroke-dasharray: var(--len, 240);
+  stroke-dashoffset: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-trade-glyph][data-drawn="pending"] path {
+    stroke-dashoffset: var(--len, 240);
+  }
+  [data-trade-glyph][data-drawn="run"] path {
+    stroke-dashoffset: 0;
+    transition: stroke-dashoffset 600ms ease-out;
+  }
+}
+
+/* change 33 (D3): the cue's arrow bobs 4px while the cue is up. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-cue-arrow] {
+    display: inline-block;
+    animation: cue-bob 1.4s ease-in-out infinite;
+  }
+}
+@keyframes cue-bob {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(4px);
+  }
 }
 
 /* Section 2's wrapper is a track only below 1100px: on desktop the same two
@@ -164,12 +230,11 @@ body {
   [data-section="call"] [data-phone-device] {
     max-width: min(390px, calc((100vh - 254px) * 9 / 19.5));
     max-width: min(390px, calc((100dvh - 254px) * 9 / 19.5));
-    /* change 30 (A1): right-aligned with a 28px bleed into the rail
-       gutter (12px clear of the rail) — the only geometry where the 62-64%
-       slab, the 30-36% cut, and 16px folio clearance on BOTH slab edges
-       coexist at 390x844. Objects may bleed; text may not. */
+    /* change 33 (B2): CENTERED in the content column. The slab is a
+       section band at the viewport's left edge now (B1), so the device no
+       longer has to buy folio clearance with a gutter bleed. */
     margin-left: auto;
-    margin-right: -28px;
+    margin-right: auto;
   }
 }
 /* change 17 review (WebKit 375x667): on short phones the reserve also
@@ -179,6 +244,12 @@ body {
     max-width: min(390px, calc((100vh - 310px) * 9 / 19.5));
     max-width: min(390px, calc((100dvh - 310px) * 9 / 19.5));
   }
+}
+
+/* change 33 (B1): the section-1 slab is a BAND at the left viewport edge at
+   every width — the in-device slab it replaced is gone. */
+[data-section="call"] [data-phone-device] > [data-accent-slab] {
+  display: none;
 }
 
 /* change 16 (A1): every phone SCREEN lays out at a 390px design width and
@@ -258,9 +329,7 @@ body {
     left: calc(var(--col-left) - 48px);
     width: calc(0.58 * (min(1240px, 100vw) - 96px) - 0.17 * var(--dev-w) + 48px);
   }
-  [data-section="call"] [data-phone-device] > [data-accent-slab] {
-    display: none;
-  }
+
   /* A2: the s3 band keys off the same edge; its right edge holds at 40vw. */
   [data-section="yours"] > [data-accent-slab] {
     left: calc(var(--col-left) - 48px);

@@ -50,7 +50,9 @@ export const COPY = {
     ctaLabel: "Talk to Andy · 20 min",
     ctaSub: "He sets it up on your number during the call.",
     textLead: "or text Andy:",
-    priceLine: "$1,000 setup · $200 a month",
+    // change 33 (E1, APPROVED): two lines.
+    priceLine: "$500 to start · $500 at delivery",
+    priceLine2: "$100 a month after",
     builtBy: "Built by Andy Jones · Chesterfield, VA",
     // change 29 (APPROVED): one replay label page-wide — matches replayLabel.
     loopLabel: "Watch again",
@@ -141,7 +143,7 @@ export const COPY = {
   // affordance; cues.right retired with the mobile section-2 track it
   // explained. cues.presets remains the one swipe cue.
   cues: {
-    presets: "Swipe to change trade",
+    presets: "Swipe to change trade →",
   },
   a11y: {
     pager: "Demo sections",
