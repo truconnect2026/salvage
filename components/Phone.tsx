@@ -89,9 +89,13 @@ function CallGridGlyph({ kind }: { kind: string }) {
     viewBox: "0 0 28 28",
     fill: "none",
     stroke: "currentColor",
-    strokeWidth: 1.8,
+    /* change 32: the six in-call glyphs carry ONE stroke weight — 1.5px,
+       the share/sound chrome weight. Gate 181 holds it; the marker is on
+       the family so no future glyph can opt out. */
+    strokeWidth: 1.5,
     strokeLinecap: "round" as const,
     strokeLinejoin: "round" as const,
+    "data-call-glyph": true,
     "aria-hidden": true,
   };
   switch (kind) {
@@ -113,11 +117,12 @@ function CallGridGlyph({ kind }: { kind: string }) {
         </svg>
       );
     case "speaker":
-      /* change 31 (3): hand-drawn at 1.5px to match the share/sound chrome —
-         a ROUNDED cone with a radiused back plate, replacing the angular
-         volume-up silhouette that read as tray clip-art. */
+      /* change 31 (3): hand-drawn to match the share/sound chrome — a
+         ROUNDED cone with a radiused back plate, replacing the angular
+         volume-up silhouette that read as tray clip-art. (change 32: its
+         1.5px override is the family default now.) */
       return (
-        <svg {...common} strokeWidth={1.5}>
+        <svg {...common}>
           <path d="M6 11.4h3.3l4.8-4.3a.8.8 0 0 1 1.4.6v12.6a.8.8 0 0 1-1.4.6l-4.8-4.3H6a1.3 1.3 0 0 1-1.3-1.3v-2.6A1.3 1.3 0 0 1 6 11.4z" />
           <path d="M18.9 11.1a4.7 4.7 0 0 1 0 5.8" />
           <path d="M21.7 8.6a8.5 8.5 0 0 1 0 10.8" />

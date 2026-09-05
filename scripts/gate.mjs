@@ -550,7 +550,7 @@ const BROWSER_GATES = [
   140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151,
   152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163,
   164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177,
-  178, 179, 180,
+  178, 179, 180, 181,
 ];
 
 if (!chromium) {
@@ -6247,6 +6247,40 @@ if (!chromium) {
       srcHits.length === 0 && depHits.length === 0 && bundleHits.length === 0,
       `source hits ${JSON.stringify(srcHits.slice(0, 4))}; dependency hits ${JSON.stringify(depHits)}; ` +
         `bundle hits ${JSON.stringify(bundleHits.slice(0, 4))} (scanned ${existsSync(chunkDir) ? "" : "NO "}client chunks)`,
+    );
+  });
+
+  /* --- 181: change 32 — the in-call family at one weight. --- */
+  await block("callglyph-32", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const page = await ctx.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => document.fonts.ready);
+    /* The call screen is the OPENING beat — sample while it is on. */
+    await waitT(page, 1.2);
+    const g = await page.evaluate(() => {
+      const glyphs = [...document.querySelectorAll("[data-call-glyph]")];
+      /* Every DRAWABLE child, not just <path>: the keypad is circles and
+         FaceTime is rect + path, so a path-only scan would silently skip
+         two of the six glyphs entirely. */
+      const shapes = glyphs.flatMap((svg) => [...svg.querySelectorAll("path, rect, circle")]);
+      const widths = [...new Set(shapes.map((el) => getComputedStyle(el).strokeWidth))];
+      const svgWidths = [...new Set(glyphs.map((el) => getComputedStyle(el).strokeWidth))];
+      const labels = glyphs.map((el) => el.closest("[data-call-grid-btn]")?.textContent?.trim().slice(0, 12) ?? "?");
+      return { glyphCount: glyphs.length, shapeCount: shapes.length, widths, svgWidths, labels };
+    });
+    await ctx.close();
+    check(
+      181,
+      "in-call grid: all six glyphs carry ONE stroke weight — every [data-call-glyph] and every drawable child (path, rect, circle) computes stroke-width 1.5px",
+      g.glyphCount === 6 &&
+        g.shapeCount >= 6 &&
+        g.widths.length === 1 &&
+        g.widths[0] === "1.5px" &&
+        g.svgWidths.length === 1 &&
+        g.svgWidths[0] === "1.5px",
+      `${g.glyphCount} glyph(s) ${JSON.stringify(g.labels)} (need 6), ${g.shapeCount} drawable shape(s); ` +
+        `svg widths ${JSON.stringify(g.svgWidths)}, shape widths ${JSON.stringify(g.widths)} (need exactly ["1.5px"])`,
     );
   });
 
