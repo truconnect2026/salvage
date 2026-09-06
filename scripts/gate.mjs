@@ -553,6 +553,7 @@ const BROWSER_GATES = [
   164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177,
   178, 179, 180, 181, 190,
   182, 183, 184, 185, 186, 187, 188, 189,
+  191, 192, 193,
 ];
 
 if (!chromium) {
@@ -1968,11 +1969,11 @@ if (!chromium) {
        the input sits fully LEFT of the track (or above it, below 1100). */
     check(
       62,
-      "desktop section 3: name input beside (fully left of) or above the preset track, never overlapping; one panel per preset at 94% of the track (change 33, D2: the next panel peeks)",
+      "desktop section 3: name input beside (fully left of) or above the preset track, never overlapping; one FULL-width panel per preset (change 34, B: the peek is mobile-only)",
       layout != null &&
         (layout.inputBottom <= layout.trackTop + 1 || layout.inputRight <= layout.trackLeft + 1) &&
         layout.panelCount === presets.length &&
-        layout.panelWs.every((w) => Math.abs(w - layout.trackW * 0.94) <= 2),
+        layout.panelWs.every((w) => Math.abs(w - layout.trackW) <= 2),
       layout == null
         ? "device/input/track not found"
         : `input bottom ${layout.inputBottom.toFixed(1)} vs track top ${layout.trackTop.toFixed(1)}; input right ${layout.inputRight.toFixed(1)} vs track left ${layout.trackLeft.toFixed(1)} (above OR fully left); ` +
@@ -4317,7 +4318,10 @@ if (!chromium) {
       /* The entry nests divs (breaks elementsIn's lazy close) — decode the
          raw slice between the entry marker and the panel that follows it. */
       const nIdx = page.html.indexOf("data-notify-ledger");
-      const pIdx = page.html.indexOf("data-panel-content");
+      /* Amended (change 34): search FORWARD from the entry — the inlined
+         CSS in <head> carries a [data-panel-content] selector now, and the
+         first raw occurrence is no longer the ledger's own element. */
+      const pIdx = page.html.indexOf("data-panel-content", nIdx);
       const notify = nIdx >= 0 && pIdx > nIdx ? decode(page.html.slice(nIdx, pIdx)) : "";
       nameRows.push({
         id: p.id,
@@ -5948,13 +5952,16 @@ if (!chromium) {
     await ctx172.close();
     check(
       172,
-      "stamp: row[0] height === row[1] height ±1 with the stamp present (zero layout impact); inline transform rotate(-6deg) at rest; the stamp overlaps the amount's top-right at 1440 (C3 scopes the above-the-amount placement to <1100, where gate 187 owns it)",
+      "stamp: row[0] height === row[1] height ±1 with the stamp present (zero layout impact); inline transform rotate(-6deg) at rest; (amended change 34, G) the stamp CLEARS the amount at 1440 too — no intersection, bottom edge within 8px above the amount's top; the change-30 overlap allowance is retired",
       g172.h0 != null &&
         g172.h1 != null &&
         Math.abs(g172.h0 - g172.h1) <= 1 &&
         g172.transform != null &&
         g172.transform.includes("rotate(-6deg)") &&
-        g172.intersects === true,
+        g172.intersects === false &&
+        g172.gapAbove != null &&
+        g172.gapAbove >= 0 &&
+        g172.gapAbove <= 8,
       `row0 ${g172.h0?.toFixed?.(1)} vs row1 ${g172.h1?.toFixed?.(1)}; transform ${JSON.stringify(g172.transform)}; stamp ∩ amount ${g172.intersects} (need false); gap above amount ${g172.gapAbove?.toFixed?.(1)}px (need 0..8)`,
     );
 
@@ -6526,6 +6533,8 @@ if (!chromium) {
     );
 
     /* 188 + 189: the tab strip, the peek, the drawing glyph. */
+    /* Amended (change 34, B): the peek is asserted at 390 only; desktop
+       runs full-width panels and is checked for the absence of a peek. */
     const ctxT = await browser.newContext({ viewport: { width: 390, height: 744 } });
     const pageT = await ctxT.newPage();
     await pageT.goto(base, { waitUntil: "domcontentloaded" });
@@ -6560,6 +6569,7 @@ if (!chromium) {
       const svg = document.querySelector('[data-panel][data-preset="dental"] [data-trade-glyph]');
       if (!svg) return null;
       const path = svg.querySelector("path");
+      const unit = svg.querySelector("[data-gesture]");
       const track = document.querySelector('[data-section="yours"] [data-track]');
       const panels = [...track.querySelectorAll("[data-panel]")];
       track.scrollTo({ left: 2 * panels[0].offsetWidth, behavior: "instant" });
@@ -6568,28 +6578,68 @@ if (!chromium) {
         await new Promise((r) => setTimeout(r, 80));
         samples.push(Math.round(parseFloat(getComputedStyle(path).strokeDashoffset) || 0));
       }
-      return { samples, len: Math.round(path.getTotalLength()) };
+      /* change 34 (D): the gesture fires 400ms after the 600ms draw. Sample
+         across that window, then confirm it returns to identity. */
+      const gesture = [];
+      let animName = getComputedStyle(unit).animationName;
+      for (let i = 0; i < 10; i++) {
+        await new Promise((r) => setTimeout(r, 60));
+        gesture.push(getComputedStyle(unit).transform);
+        if (getComputedStyle(unit).animationName !== "none") animName = getComputedStyle(unit).animationName;
+      }
+      await new Promise((r) => setTimeout(r, 500));
+      return {
+        samples,
+        len: Math.round(path.getTotalLength()),
+        gesture: [...new Set(gesture)],
+        animName,
+        resting: getComputedStyle(unit).transform,
+      };
     });
     await ctxT.close();
+    /* Desktop: full-width panels, no peek. */
+    const ctxTD = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+    const pageTD = await ctxTD.newPage();
+    await pageTD.goto(base, { waitUntil: "domcontentloaded" });
+    await pageTD.evaluate(() => document.fonts.ready);
+    const deskPeek = await pageTD.evaluate(() => {
+      const track = document.querySelector('[data-section="yours"] [data-track]');
+      const panel = track.querySelector("[data-panel]");
+      const cs = getComputedStyle(track);
+      return {
+        ratio: +(panel.offsetWidth / track.clientWidth).toFixed(3),
+        padLeft: cs.scrollPaddingLeft,
+      };
+    });
+    await ctxTD.close();
     check(
       188,
-      "section 3 tabs (D1/D2): four tab buttons, the active one in the panel's accent; tapping the second tab snaps the track to panel 2 and updates ?biz; at rest the next panel peeks 6%±1",
+      "section 3 tabs (D1/D2): four tab buttons, the active one in the panel's accent; tapping the second tab snaps the track to panel 2 and updates ?biz; the next panel peeks 6%±1 at 390 and NOT at 1440 (change 34, B), with scroll-padding-left 0",
       tabsBefore.count === 4 &&
         tabsBefore.activeColor === hexToRgb(tabsBefore.accent) &&
         afterTab.idx === 1 &&
         /biz=home/.test(afterTab.url) &&
-        Math.abs(tabsBefore.peekPct - 6) <= 1,
+        Math.abs(tabsBefore.peekPct - 6) <= 1 &&
+        Math.abs(deskPeek.ratio - 1) <= 0.01 &&
+        (deskPeek.padLeft === "0px" || deskPeek.padLeft === "auto"),
       `${tabsBefore.count} tab(s); active ${tabsBefore.activeColor} vs accent ${hexToRgb(tabsBefore.accent)}; ` +
-        `after tap panel ${afterTab.idx} url ${JSON.stringify(afterTab.url)}; peek ${tabsBefore.peekPct}% (need 6±1)`,
+        `after tap panel ${afterTab.idx} url ${JSON.stringify(afterTab.url)}; peek ${tabsBefore.peekPct}% at 390 (need 6±1); 1440 panel/track ${deskPeek.ratio} (need 1.00), scroll-padding-left ${deskPeek.padLeft}`,
     );
     check(
       189,
-      "section 3 trade glyph (D4): on panel entry the stroke-dashoffset runs from the path's length to 0 within 700ms",
+      "section 3 trade glyph: on panel entry the stroke-dashoffset runs from the path's length to 0 within 700ms (D4); and (change 34, D) ONE gesture follows — the transform changes inside the window and returns to identity, with no CSS animation-name on the unit",
       draw != null &&
         draw.samples.length > 0 &&
         draw.samples[0] > draw.len * 0.4 &&
-        draw.samples.slice(-2).every((v) => v === 0),
-      draw == null ? "no [data-trade-glyph] found" : `path length ${draw.len}; dashoffset samples @80ms ${JSON.stringify(draw.samples)} (must start high, end 0)`,
+        draw.samples.slice(-2).every((v) => v === 0) &&
+        draw.gesture.length > 1 &&
+        draw.animName === "none" &&
+        (draw.resting === "none" || draw.resting === "matrix(1, 0, 0, 1, 0, 0)"),
+      draw == null
+        ? "no [data-trade-glyph] found"
+        : `path length ${draw.len}; dashoffset samples @80ms ${JSON.stringify(draw.samples)} (must start high, end 0); ` +
+          `gesture transforms ${draw.gesture.length} distinct ${JSON.stringify(draw.gesture.slice(0, 4))} (need > 1); ` +
+          `animation-name ${JSON.stringify(draw.animName)} (need "none"); resting ${JSON.stringify(draw.resting)}`,
     );
   });
 
@@ -6632,6 +6682,153 @@ if (!chromium) {
       "no process-name browser kill anywhere in the project: zero matches for an image-name taskkill, a Stop-Process by browser name, or a pkill/killall of a browser (patterns in the table above) — port-scoped PID kills and own-handle closes only",
       hits.length === 0,
       hits.length === 0 ? "clean: 0 hit(s) across the scanned tree" : `${hits.length} hit(s): ${JSON.stringify(hits.slice(0, 6))}`,
+    );
+  });
+
+  /* --- 191-193: change 34 — section-3 execution. --- */
+  await block("s3-34", async () => {
+    const want = ["salon", "home", "dental", "other"].map((k) =>
+      need(new RegExp(`tabs: \\{[^}]*${k}:\\s*"([^"]+)"`), `COPY.tabs.${k}`),
+    );
+
+    /* 191: four tabs, fully visible, at the two narrow widths. */
+    const reads191 = [];
+    for (const w of [360, 390]) {
+      const c = await browser.newContext({ viewport: { width: w, height: 744 }, reducedMotion: "reduce" });
+      const pg = await c.newPage();
+      await pg.goto(base, { waitUntil: "domcontentloaded" });
+      await pg.evaluate(() => document.fonts.ready);
+      /* The other three presets hydrate in from the JSON script (change 24),
+         so wait for the full strip. waitHydrated is no use here: under
+         reduced motion data-t stays "settled" and never advances. */
+      await pg.waitForFunction(() => document.querySelectorAll("[data-tab]").length === 4);
+      reads191.push({
+        w,
+        g: await pg.evaluate(() => {
+          const strip = document.querySelector("[data-tabs]");
+          const tabs = [...document.querySelectorAll("[data-tab]")];
+          const sr = strip.getBoundingClientRect();
+          return {
+            labels: tabs.map((t) => t.textContent.trim()),
+            /* "fully visible" = inside the strip's own box AND the viewport,
+               with the strip not scrolled. */
+            clipped: tabs
+              .map((t) => t.getBoundingClientRect())
+              .filter((r) => r.left < sr.left - 0.5 || r.right > sr.right + 0.5 || r.right > innerWidth)
+              .length,
+            scrollable: strip.scrollWidth > strip.clientWidth + 1,
+            rows: new Set(tabs.map((t) => Math.round(t.getBoundingClientRect().top))).size,
+          };
+        }),
+      });
+      await c.close();
+    }
+    check(
+      191,
+      `section-3 tabs: four buttons labelled ${JSON.stringify(want)}, all fully visible on ONE row with no scrolling, at 360 and 390`,
+      reads191.every(
+        (r) =>
+          r.g.labels.length === 4 &&
+          r.g.labels.every((l, i) => l === want[i]) &&
+          r.g.clipped === 0 &&
+          r.g.scrollable === false &&
+          r.g.rows === 1,
+      ),
+      reads191
+        .map((r) => `${r.w}: ${JSON.stringify(r.g.labels)}, ${r.g.clipped} clipped, scrollable ${r.g.scrollable}, ${r.g.rows} row(s)`)
+        .join(" | "),
+    );
+
+    /* 192: the peek at rest, all four presets. */
+    const reads192 = [];
+    for (const biz of ["salon", "home", "dental", "other"]) {
+      const c = await browser.newContext({ viewport: { width: 390, height: 744 }, reducedMotion: "reduce" });
+      const pg = await c.newPage();
+      await pg.goto(`${base}/?biz=${biz}`, { waitUntil: "domcontentloaded" });
+      await pg.evaluate(() => document.fonts.ready);
+      await pg.waitForFunction(() => document.querySelectorAll("[data-panel]").length === 4);
+      await goSection(pg, 2);
+      await pg.waitForTimeout(700);
+      reads192.push({
+        biz,
+        g: await pg.evaluate((id) => {
+          const sec = document.querySelector('[data-section="yours"]');
+          const track = sec.querySelector("[data-track]");
+          const panels = [...track.querySelectorAll("[data-panel]")];
+          const active = panels.find((p) => p.dataset.preset === id);
+          const others = panels.filter((p) => p !== active);
+          /* The spine for section-3 CONTENT is the track's own left edge —
+             the folio sits 8px further in at mobile (its own inset). E's
+             claim is "the previous panel never bleeds", so the datum is the
+             track. */
+          const spine = track.getBoundingClientRect().left;
+          const glyph = active.querySelector("[data-trade-glyph]");
+          const gr = glyph.getBoundingClientRect();
+          const col = active.querySelector("[data-panel-content]").getBoundingClientRect();
+          return {
+            activeOpacity: getComputedStyle(active.querySelector("[data-panel-content]")).opacity,
+            otherOpacities: [...new Set(others.map((p) => getComputedStyle(p.querySelector("[data-panel-content]")).opacity))],
+            activeLeft: +active.getBoundingClientRect().left.toFixed(1),
+            spine: +spine.toFixed(1),
+            glyphInside: gr.right <= col.right + 1 && gr.left >= col.left - 1,
+            glyphW: Math.round(gr.width),
+          };
+        }, biz),
+      });
+      await c.close();
+    }
+    check(
+      192,
+      "section 3 at rest (390): every NON-active panel's content is at opacity 0 (the peek shows ground only); the active panel's left edge is the spine ±1; the trade glyph sits inside the content column",
+      reads192.every(
+        (r) =>
+          r.g.activeOpacity === "1" &&
+          r.g.otherOpacities.length === 1 &&
+          r.g.otherOpacities[0] === "0" &&
+          Math.abs(r.g.activeLeft - r.g.spine) <= 1 &&
+          r.g.glyphInside === true &&
+          Math.abs(r.g.glyphW - 40) <= 1,
+      ),
+      reads192
+        .map((r) => `${r.biz}: active ${r.g.activeOpacity}, others ${JSON.stringify(r.g.otherOpacities)}, left ${r.g.activeLeft} vs spine ${r.g.spine}, glyph inside ${r.g.glyphInside} @${r.g.glyphW}px`)
+        .join(" | "),
+    );
+
+    /* 193: the owner entry's caller line wraps rather than clipping. */
+    const reads193 = [];
+    for (const biz of ["salon", "home", "dental", "other"]) {
+      const c = await browser.newContext({ viewport: { width: 390, height: 744 }, reducedMotion: "reduce" });
+      const pg = await c.newPage();
+      await pg.goto(`${base}/?biz=${biz}`, { waitUntil: "domcontentloaded" });
+      await pg.evaluate(() => document.fonts.ready);
+      reads193.push({
+        biz,
+        g: await pg.evaluate(() => {
+          const el = document.querySelector("[data-entry-name]");
+          if (!el) return null;
+          const cs = getComputedStyle(el);
+          const clone = el.cloneNode(true);
+          clone.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;width:auto";
+          el.parentElement.appendChild(clone);
+          const one = clone.getBoundingClientRect().height;
+          clone.remove();
+          return {
+            lines: Math.round(el.getBoundingClientRect().height / one),
+            whiteSpace: cs.whiteSpace,
+            overflow: cs.textOverflow,
+            clipped: el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1,
+          };
+        }),
+      });
+      await c.close();
+    }
+    check(
+      193,
+      "the owner entry's caller line at 390 wraps: <= 2 line boxes, white-space normal, nothing clipped or ellipsised — all four presets",
+      reads193.every(
+        (r) => r.g != null && r.g.lines <= 2 && r.g.lines >= 1 && r.g.whiteSpace === "normal" && r.g.clipped === false && r.g.overflow !== "ellipsis",
+      ),
+      reads193.map((r) => `${r.biz}: ${r.g?.lines} line(s), white-space ${r.g?.whiteSpace}, text-overflow ${r.g?.overflow}, clipped ${r.g?.clipped}`).join(" | "),
     );
   });
 

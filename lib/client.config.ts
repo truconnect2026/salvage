@@ -142,6 +142,9 @@ export const COPY = {
   // change 15 (A3/A1): cues.down retired — the rail chevron is the standing
   // affordance; cues.right retired with the mobile section-2 track it
   // explained. cues.presets remains the one swipe cue.
+  // change 34 (A, APPROVED): the tab strip's own short labels — the panel
+  // headings keep the full trade names.
+  tabs: { salon: "Salon", home: "Home", dental: "Dental", other: "Other" },
   cues: {
     presets: "Swipe to change trade →",
   },

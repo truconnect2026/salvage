@@ -144,10 +144,10 @@ export default function Ledger({
       <span data-announce-recovered aria-live="polite" className="sr-only" />
       <span data-announce-leak aria-live="polite" className="sr-only" />
 
-      <p data-ink className={`text-[13px] text-muted ${compact ? "mt-2" : "mt-3"}`}>{L.caughtLabel}</p>
+      <p data-ink className={`text-[13px] text-muted ${compact ? "mt-2" : "mt-2"}`}>{L.caughtLabel}</p>
 
       {/* D4/D5: the table — gutter line numbers, ruled column heads. */}
-      <div className={compact ? "mt-1" : "mt-1.5"}>
+      <div className={compact ? "mt-1" : "mt-1"}>
         <div
           data-ink
           data-col-heads
@@ -193,7 +193,7 @@ export default function Ledger({
       {/* Since-install: the ledger's LAST ruled row (change 18, C2). */}
       <div
         data-ink
-        className={`flex items-baseline justify-between gap-3 border-b border-t border-line ${compact ? "mt-2 py-1.5" : "mt-2.5 py-2"}`}
+        className={`flex items-baseline justify-between gap-3 border-b border-t border-line ${compact ? "mt-2 py-1.5" : "mt-1.5 py-1.5"}`}
       >
         <p className="text-[12px] text-muted">{L.sinceLabel}</p>
         <p data-since-strip className={`text-muted ${compact ? "text-[14px]" : "text-[13px] min-[1100px]:text-[14px]"}`}>
@@ -254,7 +254,7 @@ function CaughtRow({
       <div data-caught-detail={index} className={`min-w-0 truncate text-muted max-[599.98px]:whitespace-normal ${compact ? "text-[17px]" : "text-[12px]"}`}>
         {entry.detail}
       </div>
-      <div data-caught-amount={index} data-figure="data" className={`relative text-right text-ink ${compact ? "text-[15px]" : "text-[13px] min-[1100px]:text-[14px]"}`}>
+      <div data-caught-amount={index} data-figure="data" className={`relative text-right text-ink min-[600px]:self-end ${compact ? "text-[15px]" : "text-[13px] min-[1100px]:text-[14px]"}`}>
         {usd(entry.amount)}
         {/* change 33 (C3): the stamp sits ABOVE this cell, right-aligned to
             it, bottom edge 4px clear of the figure's top — it certifies the
@@ -263,7 +263,7 @@ function CaughtRow({
           <span
             data-stamp
             data-figure="data"
-            className="absolute bottom-[calc(100%+4px)] right-0 inline-block whitespace-nowrap rounded-[4px] border border-[var(--accent,#2CC7B6)] bg-transparent px-1.5 text-[11px] tracking-[0.12em] text-[var(--accent,#74E9DC)] min-[600px]:bottom-auto min-[600px]:top-[-4px] min-[600px]:right-[-24px]"
+            className="absolute bottom-[calc(100%+4px)] right-0 inline-block whitespace-nowrap rounded-[4px] border border-[var(--accent,#2CC7B6)] bg-transparent px-1.5 text-[11px] tracking-[0.12em] text-[var(--accent,#74E9DC)]"
             style={{ transform: "rotate(-6deg)", opacity: 1 }}
           >
             {COPY.ledger.stamp}

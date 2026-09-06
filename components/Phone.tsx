@@ -193,7 +193,7 @@ export function NotifyCard({ bizName, entry }: { bizName: string; entry: CaughtE
      no fill, no radius, no blur. Same content; the Salvage S mark keeps
      teal (a 4px square now: the log stamps, it doesn't bead). */
   return (
-    <div data-owner-entry className="border-y border-line border-l-2 border-l-[var(--accent,#2CC7B6)] py-2.5 pl-3 max-[1099.98px]:py-4">
+    <div data-owner-entry className="border-y border-line border-l-2 border-l-[var(--accent,#2CC7B6)] py-2.5 pl-3 max-[1099.98px]:py-3">
       <div className="flex items-center gap-1.5">
         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] bg-teal">
           <span className="font-display text-[13px] font-semibold leading-none text-abyss">S</span>
@@ -203,7 +203,9 @@ export function NotifyCard({ bizName, entry }: { bizName: string; entry: CaughtE
       </div>
       {/* change 19 (B4): the entry names the CALLER — the owner reads who
           was caught, not their own shingle. */}
-      <div className="mt-1.5 truncate text-[18px] font-medium leading-snug text-ink min-[1100px]:text-[14px]">
+      {/* change 34 (F): the caller line WRAPS on mobile — two lines, no
+          ellipsis; a booking is not a place to hide words. */}
+      <div data-entry-name className="mt-1.5 whitespace-normal text-[18px] font-medium leading-snug text-ink min-[1100px]:truncate min-[1100px]:text-[14px]">
         {entry.name} · {entry.detail} · <span data-figure="data">${entry.amount}</span>
       </div>
       <div className="mt-0.5 flex items-center gap-1.5 text-[13px] leading-snug text-muted">

@@ -117,20 +117,28 @@ body {
   scroll-snap-align: start;
 }
 
-/* change 33 (D2): the section-3 track PEEKS — each panel is 94% wide, so
-   6% of the next panel's left edge shows at rest and the track reads as a
-   deck of trades rather than a single screen. Snap still lands the active
-   panel on the spine. */
-[data-section="yours"] [data-track] > [data-panel] {
-  flex-basis: 94%;
+/* change 34 (B/E): the peek is a MOBILE affordance — 94% panels below 1100
+   so 6% of the next panel's ground shows; full-width panels above it, where
+   the deck reads as one composed screen. scroll-padding-left is 0 at every
+   width so a panel's snapped left edge IS the spine. */
+[data-section="yours"] [data-track] {
+  scroll-padding-left: 0;
+}
+@media (max-width: 1099.98px) {
+  [data-section="yours"] [data-track] > [data-panel] {
+    flex-basis: 94%;
+  }
 }
 
-/* change 33 review lens: the peeking panel FADES at the track's right edge
-   instead of being sliced mid-letter. */
+/* change 34 (B): only the ACTIVE panel shows its content — the peek is the
+   next panel's slab GROUND, never a sliced fragment of its type. The
+   track's existing IntersectionObserver flips this; no second clock. */
+[data-section="yours"] [data-panel] > [data-panel-content] {
+  transition: opacity 180ms ease;
+}
 @media (max-width: 1099.98px) {
-  [data-section="yours"] [data-track] {
-    -webkit-mask-image: linear-gradient(to right, #000 86%, transparent 99%);
-    mask-image: linear-gradient(to right, #000 86%, transparent 99%);
+  [data-section="yours"] [data-panel][data-peek="hidden"] > [data-panel-content] {
+    opacity: 0;
   }
 }
 

@@ -927,10 +927,9 @@ function SectionMark({ kicker, title }: { kicker: string; title: string }) {
    (stroke-dashoffset, driven by the track observer). */
 function TradeGlyph({ id }: { id: string }) {
   const d: Record<string, string[]> = {
-    salon: [
-      "M6 6l20 24M26 6L6 30",
-      "M9.5 34.5a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM26.5 34.5a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
-    ],
+    /* The scissors' two blades are their own groups so the gesture can
+       close them about the pivot (change 34, D). */
+    salon: ["M6 6l20 24M9.5 34.5a4 4 0 1 0 0-8 4 4 0 0 0 0 8z", "M26 6L6 30M26.5 34.5a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"],
     home: [
       "M31 9.5a6.5 6.5 0 0 1-8.7 6.1L12 25.9a3.6 3.6 0 0 1-5.1-5.1L17.2 10.5A6.5 6.5 0 0 1 25.8 3l-4.3 4.3 1.6 5 5 1.6L32.4 9.6",
       "M9.2 23.6h.02",
@@ -947,8 +946,8 @@ function TradeGlyph({ id }: { id: string }) {
     <svg
       data-trade-glyph={id}
       aria-hidden="true"
-      width="48"
-      height="48"
+      width="40"
+      height="40"
       viewBox="0 0 38 38"
       fill="none"
       stroke="var(--accent, #2CC7B6)"
@@ -957,7 +956,11 @@ function TradeGlyph({ id }: { id: string }) {
       strokeLinejoin="round"
     >
       {paths.map((p, i) => (
-        <path key={i} d={p} />
+        /* Each path is its own gesture unit: the scissors move as two
+           blades about the pivot, every other glyph as one body. */
+        <g key={i} data-gesture={i} style={{ transformOrigin: "16px 30px", transformBox: "fill-box" }}>
+          <path d={p} />
+        </g>
       ))}
     </svg>
   );
@@ -1441,13 +1444,17 @@ export default function Demo({
       const io = new IntersectionObserver(
         (entries) => {
           entries.forEach((e) => {
+            /* change 34 (B): a panel less than 40% into view shows GROUND
+               only — its content fades out. Same observer, one more
+               threshold; the peek never needs a clock of its own. */
+            (e.target as HTMLElement).dataset.peek = e.intersectionRatio >= 0.4 ? "shown" : "hidden";
             if (e.intersectionRatio >= 0.6) {
               const i = panels.indexOf(e.target as HTMLElement);
               if (i >= 0) onPanel(i, e.target as HTMLElement);
             }
           });
         },
-        { root: track, threshold: 0.6 },
+        { root: track, threshold: [0.4, 0.6] },
       );
       panels.forEach((p) => io.observe(p));
       panelIOs.push(io);
@@ -1620,6 +1627,39 @@ export default function Demo({
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     svg.setAttribute("data-drawn", "pending");
     requestAnimationFrame(() => requestAnimationFrame(() => svg.setAttribute("data-drawn", "run")));
+    /* change 34 (D): ONE gesture, 400ms after the 600ms draw completes.
+       WAAPI carries its own delay, so this needs no timer and no CSS loop;
+       every keyframe list returns to identity. */
+    const units = [...svg.querySelectorAll<SVGGElement>("[data-gesture]")];
+    const KEY: Record<string, (i: number) => Keyframe[]> = {
+      salon: (i) => [
+        { transform: "rotate(0deg)" },
+        { transform: `rotate(${i === 0 ? -12 : 12}deg)`, offset: 0.5 },
+        { transform: "rotate(0deg)" },
+      ],
+      home: () => [
+        { transform: "rotate(0deg)" },
+        { transform: "rotate(-18deg)", offset: 0.5 },
+        { transform: "rotate(0deg)" },
+      ],
+      dental: () => [
+        { transform: "translateY(0px)" },
+        { transform: "translateY(-6px)", offset: 0.45 },
+        { transform: "translateY(1.15px)", offset: 0.75 },
+        { transform: "translateY(0px)" },
+      ],
+      other: () => [
+        { transform: "rotate(0deg)" },
+        { transform: "rotate(8deg)", offset: 0.2 },
+        { transform: "rotate(-8deg)", offset: 0.45 },
+        { transform: "rotate(8deg)", offset: 0.7 },
+        { transform: "rotate(0deg)" },
+      ],
+    };
+    const frames = KEY[p.id] ?? KEY.other;
+    units.forEach((u, i) =>
+      u.animate(frames(i), { duration: 400, delay: 1000, easing: "ease-in-out", fill: "none" }),
+    );
   }, [yoursPanel, presetList]);
 
   /* change 30 (G5): the math roll fires on section 4's FIRST entry —
@@ -2038,7 +2078,7 @@ export default function Demo({
       <section data-section="save" data-entry-fx={fxReady ? (entered[1] ? "run" : "pending") : undefined}>
         <SectionMark {...COPY.sections.save} />
 
-        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pb-4 pl-6 pr-14 pt-[76px] min-[1100px]:max-w-[1240px] min-[1100px]:px-12 min-[1100px]:pb-6 min-[1100px]:pt-[84px]">
+        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pb-4 pl-6 pr-14 pt-[60px] min-[1100px]:max-w-[1240px] min-[1100px]:px-12 min-[1100px]:pb-6 min-[1100px]:pt-[84px]">
           <div
             data-save-grid
             className="flex min-h-0 w-full flex-1 flex-col min-[1100px]:grid min-[1100px]:grid-cols-[42fr_58fr] min-[1100px]:grid-rows-[auto_minmax(0,1fr)] min-[1100px]:items-start min-[1100px]:gap-x-12"
@@ -2173,7 +2213,7 @@ export default function Demo({
           {/* change 33 (D1/D3): the tab strip is the switcher's label —
               four trades under the folio, the active one accented and
               underlined; the swipe cue sits directly beneath it. */}
-          <div data-tabs data-client-world role="tablist" aria-label={COPY.a11y.panelDot} className="col-span-full mb-2 flex shrink-0 flex-nowrap items-center gap-x-6 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-[1100px]:col-span-2 min-[1100px]:flex-wrap min-[1100px]:overflow-visible">
+          <div data-tabs data-client-world role="tablist" aria-label={COPY.a11y.panelDot} className="col-span-full mb-2 flex shrink-0 flex-nowrap items-center gap-x-5 min-[1100px]:col-span-2 min-[1100px]:gap-x-6">
             {presetList.map((p, i) => (
               <button
                 key={p.id}
@@ -2189,7 +2229,7 @@ export default function Demo({
                     : "border-b-transparent text-muted hover:text-ink")
                 }
               >
-                {p.label}
+                {COPY.tabs[p.id as keyof typeof COPY.tabs] ?? p.label}
               </button>
             ))}
           </div>
@@ -2283,6 +2323,10 @@ export default function Demo({
                     className="flex min-h-0 flex-col justify-start min-[1100px]:h-full"
                     style={{ "--accent": p.accent, "--accent-soft": p.accentSoft, "--accent-ink": p.accentInk } as CSSProperties}
                   >
+                    <div data-panel-content className="flex min-h-0 flex-col">
+                    {/* change 34 (C): the glyph's right edge lands on the
+                        content column's right edge, top-aligned with the
+                        label — inside the column, never in the peek. */}
                     <div className="flex items-start justify-between gap-3">
                       <p data-panel-label className="w-fit font-display text-[28px] font-medium leading-[1.02] tracking-[-0.01em] text-[var(--accent,#E9EEF4)] min-[1100px]:text-[44px]">{p.label}</p>
                       <TradeGlyph id={p.id} />
@@ -2316,8 +2360,13 @@ export default function Demo({
                         </span>
                       </div>
                     </div>
+                    </div>
                   </div>
                 ))}
+                {/* change 34 (E): trailing peek-width space, so the LAST
+                    panel can still snap flush to the spine — without it the
+                    track runs out of scroll and rests ~19px short. */}
+                <div aria-hidden="true" data-track-tail className="h-full shrink-0 basis-[6%] min-[1100px]:hidden" />
               </div>
             </div>
 
