@@ -2374,9 +2374,12 @@ if (!chromium) {
     const page = await ctx.newPage();
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto(base, { waitUntil: "domcontentloaded" });
-    await page.waitForFunction(
-      () => document.querySelector("[data-demo]")?.getAttribute("data-t") != null,
-    );
+    /* Amended (change 34): data-t is "settled" in the SSR markup, so it is
+       non-null before hydration — waiting on it clicked a dead dot on a
+       slow host and recorded zero calls. The other three presets hydrate in
+       from the JSON script, so a full panel set IS the hydration signal,
+       and it works under reduced motion where data-t never advances. */
+    await page.waitForFunction(() => document.querySelectorAll("[data-panel]").length === 4);
     await page.waitForTimeout(300);
     const g = await page.evaluate(() => {
       const calls = [];
