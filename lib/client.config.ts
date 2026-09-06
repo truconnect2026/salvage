@@ -8,7 +8,10 @@ export type Preset = {
   tagline?: string;
   /* change 20 (A): the vertical's accent triplet — recolors the CLIENT's
      world (bubbles, slab, sonar, stamp, labels); DJL chrome stays teal.
-     accent/accentInk measure >= 4.5:1 for all four (gate 135). */
+     accent/accentInk measure >= 4.5:1 for all four (gate 135).
+     change 35 (C1): accentSoft is one step brighter — the slab is the
+     whole mobile ground in section 3 now, and the old values read as
+     abyss with a tint. Ink on accentSoft measures >= 7:1 (gate 198). */
   accent: string;
   accentSoft: string;
   accentInk: string;
@@ -217,7 +220,7 @@ export const PRESETS: Preset[] = [
   {
     id: "salon", label: "Salon and Spa", bizName: "Harbor Row Aesthetics",
     customerName: "Danielle R.",
-    accent: "#E8A0B4", accentSoft: "#3A2230", accentInk: "#1A0C12",
+    accent: "#E8A0B4", accentSoft: "#4A2838", accentInk: "#1A0C12",
     ticket: 340, missedPerMonth: 12, callsCaught: 4, recovered: 1360, lost: 4080,
     sinceCalls: 31, sinceRecovered: 9240,
     // Entry [0] is this thread's own booking. Sum of all 4 amounts === recovered.
@@ -237,7 +240,7 @@ export const PRESETS: Preset[] = [
   {
     id: "home", label: "Home Services", bizName: "Ridgeline Plumbing",
     customerName: "Mark T.",
-    accent: "#F0A044", accentSoft: "#3A2A14", accentInk: "#1A1206",
+    accent: "#F0A044", accentSoft: "#4A3418", accentInk: "#1A1206",
     ticket: 850, missedPerMonth: 15, callsCaught: 5, recovered: 4250, lost: 12750,
     sinceCalls: 24, sinceRecovered: 18700,
     caught: [
@@ -257,7 +260,7 @@ export const PRESETS: Preset[] = [
   {
     id: "dental", label: "Dental", bizName: "Fairfield Dental",
     customerName: "Priya S.",
-    accent: "#7CC4E8", accentSoft: "#16324A", accentInk: "#08161F",
+    accent: "#7CC4E8", accentSoft: "#1C3E5C", accentInk: "#08161F",
     ticket: 600, missedPerMonth: 9, callsCaught: 3, recovered: 1800, lost: 5400,
     sinceCalls: 19, sinceRecovered: 9800,
     caught: [
@@ -280,7 +283,7 @@ export const PRESETS: Preset[] = [
   {
     id: "other", label: "Something else", bizName: "Your business",
     customerName: "Jordan M.",
-    accent: "#9BB0C4", accentSoft: "#1E2C3A", accentInk: "#0B131B",
+    accent: "#9BB0C4", accentSoft: "#253546", accentInk: "#0B131B",
     tagline: "Any business that takes calls.",
     ticket: 250, missedPerMonth: 10, callsCaught: 3, recovered: 750, lost: 2500,
     sinceCalls: 22, sinceRecovered: 5500,

@@ -15,10 +15,12 @@ import { usd } from "@/lib/format";
  * fade); SSR renders it settled at full height (the no-JS floor).
  */
 
-/* change 18 (D2) / change 26 (D8): the split-flap board. Digit flaps abut
-   (no gap), faces surface-2 with the 1px split; "$" and "," are STATIC
-   glyphs — plain type, no flap chrome. The engine derives every mid-flight
-   glyph and rotateX purely from the phase (paintFlaps in Demo.tsx). */
+/* change 18 (D2) / change 26 (D8) / change 35 (D2): the split-flap board.
+   Every glyph gets its own TILE — surface-2 at 70%, r2, a 1px seam across
+   the middle in the rule colour — and "$" and "," ride tiles too, because
+   a board is tiles all the way across. No shared container behind them:
+   the board is the tiles. The engine derives every mid-flight glyph and
+   rotateX purely from the phase (paintFlaps in Demo.tsx). */
 function FlapBoard({ value, compact }: { value: number; compact: boolean }) {
   const glyphs = usd(value).split("");
   return (
@@ -26,7 +28,7 @@ function FlapBoard({ value, compact }: { value: number; compact: boolean }) {
       data-leak-lost
       data-flap-board
       aria-live="off"
-      className="inline-flex items-baseline"
+      className="inline-flex items-baseline gap-[2px]"
     >
       {glyphs.map((g, i) => {
         const digit = /\d/.test(g);
@@ -35,8 +37,8 @@ function FlapBoard({ value, compact }: { value: number; compact: boolean }) {
             key={i}
             data-flap="digit"
             data-figure="hero"
-            className={`relative inline-flex justify-center overflow-hidden px-[3px] font-medium leading-[1.15] text-ember ${
-              compact ? "bg-surface-2 text-[24px]" : "text-[44px] min-[1100px]:bg-surface-2 min-[1100px]:text-[56px]"
+            className={`relative inline-flex justify-center overflow-hidden rounded-[2px] bg-surface-2/70 px-[3px] font-medium leading-[1.15] text-ember ${
+              compact ? "text-[24px]" : "text-[44px] min-[1100px]:text-[56px]"
             }`}
           >
             <span data-flap-face style={{ display: "inline-block" }}>
@@ -44,7 +46,7 @@ function FlapBoard({ value, compact }: { value: number; compact: boolean }) {
             </span>
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute left-0 right-0 top-1/2 h-px bg-abyss/70"
+              className="pointer-events-none absolute left-0 right-0 top-1/2 h-px bg-line"
             />
           </span>
         ) : (
@@ -52,8 +54,8 @@ function FlapBoard({ value, compact }: { value: number; compact: boolean }) {
             key={i}
             data-flap="static"
             data-figure="hero"
-            className={`relative inline-flex justify-center overflow-hidden px-[3px] font-medium leading-[1.15] text-ember ${
-              compact ? "bg-surface-2 text-[24px]" : "text-[44px] min-[1100px]:bg-surface-2 min-[1100px]:text-[56px]"
+            className={`relative inline-flex justify-center overflow-hidden rounded-[2px] bg-surface-2/70 px-[3px] font-medium leading-[1.15] text-ember ${
+              compact ? "text-[24px]" : "text-[44px] min-[1100px]:text-[56px]"
             }`}
           >
             <span data-flap-face style={{ display: "inline-block" }}>
@@ -61,7 +63,7 @@ function FlapBoard({ value, compact }: { value: number; compact: boolean }) {
             </span>
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute left-0 right-0 top-1/2 h-px bg-abyss/70"
+              className="pointer-events-none absolute left-0 right-0 top-1/2 h-px bg-line"
             />
           </span>
         );

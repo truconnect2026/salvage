@@ -942,16 +942,25 @@ function TradeGlyph({ id }: { id: string }) {
     ],
   };
   const paths = d[id] ?? d.other;
+  /* change 35 (C3): the WATERMARK — 240px, bottom-right of the panel,
+     behind the rows, the accent at 12%. The stroke is 1.5 RENDERED px: a
+     38-unit viewBox drawn at 240 scales 6.3158x, so the line is specified
+     in viewBox units at 1.5 / 6.3158. It is set in user units and not with
+     vector-effect on purpose — a non-scaling stroke lays its dash pattern
+     out in device space, and change 34's draw-on sets --len from
+     getTotalLength() in viewBox units, so the tail of every glyph would
+     simply stop being drawn. */
+  const HAIRLINE = 1.5 / (240 / 38);
   return (
     <svg
       data-trade-glyph={id}
       aria-hidden="true"
-      width="40"
-      height="40"
+      width="240"
+      height="240"
       viewBox="0 0 38 38"
       fill="none"
       stroke="var(--accent, #2CC7B6)"
-      strokeWidth="1.5"
+      strokeWidth={HAIRLINE}
       strokeLinecap="round"
       strokeLinejoin="round"
     >
@@ -1088,6 +1097,9 @@ export default function Demo({
   /* change 26 (B2/B3/B5): section-entry reveals — armed client-side only
      (SSR never hides), latched per section, skipped under reduced motion. */
   const [fxReady, setFxReady] = useState(false);
+  /* change 35 (A5): the section-1 device is SET DOWN once — pending holds
+     it 16px low on the bare contact shadow, run lands it. */
+  const [phoneEntry, setPhoneEntry] = useState<"pending" | "run" | null>(null);
   const [entered, setEntered] = useState<boolean[]>([true, false, false, false]);
 
   const preset = presetList.find((p) => p.id === presetId) ?? presetList[0];
@@ -1329,6 +1341,11 @@ export default function Demo({
        and hand each save-section ink element its stagger slot — DOM order
        is the visual order (column heads precede rows). */
     setFxReady(true);
+    /* change 35 (A5): pending must be PAINTED before run, or the transition
+       has no start value — hence two frames, not one. Reduced motion never
+       reaches here (the branch above returned), so it never rises. */
+    setPhoneEntry("pending");
+    requestAnimationFrame(() => requestAnimationFrame(() => setPhoneEntry("run")));
     /* A custom property, NOT transition-delay: a bare inline delay rides the
        default transition-property:all and defers EVERY style change (the
        pending->hidden flip included) by up to 1.2s. Only the "run" rule
@@ -1741,6 +1758,32 @@ export default function Demo({
     };
   };
 
+  /* change 35 (D1): the layout height is the VISUAL viewport, read on load
+     and on every resize. Safari moves it by ~100px between toolbar states
+     and svh is only the spec guess at the collapsed one. Updates are
+     SKIPPED while a text field holds focus: the software keyboard shrinks
+     the visual viewport too, and resizing every section down to the
+     keyboard leftovers would tear the pager off its snap point mid-typing
+     (the section-3 accommodation above owns that case). */
+  useEffect(() => {
+    const vv = window.visualViewport;
+    const apply = () => {
+      const el = document.activeElement;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
+      const h = vv ? vv.height : window.innerHeight;
+      if (h > 0) document.documentElement.style.setProperty("--vh", `${Math.round(h)}px`);
+    };
+    apply();
+    vv?.addEventListener("resize", apply);
+    window.addEventListener("resize", apply);
+    window.addEventListener("orientationchange", apply);
+    return () => {
+      vv?.removeEventListener("resize", apply);
+      window.removeEventListener("resize", apply);
+      window.removeEventListener("orientationchange", apply);
+    };
+  }, []);
+
   const onNameBlur = () => {
     kbCleanup.current?.();
     kbCleanup.current = null;
@@ -1996,8 +2039,8 @@ export default function Demo({
 
           {/* change 27 (B1): the stage column carries an explicit width — a
               shrink-wrapped grid column gives the aspect-boxed device
-              nothing to size against (globals sets 82dvh * 9/19.5). */}
-          <div data-call-stage className="w-full max-w-[390px] shrink-0">
+              nothing to size against (globals sets 82dvh * 390/810). */}
+          <div data-call-stage data-phone-entry={phoneEntry ?? undefined} className="w-full max-w-[390px] shrink-0">
             {/* change 19 (B1): the mobile caption — Newsreader italic 22px,
                 centered above the phone, height reserved, riding the same
                 three beats as the desktop scene type (same slots, one
@@ -2201,7 +2244,7 @@ export default function Demo({
           aria-hidden="true"
           data-accent-slab
           data-slab
-          className="absolute inset-y-0 left-0 z-0 w-2/5 bg-[var(--accent-soft,#0F1E33)] max-[1099.98px]:w-[244px]"
+          className="absolute inset-y-0 left-0 z-0 w-full bg-[var(--accent-soft,#0F1E33)] min-[1100px]:w-2/5"
         />
         <SectionMark {...COPY.sections.yours} />
 
@@ -2239,7 +2282,10 @@ export default function Demo({
             </p>
           )}
 
-          <div className="max-w-[200px] shrink-0 min-[600px]:max-w-md min-[1100px]:col-start-1 min-[1100px]:row-start-1 min-[1100px]:max-w-[400px]">
+          {/* change 35 (C2): the field spans the content column — a
+              240px cage was what forced the 19px value and clipped the
+              longer trade names. */}
+          <div className="w-full shrink-0 min-[1100px]:col-start-1 min-[1100px]:row-start-1 min-[1100px]:max-w-[400px]">
             <label className="block">
               <span data-name-label className="text-[13px] text-muted">{COPY.name.label}</span>
               {/* change 26 (E3/E4): pencil glyph before the placeholder;
@@ -2277,7 +2323,7 @@ export default function Demo({
                   placeholder={preset.bizName}
                   maxLength={MAX_NAME_LEN}
                   autoComplete="off"
-                  className={`mt-2 block w-full border-x-0 border-b border-t-0 border-solid border-muted bg-transparent pb-1.5 font-display font-medium text-[19px] text-ink caret-teal outline-none transition-colors focus:border-teal focus-visible:outline-none min-[600px]:text-[22px] ${
+                  className={`mt-2 block w-full overflow-hidden text-ellipsis whitespace-nowrap border-x-0 border-b border-t-0 border-solid border-muted bg-transparent pb-1.5 font-display font-medium text-[24px] text-ink caret-teal outline-none transition-colors focus:border-teal focus-visible:outline-none min-[1100px]:text-[22px] ${
                     nameInput ? "" : "pl-5"
                   } ${preset.id === "other" ? "placeholder:font-normal placeholder:italic placeholder:text-muted" : "placeholder:text-ink"}`}
                 />
@@ -2324,38 +2370,40 @@ export default function Demo({
                     style={{ "--accent": p.accent, "--accent-soft": p.accentSoft, "--accent-ink": p.accentInk } as CSSProperties}
                   >
                     <div data-panel-content className="flex min-h-0 flex-col">
-                    {/* change 34 (C): the glyph's right edge lands on the
-                        content column's right edge, top-aligned with the
-                        label — inside the column, never in the peek. */}
-                    <div className="flex items-start justify-between gap-3">
+                    {/* change 35 (C3): the watermark is FIRST in the panel,
+                        so the rows paint over it without a z-index race. */}
+                    <TradeGlyph id={p.id} />
+                    <div className="relative flex items-start justify-between gap-3">
                       <p data-panel-label className="w-fit font-display text-[28px] font-medium leading-[1.02] tracking-[-0.01em] text-[var(--accent,#E9EEF4)] min-[1100px]:text-[44px]">{p.label}</p>
-                      <TradeGlyph id={p.id} />
                     </div>
                     {/* change 19 (B9): the fourth preset explains itself. */}
-                    {p.tagline && <p data-tagline className="mt-0.5 w-fit text-[13px] text-muted">{p.tagline}</p>}
+                    {p.tagline && <p data-tagline className="relative mt-0.5 w-fit text-[13px] text-muted">{p.tagline}</p>}
                     {/* change 26 (E1): a ruled mono head over the double
                         hairline, then labeled rows. Ticket stays the one
                         gold element per panel (gates 79/82). */}
-                    <div className="mt-2 max-[599.98px]:max-w-[196px] min-[1100px]:mt-5 min-[1100px]:flex min-[1100px]:min-h-0 min-[1100px]:flex-1 min-[1100px]:flex-col">
+                    {/* change 35 (C3): labels left, figures on the content
+                        column's right edge — at every width. The mobile
+                        stacked variant and its 196px cage are gone. */}
+                    <div className="relative mt-2 min-[1100px]:mt-5 min-[1100px]:flex min-[1100px]:min-h-0 min-[1100px]:flex-1 min-[1100px]:flex-col">
                       <p data-rows-head data-figure="data" className="w-fit pb-1 text-[11px] tracking-[0.04em] text-muted">
                         {COPY.yours.rowsHead}
                       </p>
                       <div className="hairline2" aria-hidden="true" />
-                      <div data-tile="ticket" className="flex items-baseline justify-between gap-3 border-b border-line py-2 max-[599.98px]:flex-col max-[599.98px]:items-stretch max-[599.98px]:gap-0 min-[1100px]:flex-1 min-[1100px]:items-center min-[1100px]:py-8">
+                      <div data-tile="ticket" className="flex items-baseline justify-between gap-3 border-b border-line py-2 min-[1100px]:flex-1 min-[1100px]:items-center min-[1100px]:py-8">
                         <span className="whitespace-nowrap text-[13px] text-ink min-[1100px]:text-[17px]">{COPY.yours.rows.ticket}</span>
-                        <span data-ticket data-tile-value data-figure="hero" className="font-medium leading-none text-gold text-[32px] max-[599.98px]:self-end min-[1100px]:text-[96px]">
+                        <span data-ticket data-tile-value data-figure="hero" className="font-medium leading-none text-gold text-[32px] min-[1100px]:text-[96px]">
                           ${p.ticket}
                         </span>
                       </div>
-                      <div data-tile="missed" className="flex items-baseline justify-between gap-3 border-b border-line py-2 max-[599.98px]:flex-col max-[599.98px]:items-stretch max-[599.98px]:gap-0 min-[1100px]:flex-1 min-[1100px]:items-center min-[1100px]:py-8">
+                      <div data-tile="missed" className="flex items-baseline justify-between gap-3 border-b border-line py-2 min-[1100px]:flex-1 min-[1100px]:items-center min-[1100px]:py-8">
                         <span className="whitespace-nowrap text-[13px] text-ink min-[1100px]:text-[17px]">{COPY.yours.rows.missed}</span>
-                        <span data-tile-value data-figure="hero" className="font-medium leading-none text-ink text-[32px] max-[599.98px]:self-end min-[1100px]:text-[96px]">
+                        <span data-tile-value data-figure="hero" className="font-medium leading-none text-ink text-[32px] min-[1100px]:text-[96px]">
                           {p.missedPerMonth}
                         </span>
                       </div>
-                      <div data-tile="lost" className="flex items-baseline justify-between gap-3 border-b border-line py-2 max-[599.98px]:flex-col max-[599.98px]:items-stretch max-[599.98px]:gap-0 min-[1100px]:flex-1 min-[1100px]:items-center min-[1100px]:py-8">
+                      <div data-tile="lost" className="flex items-baseline justify-between gap-3 border-b border-line py-2 min-[1100px]:flex-1 min-[1100px]:items-center min-[1100px]:py-8">
                         <span className="whitespace-nowrap text-[13px] text-muted min-[1100px]:text-[17px]">{COPY.yours.rows.lost}</span>
-                        <span data-tile-value data-figure="hero" className="font-medium leading-none text-muted text-[32px] max-[599.98px]:self-end min-[1100px]:text-[96px]">
+                        <span data-tile-value data-figure="hero" className="font-medium leading-none text-muted text-[32px] min-[1100px]:text-[96px]">
                           {usd(p.lost)}
                         </span>
                       </div>

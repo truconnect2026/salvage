@@ -1,4 +1,4 @@
-import { Fragment, type CSSProperties } from "react";
+import { Fragment } from "react";
 
 import { COPY, type CaughtEntry, type Preset } from "@/lib/client.config";
 
@@ -295,7 +295,7 @@ function CallScreen({ preset, bizName, showBanner }: { preset: Preset; bizName: 
   return (
     <div
       data-call
-      className="absolute inset-0 z-30 hidden flex-col items-center overflow-hidden rounded-[44px] font-phone"
+      className="absolute inset-0 z-30 hidden flex-col items-center overflow-hidden font-phone"
       style={{ background: "linear-gradient(180deg, #071021 0%, #0B1830 100%)" }}
     >
       {/* Status glyphs persist — the hardware doesn't vanish during a call. */}
@@ -476,24 +476,25 @@ export default function Phone({
   const skinText = (t: string) =>
     skinThread && !live ? t.replace(preset.bizName, effectiveBizName) : t;
 
-  /* change 26 (C4): one grounded shadow on every instance — the inner
-     specular line lives on the masked border element, not here. */
-  const bezelShadow: CSSProperties = {
-    boxShadow: "0 40px 60px rgba(0,0,0,0.35), 0 4px 6px rgba(0,0,0,0.6)",
-  };
+  /* change 35 (A1): the titanium band. One gradient, reused by the nubs, so
+     the rim and the hardware read as a single machined piece. The device's
+     shadow pair lives in globals.css on [data-phone-rim], not here: the A5
+     entry grows it from the bare contact shadow, and an inline box-shadow
+     would outrank the rule that does the growing. */
+  const RIM = "linear-gradient(135deg, #C9CDD3 0%, #6B7078 45%, #2A2E34 100%)";
 
   const screenContent = (
     <>
-      {/* change 30 (B1): the Dynamic Island — 126x37 pill, r18.5, pure
-          black, centered, 11px off the screen top. The status items sit
-          beside it at its height. */}
+      {/* change 30 (B1) / change 35 (A3): the Dynamic Island — 118x34
+          pill, r17, pure black, centered, 10px off the screen top. The
+          status items sit beside it at its height. */}
       <div
         data-island
-        className="absolute left-1/2 top-[11px] z-40 h-[37px] w-[126px] -translate-x-1/2 rounded-[18.5px] bg-black"
+        className="absolute left-1/2 top-[10px] z-40 h-[34px] w-[118px] -translate-x-1/2 rounded-[17px] bg-black"
       />
 
       {/* Status row — centered on the Island's band. */}
-      <div className="relative z-10 flex h-[48px] shrink-0 items-center justify-between px-6 pt-[11px]">
+      <div className="relative z-10 flex h-[46px] shrink-0 items-center justify-between px-6 pt-[10px]">
         <span className="text-[13px] font-semibold tabular-nums text-white">
           {COPY.chrome.phone.statusTime}
         </span>
@@ -501,7 +502,7 @@ export default function Phone({
       </div>
 
       {/* Contact header */}
-      <div data-phone-header className="shrink-0 border-b border-line bg-surface-2 px-6 pb-3 pt-2 text-center">
+      <div data-phone-header className="shrink-0 border-b border-line bg-surface-2 px-6 pb-2 pt-2 text-center">
         <div
           {...(live ? { "data-biz-name": true } : staticId ? { "data-crop-biz": staticId } : {})}
           className={`text-[15px] leading-tight ${headerGhost ? "font-normal italic text-muted" : "font-semibold text-ink"}`}
@@ -511,30 +512,62 @@ export default function Phone({
         <div className="mt-0.5 text-[11px] text-muted">{COPY.chrome.textMessageLabel}</div>
       </div>
 
+      {/* change 35 (B1): iOS's new-conversation contact block. A real
+          thread does not open on a bubble — it opens on who you are
+          talking to. Top-anchored, above the thread's own mask ramp (the
+          ramp fades the THREAD under it, never this), with the thread
+          directly beneath it. Present on every instance. */}
+      {/* The OG crop is the ONE instance without it: that composition is a
+          screenshot of a settled thread's TAIL, and nobody scrolled to the
+          bottom of a conversation can see its contact block. Cropping it in
+          would also cost the OG its second bubble, which is the exchange
+          the thumbnail exists to show. */}
+      {aspect && (
+      <div data-contact-block className="flex shrink-0 flex-col items-center px-4 pb-1 pt-6">
+        <div
+          data-contact-avatar
+          className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--accent-soft,#162A44)]"
+        >
+          <span data-contact-initials className="text-[22px] font-semibold text-[var(--accent,#8AA0B4)]">
+            {initialsOf(effectiveBizName)}
+          </span>
+        </div>
+        <div data-contact-name className="mt-1.5 max-w-full truncate px-2 text-[17px] font-semibold leading-tight text-ink">
+          {effectiveBizName}
+        </div>
+        <div aria-hidden="true" className="mt-0.5 text-[13px] leading-none text-muted">
+          ›
+        </div>
+      </div>
+      )}
+
       {/* The thread box. The call card is gone (change 11, step 3): it
           carried the owner's POV. The thread opens directly with the
           business's auto-text at its timestamp; the banner beat fills
           t=0-5.6, so the first thread frame is never an empty box. */}
       <div
         {...markEither("data-thread-viewport", "data-s-viewport")}
-        className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-5 pt-4"
+        className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-3 pt-4"
       >
         <div
-          /* overflow-hidden matters: an overflowing justify-end box spills
-             past its START edge, so without it a thread taller than the
-             box would spill over the contact header at very narrow widths.
+          /* overflow-hidden matters: a thread taller than the box would
+             otherwise spill over the compose bar at very narrow widths.
              Clipped, it degrades like a scrolled thread.
              change 13 (S2a): STATIC instances anchor the thread to the TOP —
              their device bleeds off the section bottom, so the thread must
-             start at its first bubble and clip from the bottom, never the
-             top. The live phone keeps the bottom-anchored real-thread look. */
-          className={`flex min-h-0 flex-1 flex-col overflow-hidden ${
-            aspect && live ? "justify-end" : "justify-start"
-          }`}
+             start at its first bubble and clip from the bottom. change 35
+             (B1) puts the live instance on the same anchor. */
+          /* change 35 (B1): TOP-anchored at every instance. A thread
+             shorter than its box sits under the contact block with the
+             slack below it — bottom-anchoring a short thread opens a gap
+             in the middle of the screen that iOS never shows. A thread
+             taller than its box still clips from the bottom the way a
+             scrolled one does. */
+          className="flex min-h-0 flex-1 flex-col overflow-hidden justify-start"
         >
-          {/* change 28 (E1): a static reference phone opens its thread 16px
-              under the header; the live playback instance keeps 12. */}
-          <div {...markEither("data-thread-area", "data-s-thread-area")} className={`flex flex-col ${aspect && live ? "pt-3" : "pt-4"}`}>
+          {/* change 35 (B1): no gap of its own — the contact block above
+              and the thread box's own 16px top pad set the opening. */}
+          <div {...markEither("data-thread-area", "data-s-thread-area")} className="flex flex-col">
             {thread.map((b, i) => {
               const prev = thread[i - 1];
               const next = thread[i + 1];
@@ -551,11 +584,11 @@ export default function Phone({
                     {...mark({ "data-row": i })}
                     className={`flex flex-col ${i === 0 ? "" : senderChange ? "mt-2" : "mt-0.5"}`}
                   >
-                    {senderChange && (
-                      <div className="pb-1.5 pt-2 text-center text-[11px] tabular-nums text-muted">
+                    {i === 0 && (
+                      <div data-thread-stamp className="pb-1.5 pt-1 text-center text-[11px] tabular-nums text-muted">
                         {/* change 17 (C3): "Today " before the thread's
                             opening timestamp only — iOS's day marker. */}
-                        {i === 0 && <span className="font-semibold">{COPY.chrome.todayPrefix}</span>}
+                        <span className="font-semibold">{COPY.chrome.todayPrefix}</span>
                         {b.time}
                       </div>
                     )}
@@ -615,7 +648,7 @@ export default function Phone({
       {/* change 26 (C1): the iOS compose bar — 36px field, camera left,
           mic in the field's right end. Scenery; the call screen overlays
           it during the open. */}
-      <div data-compose className="flex shrink-0 items-center gap-2.5 px-3 pb-8 pt-1.5 font-phone">
+      <div data-compose className="flex shrink-0 items-center gap-2.5 px-3 pb-6 pt-1.5 font-phone">
         {/* change 30 (B4): the circled "+" — 28px surface-3 disc, 14px
             stroke plus. */}
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-3">
@@ -692,29 +725,31 @@ export default function Phone({
     </>
   );
 
-  /* change 16 (A1): the SCREEN lays out at a 390px design width — text,
-     bubbles, banner, status row, notch, home bar, call screen all in design
-     px — and the whole screen zooms to the rendered device width (change
-     14's screenshot method, moved onto the screen itself). Width and zoom
-     live in globals.css on [data-phone-screen]; only the design HEIGHT
-     differs per mode. 874 is the aspect box's screen height mapped back to
-     design scale: (390 × 19.5/9 − 24) ÷ ((390 − 24) / 390) ≈ 874.8, floored
-     so the zoomed screen never overflows the bezel. */
-  const DESIGN_ZOOM = (390 - 24) / 390;
+  /* change 16 (A1) / change 35 (A1): the SCREEN lays out at a 360px design
+     width — text, bubbles, banner, status row, island, home bar, call
+     screen all in design px — and the whole screen zooms to the rendered
+     screen width as ONE unit. 360 is the 390 body less the 15px rim+glass
+     inset on each side, so at a full-size device the zoom is exactly 1 and
+     every design px is a rendered px. Width, zoom and the aspect mode
+     design HEIGHT live in globals.css on [data-phone-screen]; the OG crop
+     mode sets its height inline. */
 
   if (!aspect) {
     /* OG crop mode: fixed rendered screen height, device cropped by the
-       canvas — the design height is that height mapped back to design px. */
+       canvas. At the 390 render width the screen zoom is 1, so the design
+       height IS the rendered height. */
     return (
       <div data-phone-device data-client-world className="w-[390px] max-w-full shrink-0">
-        <div className="relative rounded-[56px] bg-[#05090F] p-3 ring-1 ring-inset ring-line/60" style={bezelShadow}>
-          <div data-screen-fit>
-            <div
-              data-phone-screen
-              className="relative flex flex-col overflow-hidden rounded-[44px] bg-surface font-phone"
-              style={{ height: Math.round(screenMinHeight / DESIGN_ZOOM) }}
-            >
-              {screenContent}
+        <div data-phone-rim className="relative rounded-[55px] p-[2px]" style={{ background: RIM }}>
+          <div data-phone-glass className="rounded-[53px] bg-[#050608] p-[13px]">
+            <div data-screen-fit="og" className="overflow-hidden rounded-[40px]">
+              <div
+                data-phone-screen
+                className="relative flex flex-col overflow-hidden bg-surface font-phone"
+                style={{ height: screenMinHeight }}
+              >
+                {screenContent}
+              </div>
             </div>
           </div>
         </div>
@@ -722,15 +757,17 @@ export default function Phone({
     );
   }
 
-  /* The real device: 19.5:9 box (gate 46), 12px bezel, 44px design-scale
-     screen radius inside a 56px outer radius (C1d). Height always follows
-     width; the screen zooms uniformly inside the bezel. */
+  /* change 35 (A1): the real device — a 390x810 body (ratio 2.077, gate
+     194) in three layers, outermost first: a 2px titanium RIM at r55, 13px
+     of GLASS at r53, and the SCREEN at r40, inset 15 from the body edge on
+     all four sides. Height always follows width; the screen zooms
+     uniformly inside the glass. */
   return (
     <div
       data-phone-device
       data-client-world
       {...(live ? {} : { "data-phone-static": true })}
-      className="relative mx-auto aspect-[9/19.5] w-full max-w-[390px] shrink-0"
+      className="relative mx-auto aspect-[390/810] w-full max-w-[390px] shrink-0"
     >
       {/* z -1: the device wrapper creates no stacking context, so the slab
           and rings escape BEHIND the section's content — a flex `order`ed
@@ -761,50 +798,30 @@ export default function Phone({
           <circle data-sonar-ring="1" cx="1400" cy="1400" r="0" fill="none" stroke="var(--accent, var(--color-teal))" strokeWidth="1" opacity="0" />
         </svg>
       )}
-      {/* change 17 (B1): hardware nubs — two volume (44px, 14px gap) left,
-          one power (64px) right, 6px proud of the frame, one step lighter
-          than the bezel. Aluminum, not UI. */}
-      {/* change 33 (B6): nubs sit 3px proud OUTSIDE the bezel silhouette,
-          in the bezel's own colour with a 1px lighter top edge. They never
-          reach the screen — the bezel's 12px padding is between. */}
-      <div aria-hidden="true" data-nub className="absolute -left-[3px] top-[168px] h-11 w-[3px] rounded-l-[2px] border-t border-t-[#1E3A5C] bg-[#0B1220]" />
-      <div aria-hidden="true" data-nub className="absolute -left-[3px] top-[226px] h-11 w-[3px] rounded-l-[2px] border-t border-t-[#1E3A5C] bg-[#0B1220]" />
-      <div aria-hidden="true" data-nub className="absolute -right-[3px] top-[186px] h-16 w-[3px] rounded-r-[2px] border-t border-t-[#1E3A5C] bg-[#0B1220]" />
+      {/* change 35 (A2): three nubs ON the rim, in the rim gradient — two
+          volume (30 tall, 10 apart, from 92) left, one power (56, from 104)
+          right, 2.5px proud. Nothing else on the body: the change-33
+          two-tone frame and the change-17 masked specular are both gone,
+          because the rim gradient IS the specular now. */}
+      <div aria-hidden="true" data-nub className="absolute -left-[2.5px] top-[92px] h-[30px] w-[2.5px] rounded-l-[2px]" style={{ background: RIM }} />
+      <div aria-hidden="true" data-nub className="absolute -left-[2.5px] top-[132px] h-[30px] w-[2.5px] rounded-l-[2px]" style={{ background: RIM }} />
+      <div aria-hidden="true" data-nub className="absolute -right-[2.5px] top-[104px] h-[56px] w-[2.5px] rounded-r-[2px]" style={{ background: RIM }} />
 
-      {/* change 33 (B6): a TWO-TONE frame — a 1px surface-3 outer edge over
-          the darker #0B1220 bezel, so the device reads as an object with a
-          machined rim rather than one flat slab. */}
       <div
-        data-phone-frame
-        className="absolute inset-0 rounded-[57px] bg-surface-3 p-px"
-        style={bezelShadow}
+        data-phone-rim
+        className="absolute inset-0 rounded-[55px] p-[2px]"
+        style={{ background: RIM }}
       >
-      <div className="h-full w-full rounded-[56px] bg-[#0B1220] p-3">
-        {/* change 17 (B1): 1px inner specular — white 8% fading out along
-            the top and left edges only, drawn as a masked gradient border. */}
-        <div
-          aria-hidden="true"
-          data-specular
-          className="pointer-events-none absolute inset-0 z-10 rounded-[56px]"
-          style={{
-            padding: 1,
-            background: "linear-gradient(135deg, rgba(255,255,255,0.08), transparent 55%)",
-            WebkitMask: "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
-            WebkitMaskComposite: "xor",
-            mask: "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
-            maskComposite: "exclude",
-          }}
-        />
-        <div data-screen-fit className="flex h-full items-center justify-center">
-          <div
-            data-phone-screen
-            className="relative flex flex-col overflow-hidden rounded-[44px] bg-surface font-phone"
-            style={{ height: 874 }}
-          >
-            {screenContent}
+        <div data-phone-glass className="h-full w-full rounded-[53px] bg-[#050608] p-[13px]">
+          <div data-screen-fit="aspect" className="overflow-hidden rounded-[40px]">
+            <div
+              data-phone-screen
+              className="relative flex flex-col overflow-hidden bg-surface font-phone"
+            >
+              {screenContent}
+            </div>
           </div>
         </div>
-      </div>
       </div>
     </div>
   );

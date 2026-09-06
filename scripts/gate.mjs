@@ -554,6 +554,7 @@ const BROWSER_GATES = [
   178, 179, 180, 181, 190,
   182, 183, 184, 185, 186, 187, 188, 189,
   191, 192, 193,
+  194, 195, 196, 197, 198,
 ];
 
 if (!chromium) {
@@ -1395,7 +1396,7 @@ if (!chromium) {
     );
   });
 
-  /* --- 46 + 47: device fidelity — 19.5:9 box, system stack inside the
+  /* --- 46 + 47: device fidelity — 390:810 body, system stack inside the
    * screen, Fraunces outside it. --- */
   await block("device-fidelity", async () => {
     const rows = [];
@@ -1425,12 +1426,16 @@ if (!chromium) {
       await ctx.close();
     }
 
-    const TARGET = 19.5 / 9;
+    /* change 35 (A6): the body is the PHYSICAL device now — 390x810,
+       ratio 2.077 (the iPhone 15 Pro is 146.6 x 70.6mm). The 19.5:9 the
+       box used to carry is the DISPLAY ratio, and the display now lives
+       inside it at 360x780 = 2.167. */
+    const TARGET = 810 / 390;
     const aspectOk = (g) =>
       g != null && Number.isFinite(g.ratio) && g.ratio > 0 && Math.abs(g.ratio - TARGET) / TARGET <= 0.01;
     check(
       46,
-      "phone box aspect 19.5:9 within 1% at 390x844 and 1440x900",
+      "phone body aspect 390:810 (2.077) within 1% at 390x844 and 1440x900",
       rows.length === 2 && rows.every((r) => aspectOk(r.g)),
       rows
         .map(
@@ -3124,11 +3129,13 @@ if (!chromium) {
       await ctx.close();
     }
 
-    const WANT = 17 / 390;
+    /* change 35 (A1): the design screen is 360 wide — 390 body less the
+       15px rim+glass inset on each side. */
+    const WANT = 17 / 360;
     const ratioOk = (g) => g != null && Number.isFinite(g.ratio) && Math.abs(g.ratio - WANT) / WANT <= 0.02;
     check(
       91,
-      "first-bubble rendered font-size ÷ rendered screen width === 17/390 ±2%, both viewports",
+      "first-bubble rendered font-size ÷ rendered screen width === 17/360 ±2%, both viewports",
       reads.length === 2 && reads.every((r) => ratioOk(r.g)),
       reads
         .map(
@@ -3303,6 +3310,10 @@ if (!chromium) {
         const tr = tile.getBoundingClientRect();
         for (const el of yours.querySelectorAll("*")) {
           if (tile.contains(el) || el.contains(tile)) continue;
+          /* change 35 (C3): the trade glyph is the panel WATERMARK now —
+             240px, bottom-right, deliberately behind the rows at 12%.
+             Gate 196 owns its placement and its opacity ceiling. */
+          if (el.hasAttribute("data-trade-glyph")) continue;
           const hasText = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
           if (!hasText && !el.hasAttribute("data-phone-device") && el.tagName !== "svg") continue;
           if (vis(el) <= 0.1) continue;
@@ -3326,7 +3337,7 @@ if (!chromium) {
     }, EFF);
     check(
       94,
-      "section 3 mobile: 3 tiles fully visible, nothing intersects them, phone top > cue band bottom",
+      "section 3 mobile: 3 tiles fully visible, nothing intersects them (the 12% trade watermark excepted — gate 196 owns it), phone top > cue band bottom",
       g94 != null &&
         g94.tiles === 3 &&
         g94.tilesInside === true &&
@@ -3484,27 +3495,30 @@ if (!chromium) {
         const r = n.getBoundingClientRect();
         return r.right <= sr.left + 0.5 || r.left >= sr.right - 0.5;
       });
-      const spec = dev.querySelector("[data-specular]");
+      /* change 35 (A2): "nothing else on the body" retired the masked
+         specular border — the rim gradient is the specular now (gate 194
+         asserts the gradient). The screen streak stays: it is glass, not
+         body. */
       const streak = dev.querySelector("[data-screen-streak]");
       return {
         nubs: nubs.length,
         outside,
-        specular: spec ? getComputedStyle(spec).pointerEvents : null,
+        specular: dev.querySelector("[data-specular]") ? "present" : "gone",
         streak: streak ? getComputedStyle(streak).pointerEvents : null,
       };
     });
     check(
       102,
-      "3 nub elements with boxes outside the screen area; bezel specular + screen streak present with pointer-events none",
+      "3 nub elements with boxes outside the screen area; screen streak present with pointer-events none; the change-17 masked bezel specular is GONE (change 35 A2 — the rim gradient replaced it)",
       g102 != null &&
         g102.nubs === 3 &&
         g102.outside === true &&
-        g102.specular === "none" &&
+        g102.specular === "gone" &&
         g102.streak === "none",
       g102 == null
         ? "device nodes not found"
-        : `${g102.nubs} nub(s) (need 3), outside screen ${g102.outside}; specular pointer-events ${JSON.stringify(g102.specular)}, ` +
-          `streak ${JSON.stringify(g102.streak)} (both need "none")`,
+        : `${g102.nubs} nub(s) (need 3), outside screen ${g102.outside}; bezel specular ${g102.specular} (need "gone"), ` +
+          `streak pointer-events ${JSON.stringify(g102.streak)} (need "none")`,
     );
 
     /* Banner pass: t=4.8, the banner is landed and clamped. */
@@ -3909,17 +3923,18 @@ if (!chromium) {
                 hard,
             };
           }
-          /* Amended (change 30, A1): the mobile band widens so the folio
-             (and the preset labels) sit fully ON it with >= 16px clearance —
-             left 0, right >= folio right + 16, <= 70% of the section. */
+          /* Amended (change 35, C2): the mobile s3 band is FULL-BLEED —
+             the whole section ground, both safe areas. The change-30 rule
+             (a band wide enough to carry the folio) is subsumed: at 100%
+             every element in the section sits on it. */
           const folio3 = sec.querySelector("[data-folio]");
           const fr = folio3 ? folio3.getBoundingClientRect().right : 0;
           return {
             id,
             left: +(sr.left - secR.left).toFixed(1),
-            right: +sr.right.toFixed(1),
+            widthPct: +((sr.width / secR.width) * 100).toFixed(1),
             folioRight: +fr.toFixed(1),
-            ok: Math.abs(sr.left - secR.left) <= 1 && sr.right >= fr + 16 && sr.width <= 0.7 * secR.width && hard,
+            ok: Math.abs(sr.left - secR.left) <= 1 && Math.abs(sr.width - secR.width) <= 1 && hard,
           };
         });
 
@@ -4052,7 +4067,7 @@ if (!chromium) {
 
     check(
       112,
-      "accent slabs — 390 (change 33): s1 a 60%±1 band at left 0, s3 a band at left 0 clearing the folio; 1440 (change 28): both bands at column-left − 48, s1 cut 30-36%, s3 right at 40vw±2; hard edges",
+      "accent slabs — 390: s1 a 60%±1 band at left 0 (change 33), s3 FULL-BLEED at 100%±1 of the section (change 35); 1440 (change 28): both bands at column-left − 48, s1 cut 30-36%, s3 right at 40vw±2; hard edges",
       both((g) => g.slabs.every((s) => s.ok)),
       detail((g) => g.slabs.map((sl) => `${sl.id}: ${JSON.stringify(sl)}`).join(", ")),
     );
@@ -6385,6 +6400,11 @@ if (!chromium) {
       const ecs = entry ? getComputedStyle(entry) : null;
       const flaps = [...document.querySelectorAll('[data-flap="digit"]')];
       const flapBg = [...new Set(flaps.map((el) => getComputedStyle(el).backgroundColor))];
+      /* change 35 (D2): the tiles carry the fill; the board behind them
+         must stay bare, or the "per-digit tile" reading collapses back
+         into one lozenge. */
+      const board = document.querySelector("[data-flap-board]");
+      const boardBg = board ? getComputedStyle(board).backgroundColor : null;
       const since = document.querySelector("[data-since-strip]");
       const saveSec = document.querySelector('[data-section="save"]');
       const saveBottom = saveSec ? saveSec.getBoundingClientRect().bottom : null;
@@ -6404,6 +6424,7 @@ if (!chromium) {
         entryRuleColor: ecs ? ecs.borderLeftColor : null,
         accent: getComputedStyle(document.querySelector("[data-demo]")).getPropertyValue("--accent").trim(),
         flapBg,
+        boardBg,
         sinceBottom: since ? +since.getBoundingClientRect().bottom.toFixed(1) : null,
         sectionBottom: saveBottom == null ? null : +saveBottom.toFixed(1),
         vh: innerHeight,
@@ -6424,17 +6445,18 @@ if (!chromium) {
     };
     check(
       186,
-      "mobile section 2 (390x744): no h1; the owner entry carries a 2px accent left rule; the flap tiles share no container fill; the since-install row closes >= 16px above the fold",
+      "mobile section 2 (390x744): no h1; the owner entry carries a 2px accent left rule; every flap carries its OWN tile fill and the board behind them carries none (change 35, D2); the since-install row closes >= 16px above the fold",
       gM.h1Visible === false &&
         gM.entryRule === "2px" &&
         gM.entryRuleColor === hexToRgb(gM.accent) &&
         gM.flapBg.length === 1 &&
-        gM.flapBg[0] === "rgba(0, 0, 0, 0)" &&
+        gM.flapBg[0] !== "rgba(0, 0, 0, 0)" &&
+        gM.boardBg === "rgba(0, 0, 0, 0)" &&
         gM.sinceBottom != null &&
         gM.sectionBottom != null &&
         gM.sinceBottom <= gM.sectionBottom - 16,
       `h1 visible ${gM.h1Visible} (need false); entry rule ${gM.entryRule} ${gM.entryRuleColor} (need 2px ${hexToRgb(gM.accent)}); ` +
-        `flap backgrounds ${JSON.stringify(gM.flapBg)} (need one, transparent); since-install bottom ${gM.sinceBottom} vs section fold ${gM.sectionBottom == null ? "?" : gM.sectionBottom - 16}`,
+        `flap tile fills ${JSON.stringify(gM.flapBg)} (need exactly one, NOT transparent), board fill ${gM.boardBg} (need transparent); since-install bottom ${gM.sinceBottom} vs section fold ${gM.sectionBottom == null ? "?" : gM.sectionBottom - 16}`,
     );
     check(
       187,
@@ -6779,7 +6801,12 @@ if (!chromium) {
             otherOpacities: [...new Set(others.map((p) => getComputedStyle(p.querySelector("[data-panel-content]")).opacity))],
             activeLeft: +active.getBoundingClientRect().left.toFixed(1),
             spine: +spine.toFixed(1),
-            glyphInside: gr.right <= col.right + 1 && gr.left >= col.left - 1,
+            /* change 35 (C3): the glyph is the panel WATERMARK — 240px,
+               bottom-right, clipped to the panel. It still lives inside
+               [data-panel-content], which is what keeps the peek showing
+               ground and nothing else. */
+            glyphInside:
+              gr.right <= col.right + 1 && gr.left >= col.left - 1 && gr.bottom <= col.bottom + 1,
             glyphW: Math.round(gr.width),
           };
         }, biz),
@@ -6788,7 +6815,7 @@ if (!chromium) {
     }
     check(
       192,
-      "section 3 at rest (390): every NON-active panel's content is at opacity 0 (the peek shows ground only); the active panel's left edge is the spine ±1; the trade glyph sits inside the content column",
+      "section 3 at rest (390): every NON-active panel's content is at opacity 0 (the peek shows ground only); the active panel's left edge is the spine ±1; the 240px trade-glyph watermark sits inside the content column",
       reads192.every(
         (r) =>
           r.g.activeOpacity === "1" &&
@@ -6796,7 +6823,7 @@ if (!chromium) {
           r.g.otherOpacities[0] === "0" &&
           Math.abs(r.g.activeLeft - r.g.spine) <= 1 &&
           r.g.glyphInside === true &&
-          Math.abs(r.g.glyphW - 40) <= 1,
+          Math.abs(r.g.glyphW - 240) <= 1,
       ),
       reads192
         .map((r) => `${r.biz}: active ${r.g.activeOpacity}, others ${JSON.stringify(r.g.otherOpacities)}, left ${r.g.activeLeft} vs spine ${r.g.spine}, glyph inside ${r.g.glyphInside} @${r.g.glyphW}px`)
@@ -6838,6 +6865,343 @@ if (!chromium) {
         (r) => r.g != null && r.g.lines <= 2 && r.g.lines >= 1 && r.g.whiteSpace === "normal" && r.g.clipped === false && r.g.overflow !== "ellipsis",
       ),
       reads193.map((r) => `${r.biz}: ${r.g?.lines} line(s), white-space ${r.g?.whiteSpace}, text-overflow ${r.g?.overflow}, clipped ${r.g?.clipped}`).join(" | "),
+    );
+  });
+
+  /* --- 194-198: change 35 — the device, the thread, the ground. --- */
+  await block("device-35", async () => {
+    const initialsOf = (name) =>
+      name
+        .split(/\s+/)
+        .map((w) => w[0] ?? "")
+        .join("")
+        .replace(/[^A-Za-z]/g, "")
+        .slice(0, 2)
+        .toUpperCase();
+
+    /* 194: the device is three layers and nothing else. */
+    const reads194 = [];
+    for (const vp of [
+      { w: 390, h: 844 },
+      { w: 1440, h: 900 },
+    ]) {
+      const c = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, reducedMotion: "reduce" });
+      const pg = await c.newPage();
+      await pg.goto(base, { waitUntil: "domcontentloaded" });
+      await pg.evaluate(() => document.fonts.ready);
+      reads194.push({
+        vp: vp.w + "x" + vp.h,
+        g: await pg.evaluate(() => {
+          const dev = document.querySelector('[data-section="call"] [data-phone-device]');
+          const rim = dev && dev.querySelector("[data-phone-rim]");
+          const glass = dev && dev.querySelector("[data-phone-glass]");
+          const scr = dev && dev.querySelector("[data-phone-screen]");
+          if (!dev || !rim || !glass || !scr) return null;
+          const d = dev.getBoundingClientRect();
+          const sr = scr.getBoundingClientRect();
+          /* BODY chrome only: the compose field and the contact header
+             carry borders by design, and those are SCREEN, not body. */
+          const outlines = [];
+          for (const el of dev.querySelectorAll("*")) {
+            if (el === scr || scr.contains(el)) continue;
+            const cs = getComputedStyle(el);
+            if (cs.outlineStyle !== "none" && parseFloat(cs.outlineWidth) > 0) {
+              outlines.push("outline on " + el.tagName + "[" + (el.getAttribute("data-nub") != null ? "nub" : el.getAttribute("class") || "") + "]");
+              continue;
+            }
+            const sides = ["Top", "Right", "Bottom", "Left"];
+            const w = sides.map((k) => parseFloat(cs["border" + k + "Width"]) || 0);
+            const col = sides.map((k) => cs["border" + k + "Color"]);
+            if (w.every((v) => v > 0) && col.every((v) => !/rgba\(0, 0, 0, 0\)/.test(v))) {
+              outlines.push("4-side border on " + el.tagName);
+            }
+          }
+          return {
+            ratio: d.height / d.width,
+            inset: [sr.left - d.left, d.right - sr.right, sr.top - d.top, d.bottom - sr.bottom].map((v) => +v.toFixed(2)),
+            rimGradient: /gradient/.test(getComputedStyle(rim).backgroundImage),
+            glassBg: getComputedStyle(glass).backgroundColor,
+            nubW: [...dev.querySelectorAll("[data-nub]")].map((n) => +n.getBoundingClientRect().width.toFixed(2)),
+            outlines,
+          };
+        }),
+      });
+      await c.close();
+    }
+    check(
+      194,
+      "device: body ratio 2.077 ±0.01; screen inset 15 ±0.5 on all four sides; the rim computes a gradient background; the glass computes #050608; three nubs 2.5 ±0.5 wide; NO full-perimeter outline anywhere on the body (outline, or a four-side border, outside the screen)",
+      reads194.length === 2 &&
+        reads194.every(
+          (r) =>
+            r.g != null &&
+            Math.abs(r.g.ratio - 2.077) <= 0.01 &&
+            r.g.inset.every((v) => Math.abs(v - 15) <= 0.5) &&
+            r.g.rimGradient === true &&
+            r.g.glassBg === "rgb(5, 6, 8)" &&
+            r.g.nubW.length === 3 &&
+            r.g.nubW.every((v) => Math.abs(v - 2.5) <= 0.5) &&
+            r.g.outlines.length === 0,
+        ),
+      reads194
+        .map((r) =>
+          r.g == null
+            ? r.vp + ": device layers not found"
+            : r.vp +
+              ": ratio " +
+              r.g.ratio.toFixed(4) +
+              " (need 2.077±0.01), inset [l,r,t,b] " +
+              JSON.stringify(r.g.inset) +
+              " (need 15±0.5), rim gradient " +
+              r.g.rimGradient +
+              ", glass " +
+              r.g.glassBg +
+              ' (need "rgb(5, 6, 8)"), nubs ' +
+              JSON.stringify(r.g.nubW) +
+              ", perimeter outlines " +
+              JSON.stringify(r.g.outlines),
+        )
+        .join(" | "),
+    );
+
+    /* 195: the contact block, on every thread instance, live to the name. */
+    const reads195 = [];
+    for (const vp of [
+      { w: 390, h: 844 },
+      { w: 1440, h: 900 },
+    ]) {
+      const c = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, reducedMotion: "reduce" });
+      const pg = await c.newPage();
+      await pg.goto(base, { waitUntil: "domcontentloaded" });
+      await pg.evaluate(() => document.fonts.ready);
+      await pg.waitForFunction(() => document.querySelectorAll("[data-panel]").length === 4);
+      const rows = await pg.evaluate((src) => {
+        const initials = new Function("name", src);
+        return [...document.querySelectorAll("[data-phone-device]")].map((dev) => {
+          const block = dev.querySelector("[data-contact-block]");
+          const b0 = dev.querySelector("[data-bubble], [data-s-bubble]");
+          const nameEl = block && block.querySelector("[data-contact-name]");
+          const initEl = block && block.querySelector("[data-contact-initials]");
+          const sec = dev.closest("[data-section]");
+          return {
+            sec: sec ? sec.dataset.section : "?",
+            hasBlock: !!block,
+            above: block && b0 ? block.getBoundingClientRect().bottom <= b0.getBoundingClientRect().top + 0.5 : false,
+            name: nameEl ? nameEl.textContent.trim() : null,
+            initials: initEl ? initEl.textContent.trim() : null,
+            match: nameEl && initEl ? initEl.textContent.trim() === initials(nameEl.textContent.trim()) : false,
+          };
+        });
+      }, "return name.split(/\\s+/).map(function(w){return w[0]||''}).join('').replace(/[^A-Za-z]/g,'').slice(0,2).toUpperCase();");
+
+      /* The live read: type a name, and the block must carry it inside
+         300ms — the same budget the header and the thread skin run on. */
+      await goSection(pg, 2);
+      await pg.fill("[data-name-input]", "Blue Anchor Studio");
+      await pg.waitForTimeout(300);
+      const typed = await pg.evaluate(() => {
+        const b = document.querySelector('[data-section="yours"] [data-contact-block]');
+        const n = b && b.querySelector("[data-contact-name]");
+        const i = b && b.querySelector("[data-contact-initials]");
+        return { name: n ? n.textContent.trim() : null, initials: i ? i.textContent.trim() : null };
+      });
+      reads195.push({ vp: vp.w + "x" + vp.h, rows, typed });
+      await c.close();
+    }
+    check(
+      195,
+      'thread: a contact block sits above bubble[0] on EVERY phone instance, its avatar initials are the block name’s own initials, and typing a business name lands on it within 300ms',
+      reads195.every(
+        (r) =>
+          r.rows.length >= 2 &&
+          r.rows.every((x) => x.hasBlock && x.above && x.match) &&
+          r.typed.name === "Blue Anchor Studio" &&
+          r.typed.initials === "BA",
+      ),
+      reads195
+        .map(
+          (r) =>
+            r.vp +
+            ": " +
+            r.rows.length +
+            " instance(s) " +
+            JSON.stringify(r.rows.map((x) => x.sec + ":" + (x.hasBlock ? "block" : "NONE") + "/" + (x.above ? "above" : "BELOW") + "/" + x.initials + "=" + x.name)) +
+            " -> after typing " +
+            JSON.stringify(r.typed) +
+            ' (need {"Blue Anchor Studio","BA"})',
+        )
+        .join(" | "),
+    );
+
+    /* 196: the mobile section-3 ground, watermark and name field. */
+    const reads196 = [];
+    for (const biz of ["salon", "home", "dental", "other"]) {
+      const c = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
+      const pg = await c.newPage();
+      await pg.goto(base + "/?biz=" + biz, { waitUntil: "domcontentloaded" });
+      await pg.evaluate(() => document.fonts.ready);
+      await pg.waitForFunction(() => document.querySelectorAll("[data-panel]").length === 4);
+      await goSection(pg, 2);
+      await pg.waitForTimeout(700);
+      reads196.push({
+        biz,
+        g: await pg.evaluate((id) => {
+          const sec = document.querySelector('[data-section="yours"]');
+          const slab = sec.querySelector(":scope > [data-accent-slab]");
+          const panel = sec.querySelector('[data-panel][data-preset="' + id + '"]');
+          const glyph = panel.querySelector("[data-trade-glyph]");
+          const pr = panel.getBoundingClientRect();
+          const gr = glyph.getBoundingClientRect();
+          const input = document.querySelector("[data-name-input]");
+          const cs = getComputedStyle(input);
+          const probe = document.createElement("span");
+          probe.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;font:" + cs.font;
+          probe.textContent = input.placeholder;
+          document.body.appendChild(probe);
+          const textW = probe.getBoundingClientRect().width;
+          probe.remove();
+          return {
+            slabW: +slab.getBoundingClientRect().width.toFixed(1),
+            viewportW: innerWidth,
+            glyphW: Math.round(gr.width),
+            glyphOpacity: parseFloat(getComputedStyle(glyph).opacity),
+            /* The watermark is taller than a short panel by design: it is
+               CLIPPED to the panel, not contained by it. So the assertion
+               is the clip (the content box hides its overflow) plus the two
+               edges it is anchored to. */
+            clipped: getComputedStyle(glyph.parentElement).overflow === "hidden",
+            glyphInPanel: gr.left >= pr.left - 1 && gr.right <= pr.right + 1 && gr.bottom <= pr.bottom + 1,
+            value: input.placeholder,
+            valueW: +textW.toFixed(1),
+            fieldW: input.clientWidth,
+            unclipped: textW <= input.clientWidth + 0.5,
+          };
+        }, biz),
+      });
+      await c.close();
+    }
+    check(
+      196,
+      "section 3 at 390: the slab width IS the viewport width; the trade-glyph watermark is clipped to its panel, anchored to its bottom-right, at opacity <= 0.14; the name field renders its default value unclipped — all four presets",
+      reads196.every(
+        (r) =>
+          Math.abs(r.g.slabW - r.g.viewportW) <= 0.5 &&
+          r.g.glyphInPanel === true &&
+          r.g.clipped === true &&
+          r.g.glyphOpacity <= 0.14 &&
+          r.g.unclipped === true,
+      ),
+      reads196
+        .map(
+          (r) =>
+            r.biz +
+            ": slab " +
+            r.g.slabW +
+            " vs viewport " +
+            r.g.viewportW +
+            ", watermark " +
+            r.g.glyphW +
+            "px in-panel " +
+            r.g.glyphInPanel +
+            " clipped " +
+            r.g.clipped +
+            " @opacity " +
+            r.g.glyphOpacity +
+            ", value " +
+            JSON.stringify(r.g.value) +
+            " " +
+            r.g.valueW +
+            "px in " +
+            r.g.fieldW +
+            "px -> unclipped " +
+            r.g.unclipped,
+        )
+        .join(" | "),
+    );
+
+    /* 197: section 2 lays out to the VISUAL viewport, not the window. The
+       height is forced through visualViewport itself, so the assertion is
+       about --vh doing its job and not about the window size. */
+    const reads197 = [];
+    for (const H of [740, 844]) {
+      const c = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
+      const pg = await c.newPage();
+      await pg.addInitScript((forced) => {
+        Object.defineProperty(window.visualViewport, "height", { get: () => forced, configurable: true });
+      }, H);
+      await pg.goto(base, { waitUntil: "domcontentloaded" });
+      await pg.evaluate(() => document.fonts.ready);
+      await pg.evaluate(() => window.visualViewport.dispatchEvent(new Event("resize")));
+      await pg.waitForTimeout(150);
+      await goSection(pg, 1);
+      await pg.waitForTimeout(250);
+      reads197.push({
+        H,
+        g: await pg.evaluate(() => {
+          const sec = document.querySelector('[data-section="save"]');
+          const strip = sec.querySelector("[data-since-strip]");
+          const r = strip.getBoundingClientRect();
+          const sr = sec.getBoundingClientRect();
+          return {
+            vh: getComputedStyle(document.documentElement).getPropertyValue("--vh").trim(),
+            sectionH: +sr.height.toFixed(1),
+            stripBottom: +(r.bottom - sr.top).toFixed(1),
+          };
+        }),
+      });
+      await c.close();
+    }
+    check(
+      197,
+      "section 2 at 390 with visualViewport.height forced to 740 AND 844: the section lays out to that height and the since-install strip closes at least 12px above its bottom edge",
+      reads197.every((r) => r.g.vh === r.H + "px" && Math.abs(r.g.sectionH - r.H) <= 1 && r.g.stripBottom <= r.H - 12),
+      reads197
+        .map((r) => "vv " + r.H + ": --vh " + r.g.vh + ", section " + r.g.sectionH + ", since-install bottom " + r.g.stripBottom + " (need <= " + (r.H - 12) + ")")
+        .join(" | "),
+    );
+
+    /* 198: ink on the new accentSoft ground. */
+    const reads198 = [];
+    for (const biz of ["salon", "home", "dental", "other"]) {
+      const c = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
+      const pg = await c.newPage();
+      await pg.goto(base + "/?biz=" + biz, { waitUntil: "domcontentloaded" });
+      await pg.evaluate(() => document.fonts.ready);
+      await pg.waitForFunction(() => document.querySelectorAll("[data-panel]").length === 4);
+      await goSection(pg, 2);
+      await pg.waitForTimeout(700);
+      reads198.push({
+        biz,
+        g: await pg.evaluate((id) => {
+          const sec = document.querySelector('[data-section="yours"]');
+          const slab = sec.querySelector(":scope > [data-accent-slab]");
+          const label = sec.querySelector('[data-panel][data-preset="' + id + '"] [data-tile="ticket"] > span');
+          return {
+            ground: getComputedStyle(slab).backgroundColor,
+            ink: getComputedStyle(label).color,
+          };
+        }, biz),
+      });
+      await c.close();
+    }
+    const lum198 = (rgb) => {
+      const m = rgb.match(/\d+/g).map(Number);
+      const f = (v) => {
+        const x = v / 255;
+        return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+      };
+      return 0.2126 * f(m[0]) + 0.7152 * f(m[1]) + 0.0722 * f(m[2]);
+    };
+    const ratio198 = (a, b) => {
+      const la = lum198(a);
+      const lb = lum198(b);
+      return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+    };
+    check(
+      198,
+      "ink on accentSoft measures >= 7:1 on the rendered section-3 ground — all four presets",
+      reads198.every((r) => ratio198(r.g.ground, r.g.ink) >= 7),
+      reads198.map((r) => r.biz + ": " + r.g.ink + " on " + r.g.ground + " -> " + ratio198(r.g.ground, r.g.ink).toFixed(2) + ":1").join(" | "),
     );
   });
 
