@@ -7456,12 +7456,25 @@ if (!chromium) {
           const i = panels.findIndex((p) => p.dataset.preset === id);
           const next = panels[i + 1];
           if (!next) return null;
+          /* change 38 (A): the GLYPH is what shows in the peek now. The
+             label must be fully out, and no fragment of it may be painted
+             inside the peek zone — the strip of the next panel that is
+             actually on screen. */
+          const glyph = next.querySelector("[data-trade-glyph]");
           const label = next.querySelector("[data-panel-label]");
-          const others = [...next.querySelectorAll("[data-panel-body], [data-trade-glyph]")];
+          const others = [...next.querySelectorAll("[data-panel-body]"), label];
+          const trackR = track.getBoundingClientRect();
+          const labelR = label.getBoundingClientRect();
+          const inZone = labelR.left < trackR.right && labelR.right > trackR.left;
           return {
             nextId: next.dataset.preset,
             labelText: label.textContent.trim(),
+            glyphOpacity: +parseFloat(getComputedStyle(glyph).opacity).toFixed(3),
+            glyphW: Math.round(glyph.getBoundingClientRect().width),
             labelOpacity: +parseFloat(getComputedStyle(label).opacity).toFixed(3),
+            /* A label box that overlaps the visible strip is only a fault if
+               it is actually painted — at opacity 0 nothing is on screen. */
+            labelPaintedInZone: inZone && parseFloat(getComputedStyle(label).opacity) > 0.02,
             otherOpacities: [...new Set(others.map((el) => +parseFloat(getComputedStyle(el).opacity).toFixed(3)))],
           };
         }, biz),
@@ -7470,12 +7483,17 @@ if (!chromium) {
     }
     check(
       202,
-      "section 3 at rest (390): the NEXT panel's trade label renders at 0.4 ±0.05 in the peek; every other piece of that panel's content is at <= 0.05",
+      "section 3 at rest (390): the NEXT panel's 24px trade GLYPH renders at 0.4 ±0.05 in the peek; its label and body are at <= 0.05, and no fragment of the label is painted in the peek zone",
       reads202.every(
-        (r) => r.g != null && Math.abs(r.g.labelOpacity - 0.4) <= 0.05 && r.g.otherOpacities.every((o) => o <= 0.05),
+        (r) =>
+          r.g != null &&
+          Math.abs(r.g.glyphOpacity - 0.4) <= 0.05 &&
+          Math.abs(r.g.glyphW - 24) <= 1 &&
+          r.g.labelPaintedInZone === false &&
+          r.g.otherOpacities.every((o) => o <= 0.05),
       ),
       reads202
-        .map((r) => r.biz + " -> next " + (r.g ? r.g.nextId + ' "' + r.g.labelText + '" @' + r.g.labelOpacity + ", rest " + JSON.stringify(r.g.otherOpacities) : "no next panel"))
+        .map((r) => r.biz + " -> next " + (r.g ? r.g.nextId + " glyph " + r.g.glyphW + "px @" + r.g.glyphOpacity + ', label "' + r.g.labelText + '" @' + r.g.labelOpacity + " painted-in-zone " + r.g.labelPaintedInZone + ", rest " + JSON.stringify(r.g.otherOpacities) : "no next panel"))
         .join(" | "),
     );
 

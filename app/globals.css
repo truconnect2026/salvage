@@ -136,11 +136,12 @@ body {
   }
 }
 
-/* change 36 (E1): the peek shows the next trade's LABEL at 40% and nothing
-   else. A name sliding in from the edge says "there is another one of these
-   and it is called Home" — which is what the retired cue line said in
-   words. The track's existing IntersectionObserver flips this; no second
-   clock, and opacity lives on the two halves so the label is never
+/* change 36 (E1) / change 38 (A): the peek shows the next trade's GLYPH at
+   40% and nothing else. The glyph leads the panel head now, so it is what
+   the 12% zone contains whole; the label goes to zero there, because a
+   name entering three letters at a time reads as a rendering fault rather
+   than an affordance. The track's existing IntersectionObserver flips
+   this; no second clock, and opacity lives on the parts so neither is
    multiplied down by a faded parent. */
 [data-section="yours"] [data-panel] [data-panel-body],
 [data-section="yours"] [data-panel] [data-panel-label],
@@ -149,10 +150,10 @@ body {
 }
 @media (max-width: 1099.98px) {
   [data-section="yours"] [data-panel][data-peek="hidden"] [data-panel-body],
-  [data-section="yours"] [data-panel][data-peek="hidden"] [data-trade-glyph] {
+  [data-section="yours"] [data-panel][data-peek="hidden"] [data-panel-label] {
     opacity: 0;
   }
-  [data-section="yours"] [data-panel][data-peek="hidden"] [data-panel-label] {
+  [data-section="yours"] [data-panel][data-peek="hidden"] [data-trade-glyph] {
     opacity: 0.4;
   }
 }

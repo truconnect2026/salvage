@@ -1964,6 +1964,67 @@ export default function Demo({
       aria-label={COPY.a11y.pager}
       style={{ "--accent": preset.accent, "--accent-soft": preset.accentSoft, "--accent-ink": preset.accentInk } as CSSProperties}
     >
+      <div data-top-cluster data-chrome="cluster" className="fixed right-3 top-3 z-40 flex gap-3 min-[1100px]:right-10 min-[1100px]:top-6">
+        <button
+          data-share
+          data-rail-share
+          type="button"
+          onClick={onShare}
+          title={COPY.shareLabel}
+          aria-label={COPY.a11y.share}
+          className={`flex h-5 w-5 items-center justify-center bg-transparent text-ink outline-none transition-opacity hover:opacity-100 focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
+            share === "copied" ? "opacity-100" : "opacity-60"
+          }`}
+        >
+          <ShareGlyph />
+        </button>
+
+        <button
+          data-sound-toggle
+          data-on={soundOn ? "true" : "false"}
+          type="button"
+          onClick={onSoundToggle}
+          title={soundOn ? COPY.a11y.soundOn : COPY.a11y.soundOff}
+          aria-label={soundOn ? COPY.a11y.soundOn : COPY.a11y.soundOff}
+          aria-pressed={soundOn}
+          className={`flex h-5 w-5 items-center justify-center bg-transparent text-ink outline-none transition-opacity focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
+            soundOn ? "opacity-100" : "opacity-60"
+          }`}
+        >
+          <SpeakerGlyph on={soundOn} />
+        </button>
+      </div>
+
+      {toastOn && (
+        <div
+          data-sound-toast
+          className="fixed right-3 top-10 z-40 text-[12px] text-muted min-[1100px]:right-10 min-[1100px]:top-16"
+        >
+          {COPY.a11y.tapForSound}
+        </div>
+      )}
+
+      {/* change 36 (A1) / change 37: the rail is gone at EVERY width. It
+          indexed four sections without indicating anything — no active
+          fill, on a page that snaps — and mobile had already proved
+          nothing was missing without it. */}
+
+      {/* The caret is the one piece of wayfinding, bottom centre at every
+          width. */}
+      <button
+        data-rail-next
+        data-chrome="caret"
+        type="button"
+        onClick={() => goSection(activeSection + 1)}
+        aria-label={COPY.a11y.next}
+        className={`fixed bottom-2 left-1/2 z-40 flex h-8 w-5 -translate-x-1/2 items-center justify-center text-teal outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-teal-bright ${
+          activeSection >= SECTIONS.length - 1 ? "hidden" : ""
+        }`}
+      >
+        <span className={caretBob ? "rail-bob" : ""}>
+          <ChevronGlyph />
+        </span>
+      </button>
       {/* ---- SECTION 1 — the call. The phone; at >=1100px the scene type
            sits left of it (change 15, A2), all three lines on the one clock. ---- */}
       <section data-section="call">
@@ -2382,8 +2443,8 @@ export default function Demo({
                         inline to the right. The HEAD is what shows in the
                         peek; the BODY is what does not. */}
                     <div data-panel-head className="flex items-center gap-2">
-                      <p data-panel-label className="w-fit font-display text-[28px] font-medium leading-[1.02] tracking-[-0.01em] text-[var(--accent,#E9EEF4)] min-[1100px]:text-[44px]">{p.label}</p>
                       <TradeGlyph id={p.id} />
+                      <p data-panel-label className="w-fit font-display text-[28px] font-medium leading-[1.02] tracking-[-0.01em] text-[var(--accent,#E9EEF4)] min-[1100px]:text-[44px]">{p.label}</p>
                     </div>
                     <div data-panel-body className="flex min-h-0 flex-col">
                     {/* change 19 (B9): the fourth preset explains itself. */}
@@ -2638,67 +2699,6 @@ export default function Demo({
           (rail inside the 40px right column, content padded 56px) stands. */}
       {/* change 36 (A2): glyph-only. No box, no stroke, ink at 60% — and
           sound-on is ink at 100%, which is the whole state machine. */}
-      <div data-top-cluster data-chrome="cluster" className="fixed right-3 top-3 z-40 flex gap-3 min-[1100px]:right-10 min-[1100px]:top-6">
-        <button
-          data-share
-          data-rail-share
-          type="button"
-          onClick={onShare}
-          title={COPY.shareLabel}
-          aria-label={COPY.a11y.share}
-          className={`flex h-5 w-5 items-center justify-center bg-transparent text-ink outline-none transition-opacity hover:opacity-100 focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
-            share === "copied" ? "opacity-100" : "opacity-60"
-          }`}
-        >
-          <ShareGlyph />
-        </button>
-
-        <button
-          data-sound-toggle
-          data-on={soundOn ? "true" : "false"}
-          type="button"
-          onClick={onSoundToggle}
-          title={soundOn ? COPY.a11y.soundOn : COPY.a11y.soundOff}
-          aria-label={soundOn ? COPY.a11y.soundOn : COPY.a11y.soundOff}
-          aria-pressed={soundOn}
-          className={`flex h-5 w-5 items-center justify-center bg-transparent text-ink outline-none transition-opacity focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
-            soundOn ? "opacity-100" : "opacity-60"
-          }`}
-        >
-          <SpeakerGlyph on={soundOn} />
-        </button>
-      </div>
-
-      {toastOn && (
-        <div
-          data-sound-toast
-          className="fixed right-3 top-10 z-40 text-[12px] text-muted min-[1100px]:right-10 min-[1100px]:top-16"
-        >
-          {COPY.a11y.tapForSound}
-        </div>
-      )}
-
-      {/* change 36 (A1) / change 37: the rail is gone at EVERY width. It
-          indexed four sections without indicating anything — no active
-          fill, on a page that snaps — and mobile had already proved
-          nothing was missing without it. */}
-
-      {/* The caret is the one piece of wayfinding, bottom centre at every
-          width. */}
-      <button
-        data-rail-next
-        data-chrome="caret"
-        type="button"
-        onClick={() => goSection(activeSection + 1)}
-        aria-label={COPY.a11y.next}
-        className={`fixed bottom-2 left-1/2 z-40 flex h-8 w-5 -translate-x-1/2 items-center justify-center text-teal outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-teal-bright ${
-          activeSection >= SECTIONS.length - 1 ? "hidden" : ""
-        }`}
-      >
-        <span className={caretBob ? "rail-bob" : ""}>
-          <ChevronGlyph />
-        </span>
-      </button>
     </main>
   );
 }
