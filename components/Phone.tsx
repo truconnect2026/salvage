@@ -244,7 +244,7 @@ function TypingRow({ index, right }: { index: number; right: boolean }) {
     <div data-typing={index} className={`mt-2 hidden ${right ? "justify-end" : "justify-start"}`}>
       <div
         className={`flex items-center gap-[5px] rounded-[20px] px-3.5 py-3 ${
-          right ? "bg-[#34C759]" : "bg-[#26252A]"
+          right ? "bg-[#34C759]" : "bg-[#3A3A3C]"
         }`}
       >
         {[0, 1, 2].map((d) => (
@@ -512,7 +512,7 @@ export default function Phone({
       </div>
 
       {/* Contact header */}
-      <div data-phone-header className="shrink-0 border-b border-line bg-surface-2 px-6 pb-2 pt-2 text-center">
+      <div data-phone-header className="shrink-0 border-b border-b-white/10 bg-[#1C1C1E] px-6 pb-2 pt-2 text-center">
         <div
           {...(live ? { "data-biz-name": true } : staticId ? { "data-crop-biz": staticId } : {})}
           className={`text-[15px] leading-tight ${headerGhost ? "font-normal italic text-muted" : "font-semibold text-ink"}`}
@@ -627,18 +627,20 @@ export default function Phone({
                       </div>
                     ) : (
                       <div className="flex flex-col items-start">
-                        {/* change 36 (B1): the incoming bubble is iOS
-                            dark-mode gray on white text. The trade accent
-                            is off the bubbles for good — it was the loudest
-                            thing in the screen and the least authentic. */}
+                        {/* change 36 (B1) / change 37: the incoming bubble
+                            is iOS dark-mode gray on white text. #3A3A3C is
+                            systemGray5 dark — the gray Apple pairs with the
+                            black ground this screen now uses; change 36's
+                            #26252A was picked for the navy one and reads
+                            1.38 against black, under gate 105's floor. */}
                         <div
                           {...markEither("data-bubble", "data-s-bubble", "business")}
-                          className={`relative max-w-[72%] rounded-[20px] bg-[#26252A] pb-[9px] pl-3 pr-3 pt-2 text-[15px] leading-[1.27] text-white ${
+                          className={`relative max-w-[72%] rounded-[20px] bg-[#3A3A3C] pb-[9px] pl-3 pr-3 pt-2 text-[15px] leading-[1.27] text-white ${
                             runEnd ? "rounded-bl-[6px]" : ""
                           }`}
                         >
                           {skinText(b.text)}
-                          {runEnd && <BubbleTail side="left" color="#26252A" />}
+                          {runEnd && <BubbleTail side="left" color="#3A3A3C" />}
                         </div>
                         {i === 0 && (
                           <div
@@ -670,12 +672,12 @@ export default function Phone({
       <div data-compose className="flex shrink-0 items-center gap-2.5 px-3 pb-6 pt-1.5 font-phone">
         {/* change 30 (B4): the circled "+" — 28px surface-3 disc, 14px
             stroke plus. */}
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-3">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#2C2C2E]">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#8AA0B4" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
             <path d="M7 1.5v11M1.5 7h11" />
           </svg>
         </span>
-        <div className="relative flex h-9 min-w-0 flex-1 items-center rounded-[18px] border border-line bg-surface-2 pl-3.5 pr-9">
+        <div className="relative flex h-9 min-w-0 flex-1 items-center rounded-[18px] border border-white/10 bg-[#1C1C1E] pl-3.5 pr-9">
           <span className="truncate text-[16px] text-ink opacity-60">{COPY.chrome.composePlaceholder}</span>
           <svg className="absolute right-2.5" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#8AA0B4" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
             <rect x="6.6" y="1.5" width="4.8" height="9" rx="2.4" fill="#8AA0B4" stroke="none" />
@@ -764,7 +766,7 @@ export default function Phone({
             <div data-screen-fit="og" className="overflow-hidden rounded-[40px]">
               <div
                 data-phone-screen
-                className="relative flex flex-col overflow-hidden bg-surface font-phone"
+                className="relative flex flex-col overflow-hidden bg-black font-phone"
                 style={{ height: screenMinHeight }}
               >
                 {screenContent}
@@ -835,7 +837,7 @@ export default function Phone({
           <div data-screen-fit="aspect" className="overflow-hidden rounded-[40px]">
             <div
               data-phone-screen
-              className="relative flex flex-col overflow-hidden bg-surface font-phone"
+              className="relative flex flex-col overflow-hidden bg-black font-phone"
             >
               {screenContent}
             </div>

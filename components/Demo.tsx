@@ -1951,13 +1951,6 @@ export default function Demo({
     name ? `Show me Salvage for ${name}` : "Show me Salvage",
   )}`;
 
-  /* change 31 (1) / change 36 (A1): ONE dot on the page, and now ONE
-     state. 6px, teal at 40%, no active fill — a position indicator does
-     not need to compete with the section it is indexing. The section-3
-     switcher dots are gone entirely (A6); the tabs are the switcher. */
-  const pagerDot = () =>
-    "h-1.5 w-1.5 rounded-[2px] border border-teal/40 bg-transparent outline-none focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2";
-
   return (
     /* The pager (A1): the ONLY vertical scroller on the page. html/body are
        overflow:hidden; the snap properties live in globals.css. */
@@ -2685,39 +2678,20 @@ export default function Demo({
         </div>
       )}
 
-      {/* change 36 (A1): the rail is GONE on mobile — the sections snap,
-          and four dots plus a chevron on a 390px screen were four more
-          nouns than the gesture needed. Desktop keeps the four squares as
-          a quiet index. */}
-      <div
-        data-rail
-        data-chrome="rail"
-        className="fixed right-10 top-1/2 z-40 hidden -translate-y-1/2 flex-col items-center gap-4 min-[1100px]:flex"
-      >
-        <div className="my-1 flex flex-col gap-3">
-          {SECTIONS.map((s, i) => (
-            <button
-              key={s.id}
-              type="button"
-              data-pager-dot
-              data-active={activeSection === i ? "true" : "false"}
-              aria-label={`${COPY.a11y.dot} ${i + 1}`}
-              onClick={() => goSection(i)}
-              className={pagerDot()}
-            />
-          ))}
-        </div>
-      </div>
+      {/* change 36 (A1) / change 37: the rail is gone at EVERY width. It
+          indexed four sections without indicating anything — no active
+          fill, on a page that snaps — and mobile had already proved
+          nothing was missing without it. */}
 
-      {/* The caret is the one piece of wayfinding at every width: bottom
-          centre on mobile, under the rail on desktop. */}
+      {/* The caret is the one piece of wayfinding, bottom centre at every
+          width. */}
       <button
         data-rail-next
         data-chrome="caret"
         type="button"
         onClick={() => goSection(activeSection + 1)}
         aria-label={COPY.a11y.next}
-        className={`fixed bottom-2 left-1/2 z-40 flex h-8 w-5 -translate-x-1/2 items-center justify-center text-teal outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-teal-bright min-[1100px]:bottom-auto min-[1100px]:left-auto min-[1100px]:right-10 min-[1100px]:top-[calc(50%+52px)] min-[1100px]:translate-x-0 ${
+        className={`fixed bottom-2 left-1/2 z-40 flex h-8 w-5 -translate-x-1/2 items-center justify-center text-teal outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-teal-bright ${
           activeSection >= SECTIONS.length - 1 ? "hidden" : ""
         }`}
       >

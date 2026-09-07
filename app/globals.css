@@ -242,11 +242,13 @@ body {
 /* change 19 (B1): +40px of reserve — the mobile caption block sits above
    the device inside the same column. change 36 (C1/A1): +52 more — the beat
    strip is a new row under the phone, and the caret moved to the bottom
-   centre where the settled controls used to end. */
+   centre where the settled controls used to end. change 37: +24 more — with
+   the rail cut the caret is the only fixed control, and it was sitting on
+   top of the "Your side" button. */
 @media (max-width: 1099.98px) {
   [data-section="call"] [data-phone-device] {
-    max-width: min(390px, calc((100vh - 306px) * 390 / 810));
-    max-width: min(390px, calc((100dvh - 306px) * 390 / 810));
+    max-width: min(390px, calc((100vh - 330px) * 390 / 810));
+    max-width: min(390px, calc((100dvh - 330px) * 390 / 810));
     /* change 33 (B2): CENTERED in the content column. The slab is a
        section band at the viewport's left edge now (B1), so the device no
        longer has to buy folio clearance with a gutter bleed. */
@@ -258,8 +260,8 @@ body {
    clears the Replay control band. */
 @media (max-width: 1099.98px) and (max-height: 720px) {
   [data-section="call"] [data-phone-device] {
-    max-width: min(390px, calc((100vh - 362px) * 390 / 810));
-    max-width: min(390px, calc((100dvh - 362px) * 390 / 810));
+    max-width: min(390px, calc((100vh - 386px) * 390 / 810));
+    max-width: min(390px, calc((100dvh - 386px) * 390 / 810));
   }
 }
 

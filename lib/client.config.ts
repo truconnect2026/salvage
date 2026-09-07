@@ -156,7 +156,7 @@ export const COPY = {
   tabs: { salon: "Salon", home: "Home", dental: "Dental", other: "Other" },
   a11y: {
     pager: "Demo sections",
-    dot: "Go to section",
+    // change 37: a11y.dot retired with the rail squares it labelled.
     panelDot: "Go to panel",
     share: "Copy demo link",
     next: "Next section",

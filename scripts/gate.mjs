@@ -2097,19 +2097,7 @@ if (!chromium) {
       };
     });
 
-    check(
-      /* Amended (change 36, A1): the dots keep their four positions and
-         their one active MARKER, but no fill — a position indicator on a
-         page that snaps does not need to compete with the section. */
-      71,
-      "exactly four progress dots, exactly one marked active, and no filled dot",
-      dots.count === 4 &&
-        dots.activeCount === 1 &&
-        dots.activeBg !== dots.teal &&
-        dots.inactiveBgs.every((c) => c !== dots.teal),
-      `${dots.count} dot(s) (need 4), ${dots.activeCount} active (need 1); active bg ${dots.activeBg} ` +
-        `(must NOT be teal ${dots.teal}); inactive bgs ${JSON.stringify(dots.inactiveBgs)}`,
-    );
+    retired(71, "change 37: the rail is cut — there are no progress dots left to count");
     await ctx71.close();
   });
 
@@ -2356,10 +2344,12 @@ if (!chromium) {
     await page.keyboard.press("ArrowDown");
     await page.waitForTimeout(900);
     const afterDown = await page.evaluate(() => {
-      const dots = [...document.querySelectorAll("[data-pager-dot]")];
+      /* change 37: the rail dots are gone, so the landing is read from the
+         pager itself — which is the thing the key press actually moves. */
+      const pager = document.querySelector("[data-pager]");
       return {
-        activeIdx: dots.findIndex((d) => d.getAttribute("data-active") === "true"),
-        scrollTop: document.querySelector("[data-pager]").scrollTop,
+        activeIdx: Math.round(pager.scrollTop / pager.clientHeight),
+        scrollTop: pager.scrollTop,
         vh: window.innerHeight,
       };
     });
@@ -2376,11 +2366,11 @@ if (!chromium) {
 
     check(
       70,
-      "ArrowDown from section 1 lands on section 2 (active dot index 1); ArrowRight in section 3 advances the track one panel",
+      "ArrowDown from section 1 lands on section 2 (pager index 1); ArrowRight in section 3 advances the track one panel",
       afterDown.activeIdx === 1 &&
         Math.abs(afterDown.scrollTop - afterDown.vh) <= 2 &&
         Math.abs(afterRight.left - afterRight.w) <= 2,
-      `after ArrowDown: active dot ${afterDown.activeIdx} (need 1), pager scrollTop ${afterDown.scrollTop} ` +
+      `after ArrowDown: pager index ${afterDown.activeIdx} (need 1), scrollTop ${afterDown.scrollTop} ` +
         `(need ~${afterDown.vh}); after ArrowRight in section 3: track scrollLeft ${afterRight.left} (need ~${afterRight.w})`,
     );
     await ctx.close();
@@ -2406,7 +2396,8 @@ if (!chromium) {
         calls.push(opts && typeof opts === "object" ? (opts.behavior ?? null) : null);
         return orig.call(this, opts);
       };
-      document.querySelectorAll("[data-pager-dot]")[2].click();
+      /* change 37: the caret is the one wayfinding control left. */
+      document.querySelector("[data-rail-next]").click();
       Element.prototype.scrollIntoView = orig;
       return {
         snapType: getComputedStyle(document.querySelector("[data-pager]")).scrollSnapType,
@@ -2416,7 +2407,7 @@ if (!chromium) {
 
     check(
       72,
-      'reduced motion: pager snap-type still "y mandatory"; a dot click calls scrollIntoView with behavior "auto" (spy)',
+      'reduced motion: pager snap-type still "y mandatory"; a caret click calls scrollIntoView with behavior "auto" (spy)',
       g.snapType === "y mandatory" && g.calls.length === 1 && g.calls[0] === "auto",
       `snap ${JSON.stringify(g.snapType)} (need "y mandatory"); scrollIntoView calls ${JSON.stringify(g.calls)} ` +
         `(need exactly ["auto"])`,
@@ -2818,6 +2809,7 @@ if (!chromium) {
              prominence, is the claim. */
           next: q("[data-rail-next]", 0.2),
           dots: document.querySelectorAll("[data-pager-dot]").length,
+          rail: document.querySelector("[data-rail]") != null,
         };
       }, EFF);
 
@@ -2847,9 +2839,11 @@ if (!chromium) {
 
       check(
         86,
-        `rail at ${vp.w}x${vp.h}: share + sound + chevron present with 4 dots; chevron hidden on section 4; rail share copies the ?biz&name deep link`,
-        present.share && present.sound && present.next && present.dots === 4 && onLast.nextVisible === false && clipOk,
-        `share ${present.share}, sound ${present.sound}, next ${present.next}, dots ${present.dots} (need 4); ` +
+        /* Amended (change 37): no rail, no dots — share, sound and the
+           caret are the whole set of persistent controls. */
+        `page chrome at ${vp.w}x${vp.h}: share + sound + chevron present, ZERO dots and no rail; chevron hidden on section 4; share copies the ?biz&name deep link`,
+        present.share && present.sound && present.next && present.dots === 0 && present.rail === false && onLast.nextVisible === false && clipOk,
+        `share ${present.share}, sound ${present.sound}, next ${present.next}, dots ${present.dots} (need 0), rail ${present.rail} (need false); ` +
           `next visible on section 4: ${onLast.nextVisible} (need false); clipboard ${JSON.stringify(clip)}`,
       );
       await ctx.close();
@@ -3209,15 +3203,23 @@ if (!chromium) {
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
 
-    /* 93: nothing renders under the rail, any section. */
+    /* 93 (amended, change 37): nothing renders under the CARET — the rail
+       it used to police is gone, and the caret is the one fixed control
+       sitting over the sections. */
     const railHits = [];
     for (let i = 0; i < 4; i++) {
       await goSection(page, i);
       const hits = await page.evaluate((EFF) => {
         const vis = eval(EFF);
-        const rail = document.querySelector("[data-rail]");
-        if (!rail) return ["no [data-rail]"];
+        const rail = document.querySelector("[data-rail-next]");
+        if (!rail) return ["no [data-rail-next]"];
         const rr = rail.getBoundingClientRect();
+        if (rr.width === 0 || rr.height === 0) return [];
+        /* The section-3 phone is bottom-anchored with a deliberate bleed
+           off the section (change 15, A4) — the caret floating over its
+           lower edge is the composition, not a collision. Everything that
+           is not inside that device must still clear it. */
+        const bleeding = document.querySelector('[data-section="yours"] [data-phone-device]');
         const sec = [...document.querySelectorAll("[data-section]")].find((s) => {
           const r = s.getBoundingClientRect();
           return r.top > -10 && r.top < 10;
@@ -3248,6 +3250,7 @@ if (!chromium) {
         const bad = [];
         for (const el of sec.querySelectorAll("*")) {
           if (rail.contains(el)) continue;
+          if (bleeding && (bleeding === el || bleeding.contains(el))) continue;
           if (el.getAttribute("aria-hidden") === "true" || el.closest('[aria-hidden="true"]')) continue;
           const hasText = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
           const isBox =
@@ -3265,7 +3268,7 @@ if (!chromium) {
     }
     check(
       93,
-      "390x844: no content box intersects the rail box, any section",
+      "390x844: no content box intersects the caret box, any section (the section-3 device, which bleeds off the section by design, is scoped out)",
       railHits.length === 0,
       railHits.length === 0 ? "0 intersections across 4 sections" : railHits.slice(0, 6).join(" | "),
     );
@@ -3591,20 +3594,18 @@ if (!chromium) {
       const dist = Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2);
       return { bb, sb, ratio, mask, dist, lighter: l1 > l2 };
     });
-    /* Amended (change 36, B1): the incoming bubble is iOS dark-mode gray
-       (#26252A) on the navy screen ground. Those two separate the way iOS
-       bubbles do — a warm neutral a step above a cool ground — which a pure
-       LUMINANCE ratio cannot see (it reads 1.10). The claim is the same one
-       it always was, measured the way this pairing actually works: the
-       bubble must be perceptibly distinct from the ground AND the lighter
-       of the two, so it still reads as sitting on top of it. */
+    /* change 37: RESTORED to the original 1.4 luminance floor. The measure
+       was only ever weakened because #3A3A3C sat on the brand's navy; on
+       the black ground iOS actually uses, the pairing clears the bar the
+       gate was written with. The distance and lighter-of-the-two readings
+       stay in the detail line. */
     check(
       105,
-      "business bubble is perceptibly distinct from the screen ground (RGB distance >= 18) and is the LIGHTER of the two, so it reads as sitting on it",
-      g105 != null && g105.dist >= 18 && g105.lighter === true,
+      "business bubble computed bg sits >= 2 luminance steps over the screen ground (contrast ratio >= 1.4)",
+      g105 != null && g105.ratio >= 1.4,
       g105 == null
         ? "bubble/screen not found"
-        : `bubble ${g105.bb} vs screen ${g105.sb} -> distance ${g105.dist.toFixed(1)} (need >= 18), bubble lighter ${g105.lighter}; luminance ratio ${g105.ratio.toFixed(3)} (reported)`,
+        : `bubble ${g105.bb} vs screen ${g105.sb} -> contrast ${g105.ratio.toFixed(3)} (need >= 1.4); distance ${g105.dist.toFixed(1)}, bubble lighter ${g105.lighter}`,
     );
     check(
       106,
@@ -4131,28 +4132,24 @@ if (!chromium) {
     /* Amended (change 27, B5/C4): 7px squares below 1100, 8px at desktop;
        cluster 28px below 1100, 32px at desktop. */
     check(
-      /* Amended (change 36, A1/A2): the rail is DESKTOP-ONLY and carries
-         the four dots alone — the caret is its own fixed control, bottom
-         centre on mobile. The cluster is two 20px glyphs with no box. */
+      /* Amended (change 37): there is no rail at any width. The persistent
+         chrome is exactly three controls — share, sound, and the caret. */
       118,
-      "desktop rail = four 6px squares (radius <= 2px) and nothing else; the caret is a separate 1px-stroke control; cluster = two 20px glyph buttons with no border",
-      reads.filter((r) => !r.vp.startsWith("390")).every((r) => {
+      "no rail exists at either viewport; the caret is a 1px-stroke control; cluster = two 20px glyph buttons with no border",
+      reads.every((r) => {
         const g = r.g;
         if (!g) return false;
-        const dot = 6;
-        const cl = 20;
         return (
-          g.dotBoxes.length === 4 &&
-          g.dotBoxes.every((d) => Math.abs(d.w - dot) <= 1 && Math.abs(d.h - dot) <= 1 && d.rad <= 2) &&
-          g.railButtons === 4 &&
+          g.dotBoxes.length === 0 &&
+          g.railButtons === 0 &&
           g.caretStroke === "1" &&
           g.clusterBoxes.length === 2 &&
-          g.clusterBoxes.every((b) => Math.abs(b.w - cl) <= 1 && Math.abs(b.h - cl) <= 1)
+          g.clusterBoxes.every((b) => Math.abs(b.w - 20) <= 1 && Math.abs(b.h - 20) <= 1)
         );
       }),
       detail(
         (g) =>
-          `dots ${JSON.stringify(g.dotBoxes)}; rail buttons ${g.railButtons} (4 dots + caret = 5); caret stroke ${JSON.stringify(g.caretStroke)}; cluster ${JSON.stringify(g.clusterBoxes)}`,
+          `dots ${g.dotBoxes.length} (need 0); rail buttons ${g.railButtons} (need 0); caret stroke ${JSON.stringify(g.caretStroke)}; cluster ${JSON.stringify(g.clusterBoxes)}`,
       ),
     );
 
@@ -4687,14 +4684,14 @@ if (!chromium) {
        (nothing in the screen resolves to accent but the avatar and tag). */
     check(
       131,
-      "incoming bubble bg === #26252A with white text, IDENTICAL across all four presets; customer bubble bg === #34C759",
+      "incoming bubble bg === #3A3A3C with white text, IDENTICAL across all four presets; customer bubble bg === #34C759",
       rows.every(
         (r) =>
-          r.g.bizBubble === "rgb(38, 37, 42)" &&
+          r.g.bizBubble === "rgb(58, 58, 60)" &&
           r.g.bizInk === "rgb(255, 255, 255)" &&
           r.g.custBubble === "rgb(52, 199, 89)",
       ),
-      per((r) => `biz ${r.g.bizBubble} / ${r.g.bizInk} (want rgb(38, 37, 42) / white), cust ${r.g.custBubble}`),
+      per((r) => `biz ${r.g.bizBubble} / ${r.g.bizInk} (want rgb(58, 58, 60) / white), cust ${r.g.custBubble}`),
     );
     /* Amended (change 36, A7): there are no slabs. The trade colour keeps
        the sonar ring, the row[0] stamp, and the section-3 panel tint (gate
@@ -5530,13 +5527,18 @@ if (!chromium) {
         g159.anchors === 2,
       JSON.stringify(g159),
     );
-    /* 160: tab to a rail square. */
+    /* 160: tab to the caret. change 37: gate 159 leaves the page on section
+       4, where the caret is deliberately hidden and therefore unfocusable —
+       so come back to a section that has one before tabbing. */
+    await goSection(page159, 0);
+    await page159.waitForTimeout(200);
     let dotOutline = null;
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 60; i++) {
       await page159.keyboard.press("Tab");
       dotOutline = await page159.evaluate(() => {
         const el = document.activeElement;
-        if (!el?.hasAttribute?.("data-pager-dot")) return null;
+        /* change 37: the caret carries the page's focus language now. */
+        if (!el?.hasAttribute?.("data-rail-next")) return null;
         const cs = getComputedStyle(el);
         return { w: cs.outlineWidth, color: cs.outlineColor, offset: cs.outlineOffset };
       });
@@ -5544,7 +5546,7 @@ if (!chromium) {
     }
     check(
       160,
-      "keyboard focus on a rail square draws a computed 2px teal outline, 2px offset",
+      "keyboard focus on the caret draws a computed 2px teal outline, 2px offset",
       dotOutline != null && dotOutline.w === "2px" && dotOutline.offset === "2px" && dotOutline.color === "rgb(44, 199, 182)",
       `outline ${JSON.stringify(dotOutline)} (need 2px rgb(44, 199, 182) at 2px offset)`,
     );
@@ -6310,27 +6312,7 @@ if (!chromium) {
       });
       await ctx.close();
     }
-    check(
-      /* Amended (change 36, A1/A6): the section-3 switcher dots are gone
-         and the rail dots dropped to 6px with ONE state — a position
-         indicator does not need an active fill on a page that snaps. */
-      178,
-      "one dot shape: every page-chrome dot is a 6px square — radius <= 2px, one size, ONE state and no second (the iOS typing indicator inside the phone screen stays round by design and is scoped out)",
-      /* change 36 (A1): the rail is desktop-only, so the census runs where
-         the dots render. At 390 the claim is that there are NONE. */
-      reads.every((r) =>
-        r.vp.startsWith("390")
-          ? r.g.dotCount === 0
-          : r.g.dotCount >= 4 &&
-            r.g.roundCount === 0 &&
-            r.g.sizes.length === 1 &&
-            r.g.sizes[0] === "6x6" &&
-            r.g.pairs.length === 1,
-      ),
-      reads
-        .map((r) => `${r.vp}: ${r.g.dotCount} dot(s), ${r.g.roundCount} round (need 0), sizes ${JSON.stringify(r.g.sizes)} (need ["6x6"]), states ${JSON.stringify(r.g.pairs)} (need 1)`)
-        .join(" | "),
-    );
+    retired(178, "change 37: the rail is cut — the section-3 switcher dots went in change 36, so no page-chrome dot remains");
     check(
       179,
       "one link treatment: every <a> outside the phone screen (excluding the gold CTA pill) resolves to ONE {color, text-decoration-color} pair — no gray underlined links",
@@ -7336,9 +7318,14 @@ if (!chromium) {
     }
     check(
       199,
-      "noun budget: distinct [data-chrome] classes rendered inside each section stay within its ceiling — call <= 4, save <= 3, yours <= 4, math <= 3 (persistent page chrome sits outside every section and is reported, not charged)",
-      reads199.every((r) =>
-        Object.entries(CEILING).every((e) => (r.g.per[e[0]] ?? []).length <= e[1]),
+      /* change 37: the persistent chrome is ASSERTED now, and its ceiling
+         drops from three to two with the rail cut — the cluster and the
+         caret are the whole of it. */
+      "noun budget: distinct [data-chrome] classes rendered inside each section stay within its ceiling — call <= 4, save <= 3, yours <= 4, math <= 3 — and the persistent page chrome outside every section stays at <= 2",
+      reads199.every(
+        (r) =>
+          Object.entries(CEILING).every((e) => (r.g.per[e[0]] ?? []).length <= e[1]) &&
+          r.g.global.length <= 2,
       ),
       reads199
         .map(
@@ -7348,7 +7335,7 @@ if (!chromium) {
             Object.keys(CEILING)
               .map((k) => k + " " + (r.g.per[k] ?? []).length + "/" + CEILING[k] + " " + JSON.stringify(r.g.per[k] ?? []))
               .join(", ") +
-            "; persistent " + JSON.stringify(r.g.global),
+            "; persistent " + r.g.global.length + "/2 " + JSON.stringify(r.g.global),
         )
         .join(" | "),
     );
@@ -7397,10 +7384,10 @@ if (!chromium) {
     }
     check(
       200,
-      "incoming bubble bg === #26252A on white, all four presets; NO element inside the phone screen resolves to the trade accent except the contact avatar and the auto-reply tag",
+      "incoming bubble bg === #3A3A3C on white, all four presets; NO element inside the phone screen resolves to the trade accent except the contact avatar and the auto-reply tag",
       reads200.every(
         (r) =>
-          r.g.bubbleBg === "rgb(38, 37, 42)" &&
+          r.g.bubbleBg === "rgb(58, 58, 60)" &&
           r.g.bubbleColor === "rgb(255, 255, 255)" &&
           /^rgb\(\d+, \d+, \d+\)$/.test(r.g.accent ?? "") &&
           r.g.strays.length === 0,
