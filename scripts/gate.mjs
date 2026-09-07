@@ -417,9 +417,15 @@ retired(36, "change 19 gave every caught row an initialed name ('Danielle R. · 
 /* ---------- 12-20, 22-24, 26, 28-32: the live DOM ------------------------- */
 
 let chromium = null;
+let webkit = null;
 let browserError = null;
 try {
-  chromium = createRequire(import.meta.url)("playwright").chromium;
+  /* change 39 (D1): WebKit is a first-class engine here now. The real
+     device showed a scaling defect that Chromium never reproduced, so the
+     layout gates below run in BOTH and are green only if both agree. */
+  const pw = createRequire(import.meta.url)("playwright");
+  chromium = pw.chromium;
+  webkit = pw.webkit;
 } catch (err) {
   browserError = err.message;
 }
@@ -559,6 +565,7 @@ const BROWSER_GATES = [
   191, 192, 193,
   194, 195, 196, 197, 198,
   199, 200, 201, 202, 203, 204,
+  205,
 ];
 
 if (!chromium) {
@@ -567,6 +574,15 @@ if (!chromium) {
   }
 } else {
   const browser = await chromium.launch();
+  /* A WebKit instance for the dual-engine block; null if the browser is not
+     installed, which the block reports rather than silently skipping. */
+  let wkBrowser = null;
+  let wkError = null;
+  try {
+    wkBrowser = webkit ? await webkit.launch() : null;
+  } catch (err) {
+    wkError = err.message;
+  }
   const failures = [];
   /* A page that never produces a demo must report red, not throw: an uncaught
      timeout would hide which assertions were never reached. */
@@ -3142,18 +3158,9 @@ if (!chromium) {
        bubble is 15px, not 17. */
     const WANT = 15 / 360;
     const ratioOk = (g) => g != null && Number.isFinite(g.ratio) && Math.abs(g.ratio - WANT) / WANT <= 0.02;
-    check(
-      91,
-      "first-bubble rendered font-size ÷ rendered screen width === 15/360 ±2%, both viewports",
-      reads.length === 2 && reads.every((r) => ratioOk(r.g)),
-      reads
-        .map(
-          (r) =>
-            `${r.vp} -> ${r.g ? `${r.g.renderedFS.toFixed(2)}px / ${r.g.screenW.toFixed(1)}px = ${r.g.ratio?.toFixed(5)}` : "nodes missing"} ` +
-            `(want ${WANT.toFixed(5)} ±2%)`,
-        )
-        .join(" | "),
-    );
+    /* 91 moved to the dual-engine block (change 39, A3/D1): the ratio it
+       asserts is exactly what the retired zoom got wrong on the device, so
+       it has to be measured in WebKit as well as Chromium. */
 
     check(
       92,
@@ -3266,12 +3273,8 @@ if (!chromium) {
       }, EFF);
       railHits.push(...hits);
     }
-    check(
-      93,
-      "390x844: no content box intersects the caret box, any section (the section-3 device, which bleeds off the section by design, is scoped out)",
-      railHits.length === 0,
-      railHits.length === 0 ? "0 intersections across 4 sections" : railHits.slice(0, 6).join(" | "),
-    );
+    /* 93 moved to the dual-engine block (change 39, C1/D1): rewritten to
+       every section and every preset, in both engines. */
 
     /* 95: section 2 — the ledger's last line clears the fold by 16px and
        the since-install label survived the fit. */
@@ -7599,7 +7602,414 @@ if (!chromium) {
     );
   });
 
+  /* --- change 39 (D1): the dual-engine set. 46, 91, 93, 95, 194, 196, 197,
+     201 and 205 are green only if BOTH Chromium and WebKit agree. The real
+     device failed on a property Chromium rendered perfectly, so one engine
+     is no longer evidence. Gates 91, 93 and 205 are owned here outright;
+     the rest keep their Chromium implementation above and have the WebKit
+     verdict folded into it. --- */
+  await block("dual-39", async () => {
+    const VP = { width: 390, height: 844 };
+    const run = async (b, fn, opts) => {
+      const o = opts ?? {};
+      const c = await b.newContext({
+        viewport: o.vp ?? VP,
+        deviceScaleFactor: 3,
+        ...(o.ctx ?? {}),
+      });
+      const pg = await c.newPage();
+      if (o.init) await pg.addInitScript(o.init, o.initArg);
+      await pg.goto(base + (o.path ?? ""), { waitUntil: "domcontentloaded" });
+      await pg.evaluate(() => document.fonts.ready);
+      if (o.panels) await pg.waitForFunction(() => document.querySelectorAll("[data-panel]").length === 4);
+      const out = await fn(pg);
+      await c.close();
+      return out;
+    };
+
+    /* Fold a WebKit verdict into a gate the Chromium pass already recorded. */
+    const amend = (n, ok, detail) => {
+      const r = results.find((x) => x.n === n);
+      if (!r) {
+        check(n, "dual-engine fold", false, "no Chromium result to fold into — " + detail);
+        return;
+      }
+      r.name = r.name + " [BOTH ENGINES]";
+      r.detail =
+        "chromium " + (r.pass ? "PASS" : "FAIL") + ": " + r.detail + "  ||  webkit " + (ok ? "PASS" : "FAIL") + ": " + detail;
+      r.pass = r.pass && ok;
+    };
+
+    if (!wkBrowser) {
+      for (const n of [46, 91, 93, 95, 194, 196, 197, 201, 205]) {
+        check(n, "dual-engine gate", false, "WebKit unavailable: " + (wkError ?? "not installed"));
+      }
+      return;
+    }
+    const ENGINES = [
+      { name: "chromium", b: browser },
+      { name: "webkit", b: wkBrowser },
+    ];
+    const both = async (fn, opts) => {
+      const out = {};
+      for (const e of ENGINES) out[e.name] = await run(e.b, fn, opts);
+      return out;
+    };
+    const verdict = (n, name, per, ok, fmt) => {
+      const lines = ENGINES.map((e) => e.name + " " + (ok(per[e.name]) ? "PASS" : "FAIL") + ": " + fmt(per[e.name]));
+      check(n, name, ENGINES.every((e) => ok(per[e.name])), lines.join("  ||  "));
+    };
+
+    /* ---- 205: no zoom, anywhere. ---- */
+    const g205 = await both((pg) =>
+      pg.evaluate(() => {
+        /* The shipped stylesheet, rule by rule — this is the static scan. */
+        const rules = [];
+        for (const sheet of document.styleSheets) {
+          let list;
+          try {
+            list = sheet.cssRules;
+          } catch {
+            continue;
+          }
+          const walk = (rs) => {
+            for (const r of rs) {
+              if (r.style && r.style.zoom && r.style.zoom !== "" && r.style.zoom !== "normal" && r.style.zoom !== "1")
+                rules.push(String(r.selectorText ?? r.cssText).slice(0, 60) + " -> " + r.style.zoom);
+              if (r.cssRules) walk(r.cssRules);
+            }
+          };
+          walk(list);
+        }
+        /* And every rendered element — this catches inline styles and any
+           value a rule set indirectly. */
+        const live = [];
+        for (const el of document.querySelectorAll("*")) {
+          const z = getComputedStyle(el).zoom;
+          if (z && z !== "1" && z !== "normal") live.push(el.tagName + "." + String(el.className).slice(0, 24) + "=" + z);
+          if (el.style && el.style.zoom) live.push("inline " + el.tagName + "=" + el.style.zoom);
+        }
+        /* change 39 (A2): the page's own type must never ride inside a
+           scaled subtree — the beat strip, the caption, the settled
+           controls and the caret are siblings of the device, not children
+           of the screen, and nothing above them may carry a transform. */
+        const outside = [];
+        for (const sel of ["[data-beats]", "[data-scene-mobile]", "[data-controls]", "[data-rail-next]"]) {
+          for (const el of document.querySelectorAll(sel)) {
+            if (el.closest("[data-phone-screen]")) {
+              outside.push(sel + " is inside the scaled screen");
+              continue;
+            }
+            for (let n = el.parentElement; n && n !== document.body; n = n.parentElement) {
+              const t = getComputedStyle(n).transform;
+              if (t && t !== "none" && !t.startsWith("matrix(1, 0, 0, 1,")) {
+                outside.push(sel + " under a scaled ancestor " + n.tagName + " " + t.slice(0, 30));
+                break;
+              }
+            }
+          }
+        }
+        return { rules: rules.slice(0, 5), live: live.slice(0, 5), outside: outside.slice(0, 4), scanned: document.querySelectorAll("*").length };
+      }),
+    );
+    verdict(
+      205,
+      "no CSS zoom anywhere: zero stylesheet rules declare it and zero rendered elements compute it; and the beat strip, caption, settled controls and caret all sit OUTSIDE every scaled subtree (change 39, A1/A2)",
+      g205,
+      (g) => g.rules.length === 0 && g.live.length === 0 && g.outside.length === 0,
+      (g) =>
+        g.scanned + " element(s) scanned; rule hits " + JSON.stringify(g.rules) + ", computed/inline hits " + JSON.stringify(g.live) + ", ancestry hits " + JSON.stringify(g.outside),
+    );
+
+    /* ---- 46: the body ratio, both viewports. ---- */
+    const ratio46 = (pg) =>
+      pg.evaluate(() => {
+        const d = document.querySelector("[data-phone-device]");
+        if (!d) return null;
+        const r = d.getBoundingClientRect();
+        return r.width > 0 ? +(r.height / r.width).toFixed(4) : null;
+      });
+    const g46 = {};
+    for (const e of ENGINES) {
+      g46[e.name] = {
+        m: await run(e.b, ratio46),
+        d: await run(e.b, ratio46, { vp: { width: 1440, height: 900 } }),
+      };
+    }
+    const TARGET46 = 810 / 390;
+    amend(
+      46,
+      ENGINES.every((e) =>
+        [g46[e.name].m, g46[e.name].d].every((v) => v != null && Math.abs(v - TARGET46) / TARGET46 <= 0.01),
+      ),
+      ENGINES.map((e) => e.name + " 390x844 " + g46[e.name].m + " / 1440x900 " + g46[e.name].d).join(", ") +
+        " (target " + TARGET46.toFixed(4) + " ±1%)",
+    );
+
+    /* ---- 91: the bubble's rendered size against the rendered screen. ---- */
+    const WANT91 = 15 / 360;
+    const g91 = await both(async (pg) => {
+      await waitT(pg, 6.5);
+      return pg.evaluate(() => {
+        const sec1 = document.querySelector('[data-section="call"]');
+        const screen = sec1?.querySelector("[data-phone-screen]");
+        const bubble = sec1?.querySelector("[data-bubble]");
+        if (!screen || !bubble || bubble.offsetWidth === 0) return null;
+        const sr = screen.getBoundingClientRect();
+        const k = bubble.getBoundingClientRect().width / bubble.offsetWidth;
+        const fs = parseFloat(getComputedStyle(bubble).fontSize) * k;
+        return { fs: +fs.toFixed(2), screenW: +sr.width.toFixed(1), ratio: +(fs / sr.width).toFixed(5), k: +k.toFixed(4) };
+      });
+    });
+    verdict(
+      91,
+      "first-bubble rendered font-size ÷ rendered screen width === 15/360 ±2% (change 39, A3: measured in both engines — this ratio is exactly what the retired zoom got wrong on the device)",
+      g91,
+      (g) => g != null && Math.abs(g.ratio - WANT91) / WANT91 <= 0.02,
+      (g) => (g == null ? "nodes missing" : g.fs + "px / " + g.screenW + "px = " + g.ratio + " (want " + WANT91.toFixed(5) + " ±2%, scale " + g.k + ")"),
+    );
+
+    /* ---- 93: the caret band is empty, every section, every preset. ---- */
+    const PRESETS93 = ["salon", "home", "dental", "other"];
+    const g93 = {};
+    for (const e of ENGINES) {
+      const hits = [];
+      for (const biz of PRESETS93) {
+        const out = await run(
+          e.b,
+          (pg) =>
+            pg.evaluate(async () => {
+              const pager = document.querySelector("[data-pager]");
+              const caret = document.querySelector("[data-rail-next]");
+              const bad = [];
+              for (let i = 0; i < 4; i++) {
+                pager.scrollTop = i * pager.clientHeight;
+                await new Promise((r) => setTimeout(r, 320));
+                const cr = caret.getBoundingClientRect();
+                if (cr.width === 0 || cr.height === 0) continue;
+                const sec = [...document.querySelectorAll("[data-section]")].find((x) => {
+                  const r = x.getBoundingClientRect();
+                  return r.top > -10 && r.top < 10;
+                });
+                if (!sec) continue;
+                /* The RENDERED box: clipped by every overflow ancestor, so a
+                   panel resting off-screen inside its scrollport does not
+                   count as painted where it is laid out. */
+                const rendered = (el) => {
+                  let r = el.getBoundingClientRect();
+                  let n = el.parentElement;
+                  while (n && n !== document.body) {
+                    const cs = getComputedStyle(n);
+                    if (cs.overflow !== "visible" || cs.overflowX !== "visible" || cs.overflowY !== "visible") {
+                      const c = n.getBoundingClientRect();
+                      r = {
+                        left: Math.max(r.left, c.left),
+                        right: Math.min(r.right, c.right),
+                        top: Math.max(r.top, c.top),
+                        bottom: Math.min(r.bottom, c.bottom),
+                      };
+                      if (r.left >= r.right || r.top >= r.bottom) return null;
+                    }
+                    n = n.parentElement;
+                  }
+                  return r;
+                };
+                for (const el of sec.querySelectorAll("*")) {
+                  if (caret.contains(el) || el.contains(caret)) continue;
+                  if (el.getAttribute("aria-hidden") === "true" || el.closest('[aria-hidden="true"]')) continue;
+                  const hasText = [...el.childNodes].some((n2) => n2.nodeType === 3 && n2.textContent.trim());
+                  if (!hasText && el.tagName !== "svg" && el.tagName !== "IMG" && !el.hasAttribute("data-phone-device")) continue;
+                  const cs = getComputedStyle(el);
+                  if (cs.visibility === "hidden" || parseFloat(cs.opacity) <= 0.05) continue;
+                  const r = rendered(el);
+                  if (!r || r.right - r.left <= 0 || r.bottom - r.top <= 0) continue;
+                  if (r.left < cr.right && r.right > cr.left && r.top < cr.bottom && r.bottom > cr.top)
+                    bad.push(sec.dataset.section + "/" + el.tagName + "@" + Math.round(r.top) + ".." + Math.round(r.bottom));
+                }
+              }
+              return bad.slice(0, 4);
+            }),
+          { path: "/?biz=" + biz, panels: true },
+        );
+        hits.push(...out.map((x) => biz + ":" + x));
+      }
+      g93[e.name] = hits;
+    }
+    verdict(
+      93,
+      "the caret's 48px band is empty: caret box ∩ every content box = ∅ in all four sections, all four presets (change 39, C1)",
+      g93,
+      (g) => g.length === 0,
+      (g) => (g.length === 0 ? "0 intersections across 4 sections x 4 presets" : g.length + " hit(s): " + JSON.stringify(g)),
+    );
+
+    /* ---- 95: the ledger still closes above the fold in WebKit. ---- */
+    const g95wk = await run(wkBrowser, (pg) =>
+      pg.evaluate(async () => {
+        const pager = document.querySelector("[data-pager]");
+        pager.scrollTop = pager.clientHeight;
+        await new Promise((r) => setTimeout(r, 350));
+        const sec = document.querySelector('[data-section="save"]');
+        const strip = sec.querySelector("[data-since-strip]");
+        if (!strip) return null;
+        const sr = sec.getBoundingClientRect();
+        const tr = strip.getBoundingClientRect();
+        return { gap: +(sr.bottom - tr.bottom).toFixed(1) };
+      }),
+    );
+    amend(
+      95,
+      g95wk != null && g95wk.gap >= 16,
+      g95wk == null ? "since-install strip not found" : "since-install closes " + g95wk.gap + "px above the fold (need >= 16)",
+    );
+
+    /* ---- 194: the device's three layers, in WebKit. ---- */
+    const g194wk = await run(wkBrowser, (pg) =>
+      pg.evaluate(() => {
+        const dev = document.querySelector('[data-section="call"] [data-phone-device]');
+        const rim = dev?.querySelector("[data-phone-rim]");
+        const glass = dev?.querySelector("[data-phone-glass]");
+        const scr = dev?.querySelector("[data-phone-screen]");
+        if (!dev || !rim || !glass || !scr) return null;
+        const d = dev.getBoundingClientRect();
+        const sr = scr.getBoundingClientRect();
+        return {
+          ratio: +(d.height / d.width).toFixed(4),
+          inset: [sr.left - d.left, d.right - sr.right, sr.top - d.top, d.bottom - sr.bottom].map((v) => +v.toFixed(2)),
+          rimGradient: /gradient/.test(getComputedStyle(rim).backgroundImage),
+          glassBg: getComputedStyle(glass).backgroundColor,
+          nubs: [...dev.querySelectorAll("[data-nub]")].map((n) => +n.getBoundingClientRect().width.toFixed(2)),
+        };
+      }),
+    );
+    amend(
+      194,
+      g194wk != null &&
+        Math.abs(g194wk.ratio - 2.077) <= 0.01 &&
+        g194wk.inset.every((v) => Math.abs(v - 15) <= 0.5) &&
+        g194wk.rimGradient === true &&
+        g194wk.glassBg === "rgb(5, 6, 8)" &&
+        g194wk.nubs.length === 3 &&
+        g194wk.nubs.every((v) => Math.abs(v - 2.5) <= 0.5),
+      g194wk == null
+        ? "device layers not found"
+        : "ratio " + g194wk.ratio + ", inset " + JSON.stringify(g194wk.inset) + ", rim gradient " + g194wk.rimGradient + ", glass " + g194wk.glassBg + ", nubs " + JSON.stringify(g194wk.nubs),
+    );
+
+    /* ---- 196: section 3 at 390, in WebKit. ---- */
+    const r196 = [];
+    for (const biz of PRESETS93) {
+      r196.push({
+        biz,
+        g: await run(
+          wkBrowser,
+          (pg) =>
+            pg.evaluate(async (id) => {
+              const pager = document.querySelector("[data-pager]");
+              pager.scrollTop = 2 * pager.clientHeight;
+              await new Promise((r) => setTimeout(r, 700));
+              const sec = document.querySelector('[data-section="yours"]');
+              const panel = sec.querySelector('[data-panel][data-preset="' + id + '"]');
+              const glyph = panel.querySelector("[data-trade-glyph]");
+              const pr = panel.getBoundingClientRect();
+              const gr = glyph.getBoundingClientRect();
+              const input = document.querySelector("[data-name-input]");
+              const cs = getComputedStyle(input);
+              const probe = document.createElement("span");
+              probe.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;font:" + cs.font;
+              probe.textContent = input.placeholder;
+              document.body.appendChild(probe);
+              const textW = probe.getBoundingClientRect().width;
+              probe.remove();
+              return {
+                slabPresent: sec.querySelector(":scope > [data-accent-slab]") != null,
+                glyphInPanel: gr.left >= pr.left - 1 && gr.right <= pr.right + 1 && gr.bottom <= pr.bottom + 1,
+                unclipped: textW <= input.clientWidth + 0.5,
+                valueW: +textW.toFixed(1),
+                fieldW: input.clientWidth,
+              };
+            }, id),
+          { path: "/?biz=" + biz, panels: true },
+        ),
+      });
+    }
+    amend(
+      196,
+      r196.every((r) => r.g.slabPresent === false && r.g.glyphInPanel && r.g.unclipped),
+      r196.map((r) => r.biz + ": slab " + r.g.slabPresent + ", glyph in panel " + r.g.glyphInPanel + ", value " + r.g.valueW + "/" + r.g.fieldW + "px").join(" | "),
+    );
+
+    /* ---- 197: the visual-viewport fit, in WebKit. ---- */
+    const r197 = [];
+    for (const H of [740, 844]) {
+      r197.push({
+        H,
+        g: await run(
+          wkBrowser,
+          async (pg) => {
+            await pg.evaluate(() => window.visualViewport.dispatchEvent(new Event("resize")));
+            await pg.waitForTimeout(150);
+            return pg.evaluate(async () => {
+              const pager = document.querySelector("[data-pager]");
+              pager.scrollTop = pager.clientHeight;
+              await new Promise((r) => setTimeout(r, 300));
+              const sec = document.querySelector('[data-section="save"]');
+              const strip = sec.querySelector("[data-since-strip]");
+              const sr = sec.getBoundingClientRect();
+              return {
+                vh: getComputedStyle(document.documentElement).getPropertyValue("--vh").trim(),
+                sectionH: +sr.height.toFixed(1),
+                stripBottom: +(strip.getBoundingClientRect().bottom - sr.top).toFixed(1),
+              };
+            });
+          },
+          {
+            init: (forced) => {
+              Object.defineProperty(window.visualViewport, "height", { get: () => forced, configurable: true });
+            },
+            initArg: H,
+          },
+        ),
+      });
+    }
+    amend(
+      197,
+      r197.every((r) => r.g.vh === r.H + "px" && Math.abs(r.g.sectionH - r.H) <= 1 && r.g.stripBottom <= r.H - 12),
+      r197.map((r) => "vv " + r.H + ": --vh " + r.g.vh + ", section " + r.g.sectionH + ", strip bottom " + r.g.stripBottom).join(" | "),
+    );
+
+    /* ---- 201: the beat strip, in WebKit. ---- */
+    const g201wk = await run(wkBrowser, async (pg) => {
+      const sample = async (t) => {
+        await waitT(pg, t);
+        return pg.evaluate(() => {
+          const words = [...document.querySelectorAll("[data-beat]")].map(
+            (el) => getComputedStyle(el).color === "rgb(233, 238, 244)",
+          );
+          const money = document.querySelector("[data-beat-money]");
+          return { words, money: money ? +parseFloat(getComputedStyle(money).opacity).toFixed(2) : null };
+        });
+      };
+      return { at30: await sample(3.0), at38: await sample(3.8), at46: await sample(4.6), at100: await sample(10.2) };
+    });
+    amend(
+      201,
+      g201wk.at30.words.length === 3 &&
+        g201wk.at30.words.every((w) => !w) &&
+        g201wk.at30.money === 0 &&
+        g201wk.at38.words[0] && !g201wk.at38.words[1] && !g201wk.at38.words[2] &&
+        g201wk.at46.words[0] && g201wk.at46.words[1] && !g201wk.at46.words[2] &&
+        g201wk.at100.words.every((w) => w) &&
+        g201wk.at100.money === 1,
+      "t=3.0 " + JSON.stringify(g201wk.at30.words) + " money " + g201wk.at30.money +
+        "; t=3.8 " + JSON.stringify(g201wk.at38.words) +
+        "; t=4.6 " + JSON.stringify(g201wk.at46.words) +
+        "; t=10.2 " + JSON.stringify(g201wk.at100.words) + " money " + g201wk.at100.money,
+    );
+  });
+
   await browser.close();
+  if (wkBrowser) await wkBrowser.close();
 
   for (const n of BROWSER_GATES) {
     if (!results.some((r) => r.n === n)) {

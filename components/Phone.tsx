@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, type CSSProperties } from "react";
 
 import { COPY, type CaughtEntry, type Preset } from "@/lib/client.config";
 
@@ -757,17 +757,20 @@ export default function Phone({
 
   if (!aspect) {
     /* OG crop mode: fixed rendered screen height, device cropped by the
-       canvas. At the 390 render width the screen zoom is 1, so the design
-       height IS the rendered height. */
+       canvas. At the 390 render width the scale is 1, so the design height
+       IS the rendered height — the fit box and the screen share it. */
     return (
       <div data-phone-device data-client-world className="w-[390px] max-w-full shrink-0">
         <div data-phone-rim className="relative rounded-[55px] p-[2px]" style={{ background: RIM }}>
           <div data-phone-glass className="rounded-[53px] bg-[#050608] p-[13px]">
-            <div data-screen-fit="og" className="overflow-hidden rounded-[40px]">
+            <div
+              data-screen-fit="og"
+              className="overflow-hidden rounded-[40px]"
+              style={{ height: screenMinHeight, "--screen-h": `${screenMinHeight}px` } as CSSProperties}
+            >
               <div
                 data-phone-screen
-                className="relative flex flex-col overflow-hidden bg-black font-phone"
-                style={{ height: screenMinHeight }}
+                className="flex flex-col overflow-hidden bg-black font-phone"
               >
                 {screenContent}
               </div>
@@ -837,7 +840,7 @@ export default function Phone({
           <div data-screen-fit="aspect" className="overflow-hidden rounded-[40px]">
             <div
               data-phone-screen
-              className="relative flex flex-col overflow-hidden bg-black font-phone"
+              className="flex flex-col overflow-hidden bg-black font-phone"
             >
               {screenContent}
             </div>

@@ -88,6 +88,12 @@ body {
   display: none;
 }
 
+/* change 39 (C1): the caret is 32px tall and centred in a 48px band at the
+   bottom of the section. Content never enters that band — gate 93 asserts
+   the intersection is empty in every section, in both engines. */
+:root {
+  --caret-band: 48px;
+}
 [data-section] {
   position: relative;
   height: 100vh;
@@ -198,11 +204,13 @@ body {
   [data-yours-phone-fit] {
     container-type: size;
   }
+  /* change 39 (A1): these are aspect boxes — capping the WIDTH caps the
+     height, which is all the retired zoom was doing. */
   [data-section="save"] [data-phone-device],
   [data-section="yours"] [data-phone-device] {
-    width: 390px;
-    max-width: none;
-    zoom: min(calc(100cqh / 815px), 1);
+    width: 100%;
+    max-width: 390px;
+    max-width: min(390px, calc(100cqh * 390 / 810));
   }
 }
 
@@ -248,8 +256,13 @@ body {
    top of the "Your side" button. */
 @media (max-width: 1099.98px) {
   [data-section="call"] [data-phone-device] {
-    max-width: min(390px, calc((100vh - 330px) * 390 / 810));
-    max-width: min(390px, calc((100dvh - 330px) * 390 / 810));
+    /* change 39 (B1): 82% of the content column, capped by the height the
+       rest of the stack leaves. 316 IS that rest — 64 + 32 + 60 + 24 + 20 +
+       16 + 36 + 64 — so the column fills the section exactly at every
+       height and the caret's band stays clear by construction. */
+    width: 82%;
+    max-width: min(390px, calc((100vh - 316px) * 390 / 810));
+    max-width: min(390px, calc((100dvh - 316px) * 390 / 810));
     /* change 33 (B2): CENTERED in the content column. The slab is a
        section band at the viewport's left edge now (B1), so the device no
        longer has to buy folio clearance with a gutter bleed. */
@@ -257,15 +270,6 @@ body {
     margin-right: auto;
   }
 }
-/* change 17 review (WebKit 375x667): on short phones the reserve also
-   clears the Replay control band. */
-@media (max-width: 1099.98px) and (max-height: 720px) {
-  [data-section="call"] [data-phone-device] {
-    max-width: min(390px, calc((100vh - 386px) * 390 / 810));
-    max-width: min(390px, calc((100dvh - 386px) * 390 / 810));
-  }
-}
-
 /* change 33 (B1): the section-1 slab is a BAND at the left viewport edge at
    every width — the in-device slab it replaced is gone. */
 [data-section="call"] [data-phone-device] > [data-accent-slab] {
@@ -284,6 +288,7 @@ body {
 [data-screen-fit] {
   container-type: inline-size;
   width: 100%;
+  position: relative;
 }
 /* change 35 (A1): in aspect mode the glass content box has a definite
    height, so the fit element is a SIZE container and the screen fills it
@@ -293,17 +298,30 @@ body {
   container-type: size;
   height: 100%;
 }
+/* change 39 (A1): the screen lays out at its 360px design width and is
+   scaled by a TRANSFORM, never by zoom. zoom is non-standard, and on the
+   real device it clipped the screen's left edge and undersized the whole
+   phone — a defect no desktop engine reproduced. transform-origin sits at
+   the top-left so the scaled box starts exactly where the unscaled one
+   did, and the element is taken out of flow so its untransformed size can
+   never push layout around. --screen-k / --screen-h come from a
+   ResizeObserver; the container-query fallbacks keep the geometry right
+   with JS off. */
 [data-phone-screen] {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 360px;
-  zoom: 1;
-  zoom: calc(100cqw / 360px);
+  transform-origin: top left;
 }
-/* The design HEIGHT that renders as exactly the glass content height: the
-   rendered height divided by the screen zoom. The first line is the
-   no-container-query floor (iOS 15) — exact at a full-size 390 device. */
 [data-screen-fit="aspect"] > [data-phone-screen] {
-  height: 780px;
-  height: calc(100cqh / (100cqw / 360px));
+  height: var(--screen-h, calc(100cqh / (100cqw / 360px)));
+  transform: scale(var(--screen-k, calc(100cqw / 360px)));
+}
+/* The OG crop carries its own height and renders at exactly 1. */
+[data-screen-fit="og"] > [data-phone-screen] {
+  height: var(--screen-h, 452px);
+  transform: none;
 }
 
 /* change 35 (A4): the shadow lives here, not inline, so the A5 entry can

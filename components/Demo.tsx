@@ -1761,6 +1761,33 @@ export default function Demo({
     };
   };
 
+  /* change 39 (A1): the phone screen lays out at 360 design px and is
+     scaled by a transform. A ResizeObserver measures the glass content box
+     and writes the factor and the design height it implies — k = width/360,
+     h = height/k — so the scaled screen lands on the box exactly. This
+     replaces `zoom`, which is non-standard and, on the real device, clipped
+     the screen's left edge and undersized the phone. Every static instance
+     is observed too, and re-observed when the other three presets hydrate. */
+  useEffect(() => {
+    const fits = Array.from(document.querySelectorAll<HTMLElement>('[data-screen-fit="aspect"]'));
+    if (fits.length === 0) return;
+    const apply = (el: HTMLElement) => {
+      const r = el.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) return;
+      const k = r.width / 360;
+      el.style.setProperty("--screen-k", String(k));
+      el.style.setProperty("--screen-h", `${r.height / k}px`);
+    };
+    const ro = new ResizeObserver((entries) => {
+      for (const e of entries) apply(e.target as HTMLElement);
+    });
+    for (const el of fits) {
+      apply(el);
+      ro.observe(el);
+    }
+    return () => ro.disconnect();
+  }, [presetList.length]);
+
   /* change 35 (D1): the layout height is the VISUAL viewport, read on load
      and on every resize. Safari moves it by ~100px between toolbar states
      and svh is only the spec guess at the collapsed one. Updates are
@@ -2040,7 +2067,7 @@ export default function Demo({
         {/* change 27 (B1): >=1100 a [1fr_auto_1fr] grid — the DEVICE is the
             centered column, the scene type right-aligned in the left third,
             vertically centered on the phone. */}
-        <div className="relative z-10 flex h-full w-full items-center justify-center gap-16 pb-6 pl-6 pr-14 pt-[112px] min-[1100px]:mx-auto min-[1100px]:grid min-[1100px]:max-w-[1240px] min-[1100px]:grid-cols-[61fr_auto_39fr] min-[1100px]:gap-x-0 min-[1100px]:px-12 min-[1100px]:py-6">
+        <div data-section-content className="relative z-10 flex h-full w-full items-center justify-center gap-16 pb-16 pl-6 pr-14 pt-16 min-[1100px]:mx-auto min-[1100px]:grid min-[1100px]:max-w-[1240px] min-[1100px]:grid-cols-[61fr_auto_39fr] min-[1100px]:gap-x-0 min-[1100px]:px-12 min-[1100px]:pb-12 min-[1100px]:pt-6">
           <div data-scene data-client-world className="relative hidden shrink-0 min-[1100px]:block min-[1100px]:justify-self-start min-[1100px]:self-center min-[1100px]:-translate-y-8">
             {/* change 30 (G1): the slab receipt — the clock crossfades out
                 beneath it on the booking beat. Gold census +1 (gate 175);
@@ -2105,7 +2132,7 @@ export default function Demo({
                 centered above the phone, height reserved, riding the same
                 three beats as the desktop scene type (same slots, one
                 clock). SSR seeds the settled "caught" line. */}
-            <div data-scene-mobile data-chrome="caption" data-client-world className="relative mb-2 h-[56px] text-left min-[1100px]:hidden">
+            <div data-scene-mobile data-chrome="caption" data-client-world className="relative mb-[60px] h-[32px] text-left min-[1100px]:hidden">
               <p
                 data-scene-line="closed"
                 className="absolute left-0 top-0 w-fit max-w-[145px] whitespace-nowrap font-caption text-[15px] font-normal italic leading-[30px] text-ink"
@@ -2140,7 +2167,7 @@ export default function Demo({
                 lands 12px right of "Booked" on the booking beat. This is
                 where the money lives now — section 1 leads with what the
                 product DOES and closes on what it made. */}
-            <div data-beats data-chrome="beats" className="mt-3 flex items-center justify-center">
+            <div data-beats data-chrome="beats" className="mt-6 flex items-center justify-center">
               <div className="flex items-center gap-6 font-figures text-[12px]">
                 {[COPY.beats.missed, COPY.beats.text, COPY.beats.booked].map((w, i) => (
                   <Fragment key={w}>
@@ -2158,7 +2185,7 @@ export default function Demo({
               <span
                 data-beat-money
                 data-figure="hero"
-                className="ml-3 whitespace-nowrap text-[24px] font-medium leading-none text-gold"
+                className="ml-3 whitespace-nowrap text-[20px] font-medium leading-none text-gold"
                 style={{ opacity: 0 }}
               >
                 +${preset.ticket}
@@ -2170,7 +2197,7 @@ export default function Demo({
                 them at settle. change 36 (C3): under the beat strip. */}
             {/* change 33 (B5): ONE row, two equal-width buttons, centered
                 under the phone with a 12px gap — never stacked. */}
-            <div data-controls data-chrome="controls" className="mt-3 flex flex-row items-center justify-center gap-3 min-[1100px]:mt-4">
+            <div data-controls data-chrome="controls" className="mt-4 flex flex-row items-center justify-center gap-3">
               <button data-replay type="button" onClick={onReplay} className={`w-[46%] max-w-[180px] ${btnSecondary}`}>
                 {COPY.replayLabel}
               </button>
@@ -2190,7 +2217,7 @@ export default function Demo({
       <section data-section="save" data-entry-fx={fxReady ? (entered[1] ? "run" : "pending") : undefined}>
         <SectionMark {...COPY.sections.save} />
 
-        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pb-4 pl-6 pr-14 pt-[60px] min-[1100px]:max-w-[1240px] min-[1100px]:px-12 min-[1100px]:pb-6 min-[1100px]:pt-[84px]">
+        <div data-section-content className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pb-12 pl-6 pr-14 pt-[60px] min-[1100px]:max-w-[1240px] min-[1100px]:px-12 min-[1100px]:pb-12 min-[1100px]:pt-[84px]">
           <div
             data-save-grid
             className="flex min-h-0 w-full flex-1 flex-col min-[1100px]:grid min-[1100px]:grid-cols-[42fr_58fr] min-[1100px]:grid-rows-[auto_minmax(0,1fr)] min-[1100px]:items-start min-[1100px]:gap-x-12"
@@ -2315,7 +2342,8 @@ export default function Demo({
         <div
           ref={yoursPanelRef}
           data-yours-panel
-          className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pl-6 pr-14 pt-[112px] min-[1100px]:grid min-[1100px]:max-w-[1240px] min-[1100px]:grid-cols-2 min-[1100px]:grid-rows-[auto_minmax(0,1fr)] min-[1100px]:gap-x-12 min-[1100px]:px-12 min-[1100px]:pb-8 min-[1100px]:pt-[124px]"
+          data-section-content
+          className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pb-12 pl-6 pr-14 pt-[112px] min-[1100px]:grid min-[1100px]:max-w-[1240px] min-[1100px]:grid-cols-2 min-[1100px]:grid-rows-[auto_minmax(0,1fr)] min-[1100px]:gap-x-12 min-[1100px]:px-12 min-[1100px]:pb-12 min-[1100px]:pt-[124px]"
         >
           {/* change 33 (D1/D3): the tab strip is the switcher's label —
               four trades under the folio, the active one accented and
@@ -2404,7 +2432,7 @@ export default function Demo({
                 (gate 94). */}
             <div
               data-yours-phone-fit
-              className="order-3 mx-auto mt-2 min-h-0 w-full max-w-[390px] flex-1 min-[1100px]:order-none min-[1100px]:col-start-1 min-[1100px]:row-start-2 min-[1100px]:mx-auto min-[1100px]:mt-2 min-[1100px]:h-full min-[1100px]:min-h-0 min-[1100px]:flex-none"
+              className="order-3 mx-auto mt-2 min-h-0 w-full max-w-[390px] flex-1 overflow-hidden min-[1100px]:order-none min-[1100px]:col-start-1 min-[1100px]:row-start-2 min-[1100px]:mx-auto min-[1100px]:mt-2 min-[1100px]:h-full min-[1100px]:min-h-0 min-[1100px]:flex-none"
             >
               <Phone
                 preset={preset}
