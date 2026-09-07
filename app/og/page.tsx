@@ -52,7 +52,11 @@ export default async function OgFrame({
       {/* Devices row. The notification card over the phone's thread is the
           thumbnail's focal point (change 10): the two-sided moment, frozen. */}
       <div className="absolute left-16 top-[102px] flex items-start gap-8">
-        <Phone preset={settledTail} screenMinHeight={452} showNotification />
+        {/* change 36: the crop tightens with the screen. iOS body text at
+            15px and the trimmed ledger left the old 452 crop half empty —
+            the thumbnail is a first-class deliverable and dead space in it
+            costs more than a few pixels of device. */}
+        <Phone preset={settledTail} screenMinHeight={392} showNotification />
         <div className="w-[660px]">
           <Ledger preset={base} compact />
         </div>

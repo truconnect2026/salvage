@@ -49,12 +49,16 @@ export const COPY = {
   footNote: "Demo. Numbers are illustrative.",
 
   // change 21 (A, APPROVED): the close.
+  // change 36 (F, APPROVED): a TEXT-first close. The gold pill sends the
+  // message; Calendly is the secondary link. ctaLabel/ctaSub replaced,
+  // textLead retired with the phone-number line it introduced.
   close: {
-    ctaLabel: "Talk to Andy · 20 min",
-    ctaSub: "He sets it up on your number during the call.",
-    textLead: "or text Andy:",
-    // change 33 (E1, APPROVED): two lines.
-    priceLine: "$500 to start · $500 at delivery",
+    accuse: "Miss three of them and Salvage has already paid for itself.",
+    ctaLabel: "Text me — I'll show you yours",
+    ctaSub: "I'll plug in your business and run it with your name.",
+    bookLabel: "or book 20 minutes",
+    // change 36 (F5, APPROVED): the total first, then the split.
+    priceLine: "$1,000 once · $500 to start, $500 at delivery",
     priceLine2: "$100 a month after",
     builtBy: "Built by Andy Jones · Chesterfield, VA",
     // change 29 (APPROVED): one replay label page-wide — matches replayLabel.
@@ -79,8 +83,10 @@ export const COPY = {
   },
 
   ledger: {
-    // change 19 (A, APPROVED): the owner's side, addressed to the owner.
-    screenLabel: "Your side",
+    // change 36 (A5): screenLabel retired — the panel does not need to
+    // announce itself above a lead that already says whose side it is.
+    // change 36 (D1, APPROVED): the count under Recovered.
+    callsBooked: "{n} calls booked",
     // change 19 (A/B4, APPROVED): the owner entry's third line.
     calendarLine: "Added to Google Calendar",
     // monthLabel removed (change 17, D2): the month is computed at request
@@ -88,12 +94,9 @@ export const COPY = {
     // statusLabel retired with its pill (change 18 A4 / change 19 B2).
     recoveredLabel: "Recovered",
     lostLabel: "Still lost",
-    // change 26 (D4/D6, APPROVED): the table's column heads and the reply
-    // footnote; the old Reply time money row retired with its strings.
-    cols: { name: "Name", booking: "Booking", amount: "Amount", date: "Date" },
-    replyFoot: "Average reply 18s",
-    // change 28 (D1, APPROVED): the desktop table shows 3 rows at 1x.
-    moreRows: "+{n} more this month",
+    // change 36 (A5): cols, replyFoot and moreRows retired with the column
+    // heads, the footnote and the overflow line. Three rows, one rule
+    // between them, and nothing labelling the obvious.
     caughtLabel: "Caught this month",
     reviewNote: "Review requests sent automatically after each visit.",
     sinceLabel: "Since install",
@@ -130,27 +133,27 @@ export const COPY = {
     placeholder: "Harbor Row Aesthetics",
   },
 
+  // change 36 (C1, APPROVED): the mechanism, in three words under the
+  // phone. Each inks at its own beat; the money lands beside the third.
+  beats: { missed: "Missed call", text: "Text sent", booked: "Booked" },
+
   rotatePrompt: "Turn your phone upright.",
 
   // The snap pager (change 12, A4). Approved copy. Kicker + title are
   // wayfinding, not headlines — small, top-left of each section.
-  // change 18 (B5, APPROVED): folio kickers — "No. 1 — The call" reads as a
-  // log page mark, not a dashboard step counter.
+  // change 18 (B5) / change 36 (A3): the folio is the title alone. The
+  // "No. 1 —" numbering was a step counter on a page that already snaps.
   sections: {
-    call: { kicker: "No. 1", title: "The call" },
-    save: { kicker: "No. 2", title: "The save" },
-    yours: { kicker: "No. 3", title: "Make it yours" },
-    math: { kicker: "No. 4", title: "The math" },
+    call: { title: "The call" },
+    save: { title: "The save" },
+    yours: { title: "Make it yours" },
+    math: { title: "The math" },
   },
-  // change 15 (A3/A1): cues.down retired — the rail chevron is the standing
-  // affordance; cues.right retired with the mobile section-2 track it
-  // explained. cues.presets remains the one swipe cue.
   // change 34 (A, APPROVED): the tab strip's own short labels — the panel
   // headings keep the full trade names.
+  // change 36 (A6/E1): cues.presets retired with the cue line — the next
+  // trade's own label, showing at 40% in the 12% peek, IS the affordance.
   tabs: { salon: "Salon", home: "Home", dental: "Dental", other: "Other" },
-  cues: {
-    presets: "Swipe to change trade →",
-  },
   a11y: {
     pager: "Demo sections",
     dot: "Go to section",
@@ -183,13 +186,12 @@ export const COPY = {
   // the preset, the suffixes complete the lines ("$340 a job", "12 missed a
   // month", "$4,080 still lost").
   yours: {
-    // change 26 (E1, APPROVED): labeled rows under a ruled head; the three
-    // *Suffix strings retired.
-    rowsHead: "Typical for this trade",
+    // change 36 (A6): rowsHead and scrollUp retired with the ruled head and
+    // the payoff pointer — the rows label themselves and the phone below
+    // them is the payoff.
     rows: { ticket: "Per job", missed: "Missed per month", lost: "Lost per month" },
     // change 19 (A/B7, APPROVED).
     hint: "Your name lands on the phone.",
-    scrollUp: "Scroll up to watch it as {bizName}.",
   },
 
   // Phone / OG chrome. Same human veto as everything else in this file.

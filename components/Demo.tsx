@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 
 import Ledger from "@/components/Ledger";
 import Phone, { NotifyCard } from "@/components/Phone";
@@ -105,6 +105,8 @@ type Nodes = {
   threadArea: HTMLElement | null;
   leak: HTMLElement | null;
   controls: HTMLElement | null;
+  beatWords: HTMLElement[];
+  beatMoney: HTMLElement | null;
   /* change 19 (B1): arrays — the desktop scene type and the mobile caption
      share slots and beats; whichever the viewport renders, one clock. */
   sceneClock: HTMLElement | null;
@@ -113,6 +115,7 @@ type Nodes = {
   sceneClosed: HTMLElement[];
   sceneDialing: HTMLElement[];
   sceneCaught: HTMLElement[];
+  sceneCaughtDesk: HTMLElement[];
   ledgerPanel: HTMLElement | null;
   caughtRow0: HTMLElement | null;
   panelRecovered: HTMLElement | null;
@@ -366,6 +369,8 @@ function collect(root: HTMLElement): Nodes {
     threadArea: q("[data-thread-area]"),
     leak: q("[data-leak-lost]"),
     controls: q("[data-controls]"),
+    beatWords: Array.from(root.querySelectorAll<HTMLElement>("[data-beat]")),
+    beatMoney: q("[data-beat-money]"),
     sceneClock: q("[data-scene-clock]"),
     clockSeconds: q("[data-clock-seconds]"),
     mathNumerals: Array.from(root.querySelectorAll<HTMLElement>("[data-math-numeral]")).map((el) => ({
@@ -375,6 +380,12 @@ function collect(root: HTMLElement): Nodes {
     sceneClosed: Array.from(root.querySelectorAll<HTMLElement>('[data-scene-line="closed"]')),
     sceneDialing: Array.from(root.querySelectorAll<HTMLElement>('[data-scene-line="dialing"]')),
     sceneCaught: Array.from(root.querySelectorAll<HTMLElement>('[data-scene-line="caught"]')),
+    /* change 36 (C2): only the DESKTOP caught line hands its slot to the
+       receipt — the mobile receipt is retired, so the mobile caption has
+       nothing to fade out for and must stay up. */
+    sceneCaughtDesk: Array.from(
+      root.querySelectorAll<HTMLElement>('[data-scene] [data-scene-line="caught"]'),
+    ),
     ledgerPanel: q("[data-ledger-panel]"),
     caughtRow0: q('[data-caught-row="0"]'),
     panelRecovered: q("[data-panel-recovered]"),
@@ -566,6 +577,17 @@ function paintScene(ctx: Ctx, t: number) {
     n.controls.style.opacity = String(c);
   }
 
+  /* --- change 36 (C1): the beat strip. Three words under the phone, each
+         inking at the beat it names — the miss (3.6), the text (4.4), the
+         booking (RECEIPT_AT) — and the money landing beside the third.
+         Same clock, no second timer. --- */
+  const BEAT_AT = [CALL_ENDED_AT, BANNER_AT, RECEIPT_AT];
+  n.beatWords.forEach((el) => {
+    const i = Number(el.dataset.beat);
+    el.style.color = t >= BEAT_AT[i] ? "var(--color-ink)" : "var(--color-muted)";
+  });
+  if (n.beatMoney) n.beatMoney.style.opacity = String(clamp01((t - RECEIPT_AT) / 0.4));
+
   /* --- Desktop scene type (change 15, A2): line 2 crossfades on the miss
          and again when the thread begins. Same clock as everything else. --- */
   const dialingIn = easeOut(clamp01((t - SCENE_DIALING_AT) / SCENE_FADE));
@@ -575,7 +597,10 @@ function paintScene(ctx: Ctx, t: number) {
   /* change 33 (B3): the receipt takes this slot on the booking beat — the
      caught line fades out under it over 400ms, so the two never stack. */
   const receiptIn = clamp01((t - RECEIPT_AT) / 0.4);
-  n.sceneCaught.forEach((el) => (el.style.opacity = String(caughtIn * (1 - receiptIn))));
+  const deskCaught = new Set(n.sceneCaughtDesk);
+  n.sceneCaught.forEach(
+    (el) => (el.style.opacity = String(caughtIn * (deskCaught.has(el) ? 1 - receiptIn : 1))),
+  );
 
   /* --- The customer's closing beat: the booking confirmation on her phone.
          (The owner's ledger-side card is a static dock now — change 12, B2 —
@@ -881,7 +906,7 @@ const beatZeroTotals = (p: Preset): Totals => ({
 
 /* change 30 (C3): the button system — PRIMARY is the accent fill. */
 const btnPrimary =
-  "h-9 rounded-none bg-[var(--accent,#2CC7B6)] px-3 text-[12px] font-medium text-[var(--accent-ink,#06121F)] min-[1100px]:h-11 min-[1100px]:px-5 min-[1100px]:text-[15px] " +
+  "h-9 rounded-none bg-ink px-3 text-[12px] font-medium text-abyss min-[1100px]:h-11 min-[1100px]:px-5 min-[1100px]:text-[15px] " +
   "transition-opacity hover:opacity-90 outline-none " +
   "focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2";
 
@@ -912,11 +937,14 @@ const buildQuery = (biz: string, name: string, refDjl = false) =>
    line, the log's page number. The ONLY uppercase-tracked element class on
    the page (gate 111); the reserve rule from change 16 (content >= 32px
    below it) stands. */
-function SectionMark({ kicker, title }: { kicker: string; title: string }) {
+function SectionMark({ title }: { title: string }) {
+  /* change 36 (A3): the title alone, Plex Mono 12px secondary. The
+     "No. 1 —" numbering was a step counter on a page that already snaps,
+     and it was the same size as content two lines below it. */
   return (
-    <div data-section-mark className="pointer-events-none absolute left-8 top-8 z-20">
-      <p data-folio data-figure="data" data-ink className="text-[12px] uppercase tracking-[0.04em] text-muted min-[600px]:text-[13px] min-[1100px]:text-[15px]" style={{ transitionDuration: "200ms" }}>
-        {kicker} — {title}
+    <div data-section-mark data-chrome="folio" className="pointer-events-none absolute left-8 top-8 z-20">
+      <p data-folio data-figure="data" data-ink className="text-[12px] uppercase tracking-[0.04em] text-muted" style={{ transitionDuration: "200ms" }}>
+        {title}
       </p>
     </div>
   );
@@ -942,21 +970,22 @@ function TradeGlyph({ id }: { id: string }) {
     ],
   };
   const paths = d[id] ?? d.other;
-  /* change 35 (C3): the WATERMARK — 240px, bottom-right of the panel,
-     behind the rows, the accent at 12%. The stroke is 1.5 RENDERED px: a
-     38-unit viewBox drawn at 240 scales 6.3158x, so the line is specified
-     in viewBox units at 1.5 / 6.3158. It is set in user units and not with
-     vector-effect on purpose — a non-scaling stroke lays its dash pattern
-     out in device space, and change 34's draw-on sets --len from
-     getTotalLength() in viewBox units, so the tail of every glyph would
-     simply stop being drawn. */
-  const HAIRLINE = 1.5 / (240 / 38);
+  /* change 35 (C3) / change 36 (A6): the 240px watermark is gone — it was
+     a decorative plane behind live figures. The glyph is 24px, inline to
+     the right of the trade label, where it labels rather than decorates.
+     The stroke is 1.5 RENDERED px: a 38-unit viewBox drawn at 24 scales
+     0.6316x, so it is specified in viewBox units at 1.5 / 0.6316. It is set
+     in user units and not with vector-effect on purpose — a non-scaling
+     stroke lays its dash pattern out in device space, and change 34's
+     draw-on sets --len from getTotalLength() in viewBox units, so the tail
+     of every glyph would simply stop being drawn. */
+  const HAIRLINE = 1.5 / (24 / 38);
   return (
     <svg
       data-trade-glyph={id}
       aria-hidden="true"
-      width="240"
-      height="240"
+      width="24"
+      height="24"
       viewBox="0 0 38 38"
       fill="none"
       stroke="var(--accent, #2CC7B6)"
@@ -1078,7 +1107,6 @@ export default function Demo({
   const [yoursPanel, setYoursPanel] = useState(activeIndex);
   /* One-shot swipe cue: shown when section 3 first becomes active, dismissed
      by the first horizontal scroll or a 4s timeout. */
-  const [yoursCueGone, setYoursCueGone] = useState(false);
   /* change 27 (C2): the banner's DOM presence — the engine latches it gone
      at t=7.3; park/replay flip it back. */
   const [bannerGone, setBannerGone] = useState(false);
@@ -1482,20 +1510,6 @@ export default function Demo({
       if (id) onTrackPresetRef.current(id);
     });
 
-    /* First horizontal scroll dismisses that track's cue. A scroll listener
-       is observation, not hijacking — gate 65 bans wheel/touchmove only.
-       Attached two frames LATE: the mount effect's deep-link positioning of
-       the track fires an async scroll event that must not count as the
-       visitor's first swipe — shared ?biz= links are exactly the audience
-       the cue teaches (review lens 2, finding 2). */
-    const yoursTrack = yoursTrackRef.current;
-    const dismissYours = () => setYoursCueGone(true);
-    let cueRaf = requestAnimationFrame(() => {
-      cueRaf = requestAnimationFrame(() => {
-        yoursTrack?.addEventListener("scroll", dismissYours, { once: true, passive: true });
-      });
-    });
-
     /* Sound resume-on-gesture (change 15, B2 / gate 90): a session-restored
        "on" state has a suspended context — the first real gesture resumes
        it. Observation + resume only, never scheduling. */
@@ -1587,8 +1601,6 @@ export default function Demo({
     return () => {
       sectionIO.disconnect();
       panelIOs.forEach((io) => io.disconnect());
-      cancelAnimationFrame(cueRaf);
-      yoursTrack?.removeEventListener("scroll", dismissYours);
       window.removeEventListener("pointerdown", resumeAudio);
       window.removeEventListener("keydown", resumeAudio);
       window.removeEventListener("resize", onResize);
@@ -1688,15 +1700,6 @@ export default function Demo({
     schedule(ctx);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entered]);
-
-  /* Cue timer: the swipe cue starts its 4s dismissal when section 3 first
-     becomes active. UI plumbing (React state), not an animation clock. */
-  useEffect(() => {
-    if (SECTIONS[activeSection]?.id === "yours" && !yoursCueGone) {
-      const t = window.setTimeout(() => setYoursCueGone(true), 4000);
-      return () => window.clearTimeout(t);
-    }
-  }, [activeSection, yoursCueGone]);
 
   useEffect(
     () => () => {
@@ -1941,15 +1944,19 @@ export default function Demo({
     });
   };
 
-  /* change 31 (1): ONE dot on the page. The rail and the section-3 panel
-     switcher are the same 8px teal square in the same two states (C2 idle /
-     active) — one definition, aliased, so the two can never drift again. */
-  const dot = (active: boolean) =>
-    `h-2 w-2 rounded-[2px] border transition-colors outline-none focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
-      active ? "border-teal bg-teal" : "border-[rgba(44,199,182,0.7)] bg-transparent"
-    }`;
-  const pagerDot = dot;
-  const panelDot = dot;
+  /* change 36 (F3): the text the CTA opens. The approved ask, plus the
+     visitor's own business name when they have typed one — so the message
+     that lands on Andy's phone already says who it is from. */
+  const smsHref = `${COPY.contact.smsHref}?body=${encodeURIComponent(
+    name ? `Show me Salvage for ${name}` : "Show me Salvage",
+  )}`;
+
+  /* change 31 (1) / change 36 (A1): ONE dot on the page, and now ONE
+     state. 6px, teal at 40%, no active fill — a position indicator does
+     not need to compete with the section it is indexing. The section-3
+     switcher dots are gone entirely (A6); the tabs are the switcher. */
+  const pagerDot = () =>
+    "h-1.5 w-1.5 rounded-[2px] border border-teal/40 bg-transparent outline-none focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2";
 
   return (
     /* The pager (A1): the ONLY vertical scroller on the page. html/body are
@@ -1967,10 +1974,9 @@ export default function Demo({
       {/* ---- SECTION 1 — the call. The phone; at >=1100px the scene type
            sits left of it (change 15, A2), all three lines on the one clock. ---- */}
       <section data-section="call">
-        {/* change 28 (A2): the desktop slab is a section band keyed off the
-            column edge (globals positions it); the in-device slab serves
-            below 1100. */}
-        <div aria-hidden="true" data-accent-slab data-slab data-call-band className="absolute inset-y-0 left-0 z-0 w-[60%] bg-[var(--accent-soft,#0F1E33)] min-[1100px]:w-auto" />
+        {/* change 36 (A7/C4): the section-1 accent band is GONE. The ground
+            is abyss, the phone is centred on it, and the only colour in the
+            frame is what is on the screen. */}
         <SectionMark {...COPY.sections.call} />
 
         {/* change 16 (B1/B2): below 1100px the right padding clears the
@@ -2045,7 +2051,7 @@ export default function Demo({
                 centered above the phone, height reserved, riding the same
                 three beats as the desktop scene type (same slots, one
                 clock). SSR seeds the settled "caught" line. */}
-            <div data-scene-mobile data-client-world className="relative mb-2 h-[56px] text-left min-[1100px]:hidden">
+            <div data-scene-mobile data-chrome="caption" data-client-world className="relative mb-2 h-[56px] text-left min-[1100px]:hidden">
               <p
                 data-scene-line="closed"
                 className="absolute left-0 top-0 w-fit max-w-[145px] whitespace-nowrap font-caption text-[15px] font-normal italic leading-[30px] text-ink"
@@ -2060,18 +2066,10 @@ export default function Demo({
               >
                 {COPY.scene.mobile.nobody}
               </p>
-              {/* change 33 (B3): the receipt IS the caption's fourth line —
-                  same slot, same left edge; the engine crossfades it in on
-                  the booking beat and the "caught" line out. */}
-              {receiptShown && (
-                <p
-                  data-receipt-m
-                  data-figure="hero"
-                  className="absolute left-0 top-0 w-fit whitespace-nowrap text-[56px] font-medium leading-[56px] text-gold min-[1100px]:text-transparent"
-                >
-                  +${preset.ticket}
-                </p>
-              )}
+              {/* change 36 (C2): the 56px receipt over the caption slot is
+                  gone from mobile — the beat strip under the phone carries
+                  the money now, beside the word it belongs to. Desktop
+                  keeps the clock crossfade (C2). */}
               <p
                 data-scene-line="caught"
                 className="absolute left-0 top-0 w-fit max-w-[145px] whitespace-nowrap font-caption text-[15px] font-normal italic leading-[30px] text-ink"
@@ -2082,26 +2080,43 @@ export default function Demo({
                 {COPY.scene.mobile.caught.post}
               </p>
             </div>
-            <Phone preset={preset} bizName={bizName} typingBefore={[2]} slab sonar showBanner={!bannerGone} showConfirm={!confirmGone} />
-            <div className="hidden">
-              {/* change 30 (G1): the mobile receipt — 72px over the device,
-                  spine-left, vertically centered on it. */}
-              {receiptShown && (
-                <p
-                  data-receipt-m
-                  data-figure="data"
-                  className="pointer-events-none absolute inset-0 z-30 flex items-center justify-start text-[72px] font-medium leading-none text-gold [text-shadow:0_0_3px_rgba(6,11,20,0.85),0_2px_18px_rgba(6,11,20,0.9)] min-[1100px]:hidden min-[1100px]:text-transparent"
-                >
-                  +${preset.ticket}
-                </p>
-              )}
+            <Phone preset={preset} bizName={bizName} typingBefore={[2]} sonar showBanner={!bannerGone} showConfirm={!confirmGone} />
+            {/* change 36 (C1): the mechanism, in three words, under the
+                phone at every width. Each inks at its own beat; "+${ticket}"
+                lands 12px right of "Booked" on the booking beat. This is
+                where the money lives now — section 1 leads with what the
+                product DOES and closes on what it made. */}
+            <div data-beats data-chrome="beats" className="mt-3 flex items-center justify-center">
+              <div className="flex items-center gap-6 font-figures text-[12px]">
+                {[COPY.beats.missed, COPY.beats.text, COPY.beats.booked].map((w, i) => (
+                  <Fragment key={w}>
+                    {i > 0 && (
+                      <span aria-hidden="true" className="-mx-3 text-muted opacity-40">
+                        ·
+                      </span>
+                    )}
+                    <span data-beat={i} className="whitespace-nowrap" style={{ color: "var(--color-muted)" }}>
+                      {w}
+                    </span>
+                  </Fragment>
+                ))}
+              </div>
+              <span
+                data-beat-money
+                data-figure="hero"
+                className="ml-3 whitespace-nowrap text-[24px] font-medium leading-none text-gold"
+                style={{ opacity: 0 }}
+              >
+                +${preset.ticket}
+              </span>
             </div>
+
             {/* change 26 (C7): the settled pair — centered under the
                 phone, 24px below the bezel, 12px apart. The engine lands
-                them at settle. */}
+                them at settle. change 36 (C3): under the beat strip. */}
             {/* change 33 (B5): ONE row, two equal-width buttons, centered
                 under the phone with a 12px gap — never stacked. */}
-            <div data-controls className="mt-3 flex flex-row items-center justify-center gap-3 min-[1100px]:mt-6">
+            <div data-controls data-chrome="controls" className="mt-3 flex flex-row items-center justify-center gap-3 min-[1100px]:mt-4">
               <button data-replay type="button" onClick={onReplay} className={`w-[46%] max-w-[180px] ${btnSecondary}`}>
                 {COPY.replayLabel}
               </button>
@@ -2238,14 +2253,9 @@ export default function Demo({
            carries label + tiles per preset and stays the page-wide
            switcher; dots + cue sit ABOVE the phone on mobile. ---- */}
       <section data-section="yours" data-entry-fx={fxReady ? (entered[2] ? "run" : "pending") : undefined}>
-        {/* change 26 (A3): the slab is a 40% band at the section's far
-            left — labels sit on it, rules cross it, figures clear it. */}
-        <div
-          aria-hidden="true"
-          data-accent-slab
-          data-slab
-          className="absolute inset-y-0 left-0 z-0 w-full bg-[var(--accent-soft,#0F1E33)] min-[1100px]:w-2/5"
-        />
+        {/* change 36 (A7): no band, no full-bleed plane. The trade colour
+            gets ONE background in the whole page — a 22% tint of accentSoft
+            over abyss, on the panel itself (see [data-panel] below). */}
         <SectionMark {...COPY.sections.yours} />
 
         <div
@@ -2256,7 +2266,7 @@ export default function Demo({
           {/* change 33 (D1/D3): the tab strip is the switcher's label —
               four trades under the folio, the active one accented and
               underlined; the swipe cue sits directly beneath it. */}
-          <div data-tabs data-client-world role="tablist" aria-label={COPY.a11y.panelDot} className="col-span-full mb-2 flex shrink-0 flex-nowrap items-center gap-x-5 min-[1100px]:col-span-2 min-[1100px]:gap-x-6">
+          <div data-tabs data-chrome="tabs" data-client-world role="tablist" aria-label={COPY.a11y.panelDot} className="col-span-full mb-2 flex shrink-0 flex-nowrap items-center gap-x-5 min-[1100px]:col-span-2 min-[1100px]:gap-x-6">
             {presetList.map((p, i) => (
               <button
                 key={p.id}
@@ -2276,16 +2286,11 @@ export default function Demo({
               </button>
             ))}
           </div>
-          {!yoursCueGone && (
-            <p data-yours-cue className="col-span-full -mt-1 mb-2 shrink-0 text-[12px] text-muted min-[1100px]:col-span-2">
-              {COPY.cues.presets.replace(" →", "")} <span data-cue-arrow>→</span>
-            </p>
-          )}
 
           {/* change 35 (C2): the field spans the content column — a
               240px cage was what forced the 19px value and clipped the
               longer trade names. */}
-          <div className="w-full shrink-0 min-[1100px]:col-start-1 min-[1100px]:row-start-1 min-[1100px]:max-w-[400px]">
+          <div data-chrome="namefield" className="w-full shrink-0 min-[1100px]:col-start-1 min-[1100px]:row-start-1 min-[1100px]:max-w-[400px]">
             <label className="block">
               <span data-name-label className="text-[13px] text-muted">{COPY.name.label}</span>
               {/* change 26 (E3/E4): pencil glyph before the placeholder;
@@ -2367,28 +2372,35 @@ export default function Demo({
                     data-preset={p.id}
                     data-client-world
                     className="flex min-h-0 flex-col justify-start min-[1100px]:h-full"
-                    style={{ "--accent": p.accent, "--accent-soft": p.accentSoft, "--accent-ink": p.accentInk } as CSSProperties}
+                    style={
+                      {
+                        "--accent": p.accent,
+                        "--accent-soft": p.accentSoft,
+                        "--accent-ink": p.accentInk,
+                        /* change 36 (A7): the ONE background the trade
+                           colour is allowed — abyss carried 22% toward
+                           accentSoft. A tint, not a plane. */
+                        background: `color-mix(in srgb, ${p.accentSoft} 22%, var(--color-abyss))`,
+                      } as CSSProperties
+                    }
                   >
                     <div data-panel-content className="flex min-h-0 flex-col">
-                    {/* change 35 (C3): the watermark is FIRST in the panel,
-                        so the rows paint over it without a z-index race. */}
-                    <TradeGlyph id={p.id} />
-                    <div className="relative flex items-start justify-between gap-3">
+                    {/* change 36 (A6/E1): the trade label with its 24px glyph
+                        inline to the right. The HEAD is what shows in the
+                        peek; the BODY is what does not. */}
+                    <div data-panel-head className="flex items-center gap-2">
                       <p data-panel-label className="w-fit font-display text-[28px] font-medium leading-[1.02] tracking-[-0.01em] text-[var(--accent,#E9EEF4)] min-[1100px]:text-[44px]">{p.label}</p>
+                      <TradeGlyph id={p.id} />
                     </div>
+                    <div data-panel-body className="flex min-h-0 flex-col">
                     {/* change 19 (B9): the fourth preset explains itself. */}
                     {p.tagline && <p data-tagline className="relative mt-0.5 w-fit text-[13px] text-muted">{p.tagline}</p>}
-                    {/* change 26 (E1): a ruled mono head over the double
-                        hairline, then labeled rows. Ticket stays the one
+                    {/* change 26 (E1) / change 36 (A4/A6): labeled rows —
+                        the "Typical for this trade" head and the double
+                        hairline under it are gone. Ticket stays the one
                         gold element per panel (gates 79/82). */}
-                    {/* change 35 (C3): labels left, figures on the content
-                        column's right edge — at every width. The mobile
-                        stacked variant and its 196px cage are gone. */}
-                    <div className="relative mt-2 min-[1100px]:mt-5 min-[1100px]:flex min-[1100px]:min-h-0 min-[1100px]:flex-1 min-[1100px]:flex-col">
-                      <p data-rows-head data-figure="data" className="w-fit pb-1 text-[11px] tracking-[0.04em] text-muted">
-                        {COPY.yours.rowsHead}
-                      </p>
-                      <div className="hairline2" aria-hidden="true" />
+                    <div className="relative mt-3 min-[1100px]:mt-5 min-[1100px]:flex min-[1100px]:min-h-0 min-[1100px]:flex-1 min-[1100px]:flex-col">
+                      <div className="border-t border-line" aria-hidden="true" />
                       <div data-tile="ticket" className="flex items-baseline justify-between gap-3 border-b border-line py-2 min-[1100px]:flex-1 min-[1100px]:items-center min-[1100px]:py-8">
                         <span className="whitespace-nowrap text-[13px] text-ink min-[1100px]:text-[17px]">{COPY.yours.rows.ticket}</span>
                         <span data-ticket data-tile-value data-figure="hero" className="font-medium leading-none text-gold text-[32px] min-[1100px]:text-[96px]">
@@ -2409,62 +2421,22 @@ export default function Demo({
                       </div>
                     </div>
                     </div>
+                    </div>
                   </div>
                 ))}
                 {/* change 34 (E): trailing peek-width space, so the LAST
                     panel can still snap flush to the spine — without it the
                     track runs out of scroll and rests ~19px short. */}
-                <div aria-hidden="true" data-track-tail className="h-full shrink-0 basis-[6%] min-[1100px]:hidden" />
+                <div aria-hidden="true" data-track-tail className="h-full shrink-0 basis-[12%] min-[1100px]:hidden" />
               </div>
             </div>
 
-            {/* Mobile: dots + cue ABOVE the phone (A4), in a fixed 56px band
-                (change 16, B4) so the phone's top edge is deterministic. */}
-            <div
-              data-yours-cueband
-              className="order-2 mt-2 flex h-9 shrink-0 flex-col items-start justify-center gap-1 min-[1100px]:hidden"
-            >
-              <div className="flex justify-center gap-2.5">
-                {presetList.map((p, i) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    data-panel-dot
-                    data-active={yoursPanel === i ? "true" : "false"}
-                    aria-label={`${COPY.a11y.panelDot} ${i + 1}`}
-                    onClick={() => goPanel(yoursTrackRef.current, i)}
-                    className={panelDot(yoursPanel === i)}
-                  />
-                ))}
-              </div>
-            </div>
-            {/* change 19 (B7): the payoff pointer — its own line below the
-                band. */}
-            <p data-scroll-up className="order-2 mt-1 w-fit max-w-[200px] shrink-0 text-left text-[12px] text-muted min-[1100px]:hidden">
-              {COPY.yours.scrollUp.replace("{bizName}", bizName)}
-            </p>
+            {/* change 36 (A6): the dot row, the cue and the "Scroll up to
+                watch it as…" pointer are all gone. The tabs are the
+                switcher, the 12% peek shows the next trade's own name, and
+                the phone below is its own payoff. */}
           </div>
 
-          {/* Desktop: dots at the section's bottom left (change 33 (D3):
-              the cue moved under the tabs). */}
-          <div className="absolute bottom-6 left-12 z-20 hidden flex-col items-start gap-1.5 min-[1100px]:flex">
-            <div className="flex justify-center gap-2.5">
-              {presetList.map((p, i) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  data-panel-dot
-                  data-active={yoursPanel === i ? "true" : "false"}
-                  aria-label={`${COPY.a11y.panelDot} ${i + 1}`}
-                  onClick={() => goPanel(yoursTrackRef.current, i)}
-                  className={panelDot(yoursPanel === i)}
-                />
-              ))}
-            </div>
-            <p data-scroll-up className="text-[12px] text-muted">
-              {COPY.yours.scrollUp.replace("{bizName}", bizName)}
-            </p>
-          </div>
         </div>
       </section>
 
@@ -2479,7 +2451,7 @@ export default function Demo({
 
         {/* change 30 (F1/F2): flowed from the folio — folio bottom + 16 ->
             the 2px rule; mobile left-aligns on the spine like desktop. */}
-        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col items-start justify-start gap-8 pb-8 pl-6 pr-14 pt-[68px] text-left min-[1100px]:max-w-[1240px] min-[1100px]:items-stretch min-[1100px]:gap-14 min-[1100px]:px-12 min-[1100px]:pt-[68px]">
+        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col items-start justify-start gap-4 pb-3 pl-6 pr-14 pt-[44px] text-left min-[1100px]:max-w-[1240px] min-[1100px]:items-stretch min-[1100px]:gap-14 min-[1100px]:px-12 min-[1100px]:pb-8 min-[1100px]:pt-[68px]">
           {/* change 18 (C5): the math line is the ledger's TOTAL — a 2px
               rule above, 1px below, numerals in mono at display size. */}
           <div data-total className="w-full border-b border-t-2 border-line py-4">
@@ -2522,6 +2494,12 @@ export default function Demo({
             )}
           </div>
 
+          {/* change 36 (F2): the line that turns the arithmetic into a
+              decision. It sits with the total, not with the pitch. */}
+          <p data-accuse className="-mt-3 max-w-[24ch] font-display text-[24px] font-medium leading-[1.15] tracking-[-0.01em] text-ink min-[1100px]:-mt-8 min-[1100px]:text-[32px]">
+            {COPY.close.accuse}
+          </p>
+
           {/* change 21 (B): the close. change 26 (F3) drops since-install
               from this section; (G6) the ?ref=djl portfolio variant swaps
               the conversion block for the portfolio pitch — price, sms,
@@ -2529,8 +2507,8 @@ export default function Demo({
               of a two-row section — CTA block left, builtBy/loop/wordmark/
               stack right-aligned right. The ?ref=djl variant runs the same
               grid. */}
-          <div className="flex w-full max-w-md flex-col items-start gap-2.5 text-left min-[1100px]:grid min-[1100px]:max-w-none min-[1100px]:grid-cols-[55fr_45fr] min-[1100px]:items-start min-[1100px]:gap-x-16">
-            <div data-close-left className="flex w-full flex-col items-start gap-2.5">
+          <div className="flex w-full max-w-md flex-col items-start gap-2 text-left min-[1100px]:grid min-[1100px]:max-w-none min-[1100px]:grid-cols-[55fr_45fr] min-[1100px]:items-start min-[1100px]:gap-x-16">
+            <div data-close-left className="flex w-full flex-col items-start gap-2">
             {refDjl ? (
               <>
                 <a
@@ -2548,36 +2526,39 @@ export default function Demo({
               </>
             ) : (
               <>
+                {/* change 36 (F3): the primary action is a TEXT. Booking a
+                    call was the highest-friction thing on the page and it
+                    was wearing the gold. The body carries the ask and, when
+                    the visitor has typed one, their own business name. */}
                 <a
                   data-cta
-                  href={COPY.contact.calendly}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() => track("cta_calendly", { preset: preset.id })}
-                  className="inline-block rounded-full bg-gold px-8 py-4 text-[15px] font-semibold text-abyss outline-none focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 min-[1100px]:px-10 min-[1100px]:py-5 min-[1100px]:text-[20px]"
+                  data-sms
+                  href={smsHref}
+                  onClick={() => track("cta_sms", { preset: preset.id })}
+                  className="inline-block rounded-full bg-gold px-8 py-3.5 text-[15px] font-semibold text-abyss outline-none focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 min-[1100px]:px-10 min-[1100px]:py-5 min-[1100px]:text-[20px]"
                 >
                   {COPY.close.ctaLabel}
                 </a>
                 <p data-cta-sub className="text-[14px] text-muted min-[1100px]:text-[19px]">
                   {COPY.close.ctaSub}
                 </p>
-                <p data-sms-line className="text-[14px] text-muted min-[1100px]:font-figures min-[1100px]:text-[17px]">
-                  {COPY.close.textLead}{" "}
-                  <a
-                    data-sms
-                    data-figure="data"
-                    href={COPY.contact.smsHref}
-                    onClick={() => track("cta_sms", { preset: preset.id })}
-                    className={linkStyle}
-                  >
-                    {COPY.contact.phone}
-                  </a>
-                </p>
+                {/* change 36 (F4): Calendly is the secondary path — a 14px
+                    link, not a second pill. */}
+                <a
+                  data-cta-book
+                  href={COPY.contact.calendly}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => track("cta_calendly", { preset: preset.id })}
+                  className={`text-[14px] ${linkStyle}`}
+                >
+                  {COPY.close.bookLabel}
+                </a>
                 {/* change 30 (F4): figures mono, words sans — the approved
                     string split on its dollar figures. */}
                 {/* change 33 (E1): two lines; figures mono, words sans. */}
                 {[COPY.close.priceLine, COPY.close.priceLine2].map((line, li) => (
-                  <p key={li} data-price-line className="text-[15px] text-ink min-[1100px]:text-[22px]">
+                  <p key={li} data-price-line className="text-[14px] text-ink min-[1100px]:text-[18px]">
                     {line.split(/(\$[\d,]+)/).map((part, i) =>
                       /^\$[\d,]+$/.test(part) ? (
                         <span key={i} data-figure="data">{part}</span>
@@ -2591,29 +2572,29 @@ export default function Demo({
             )}
             </div>
 
-            <div data-close-rule className="mt-2 w-full border-t border-line min-[1100px]:hidden" />
+            <div data-close-rule className="mt-1 w-full border-t border-line min-[1100px]:hidden" />
 
             <div data-close-right className="flex w-full flex-col items-start gap-1 text-left">
 
             {/* change 26 (F4): 56px portrait; the name and the wordmark both
                 link home. */}
-            <div data-builtby className="mt-1.5 flex items-center gap-3">
+            <div data-builtby className="mt-1 flex items-center gap-3">
               {hasPhoto ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
                   data-builtby-photo
                   src={COPY.contact.photo}
                   alt=""
-                  width={56}
-                  height={56}
-                  className="h-14 w-14 rounded-full object-cover"
+                  width={48}
+                  height={48}
+                  className="h-12 w-12 rounded-full object-cover"
                 />
               ) : (
                 <span
                   data-builtby-photo
-                  className="flex h-14 w-14 items-center justify-center rounded-full bg-teal"
+                  className="flex h-12 w-12 items-center justify-center rounded-full bg-teal"
                 >
-                  <span className="font-display text-[24px] font-semibold leading-none text-abyss">S</span>
+                  <span className="font-display text-[21px] font-semibold leading-none text-abyss">S</span>
                 </span>
               )}
               {/* change 30 (F3): the approved builtBy line split on the
@@ -2632,11 +2613,11 @@ export default function Demo({
               </p>
             </div>
 
-            <button data-loop type="button" onClick={onLoop} className={`mt-1 ${btnSecondary}`}>
+            <button data-loop data-chrome="loop" type="button" onClick={onLoop} className={btnSecondary}>
               {COPY.close.loopLabel}
             </button>
 
-            <p data-wordmark className="mt-2 text-[11px] uppercase text-muted">
+            <p data-wordmark data-chrome="colophon" className="mt-1 text-[11px] uppercase text-muted">
               <a
                 href={COPY.portfolio.href}
                 target="_blank"
@@ -2647,10 +2628,10 @@ export default function Demo({
               </a>
               <span className="normal-case"> · {COPY.footNote} <span data-fictional>{COPY.fictionalNote}</span></span>
             </p>
-            {/* change 26 (F5). */}
-            <p data-stack-line data-figure="data" className="text-[11px] text-muted">
-              {COPY.close.stack}
-            </p>
+            {/* change 36: the stack credit is gone. F pins the builtBy row,
+                the loop button and the wordmark line; the build's toolchain
+                was the one noun in the colophon that nothing on the page
+                needed, and the close was running past the fold. */}
             </div>
           </div>
         </div>
@@ -2662,7 +2643,9 @@ export default function Demo({
           cluster of 28px teal-stroke squares now; the rail keeps only the
           6px square dots and the 1px caret. change 16's gutter contract
           (rail inside the 40px right column, content padded 56px) stands. */}
-      <div data-top-cluster className="fixed right-1 top-2 z-40 flex gap-1.5 min-[1100px]:right-10 min-[1100px]:top-6 min-[1100px]:gap-2">
+      {/* change 36 (A2): glyph-only. No box, no stroke, ink at 60% — and
+          sound-on is ink at 100%, which is the whole state machine. */}
+      <div data-top-cluster data-chrome="cluster" className="fixed right-3 top-3 z-40 flex gap-3 min-[1100px]:right-10 min-[1100px]:top-6">
         <button
           data-share
           data-rail-share
@@ -2670,8 +2653,8 @@ export default function Demo({
           onClick={onShare}
           title={COPY.shareLabel}
           aria-label={COPY.a11y.share}
-          className={`flex h-7 w-7 items-center justify-center rounded-[2px] border border-[rgba(44,199,182,0.7)] bg-transparent text-teal-bright outline-none transition-opacity min-[1100px]:h-8 min-[1100px]:w-8 hover:opacity-100 focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
-            share === "copied" ? "opacity-100" : "opacity-90"
+          className={`flex h-5 w-5 items-center justify-center bg-transparent text-ink outline-none transition-opacity hover:opacity-100 focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
+            share === "copied" ? "opacity-100" : "opacity-60"
           }`}
         >
           <ShareGlyph />
@@ -2685,8 +2668,8 @@ export default function Demo({
           title={soundOn ? COPY.a11y.soundOn : COPY.a11y.soundOff}
           aria-label={soundOn ? COPY.a11y.soundOn : COPY.a11y.soundOff}
           aria-pressed={soundOn}
-          className={`flex h-7 w-7 items-center justify-center rounded-[2px] outline-none transition-colors min-[1100px]:h-8 min-[1100px]:w-8 focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
-            soundOn ? "border border-teal bg-teal text-abyss" : "border border-[rgba(44,199,182,0.7)] bg-transparent text-teal-bright hover:opacity-100"
+          className={`flex h-5 w-5 items-center justify-center bg-transparent text-ink outline-none transition-opacity focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2 ${
+            soundOn ? "opacity-100" : "opacity-60"
           }`}
         >
           <SpeakerGlyph on={soundOn} />
@@ -2696,15 +2679,20 @@ export default function Demo({
       {toastOn && (
         <div
           data-sound-toast
-          className="fixed right-1 top-11 z-40 text-[12px] text-muted min-[1100px]:right-10 min-[1100px]:top-16"
+          className="fixed right-3 top-10 z-40 text-[12px] text-muted min-[1100px]:right-10 min-[1100px]:top-16"
         >
           {COPY.a11y.tapForSound}
         </div>
       )}
 
+      {/* change 36 (A1): the rail is GONE on mobile — the sections snap,
+          and four dots plus a chevron on a 390px screen were four more
+          nouns than the gesture needed. Desktop keeps the four squares as
+          a quiet index. */}
       <div
         data-rail
-        className="fixed right-0.5 top-1/2 z-40 flex -translate-y-1/2 flex-col items-center gap-3 min-[1100px]:right-10 min-[1100px]:gap-4"
+        data-chrome="rail"
+        className="fixed right-10 top-1/2 z-40 hidden -translate-y-1/2 flex-col items-center gap-4 min-[1100px]:flex"
       >
         <div className="my-1 flex flex-col gap-3">
           {SECTIONS.map((s, i) => (
@@ -2715,25 +2703,28 @@ export default function Demo({
               data-active={activeSection === i ? "true" : "false"}
               aria-label={`${COPY.a11y.dot} ${i + 1}`}
               onClick={() => goSection(i)}
-              className={pagerDot(activeSection === i)}
+              className={pagerDot()}
             />
           ))}
         </div>
-
-        <button
-          data-rail-next
-          type="button"
-          onClick={() => goSection(activeSection + 1)}
-          aria-label={COPY.a11y.next}
-          className={`flex h-8 w-5 items-center justify-center text-teal outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-teal-bright ${
-            activeSection >= SECTIONS.length - 1 ? "hidden" : ""
-          }`}
-        >
-          <span className={caretBob ? "rail-bob" : ""}>
-            <ChevronGlyph />
-          </span>
-        </button>
       </div>
+
+      {/* The caret is the one piece of wayfinding at every width: bottom
+          centre on mobile, under the rail on desktop. */}
+      <button
+        data-rail-next
+        data-chrome="caret"
+        type="button"
+        onClick={() => goSection(activeSection + 1)}
+        aria-label={COPY.a11y.next}
+        className={`fixed bottom-2 left-1/2 z-40 flex h-8 w-5 -translate-x-1/2 items-center justify-center text-teal outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-teal-bright min-[1100px]:bottom-auto min-[1100px]:left-auto min-[1100px]:right-10 min-[1100px]:top-[calc(50%+52px)] min-[1100px]:translate-x-0 ${
+          activeSection >= SECTIONS.length - 1 ? "hidden" : ""
+        }`}
+      >
+        <span className={caretBob ? "rail-bob" : ""}>
+          <ChevronGlyph />
+        </span>
+      </button>
     </main>
   );
 }

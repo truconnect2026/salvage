@@ -27,8 +27,9 @@ function WifiGlyph() {
 }
 
 export function StatusGlyphs() {
+  /* change 36 (B5): the cluster is 17px tall with 6px gaps. */
   return (
-    <span data-status-cluster className="flex items-center gap-[6px] text-white">
+    <span data-status-cluster className="flex h-[17px] items-center gap-[6px] text-white">
       <span data-glyph="signal" className="flex">
         <SignalGlyph />
       </span>
@@ -41,6 +42,8 @@ export function StatusGlyphs() {
 }
 
 function BatteryGlyph() {
+  /* change 36 (B5): the fill is inset 1px inside the shell, the way iOS
+     draws it — a filled lozenge floating in the casing, not a flush block. */
   return (
     <svg width="25" height="12" viewBox="0 0 25 12" aria-hidden="true">
       <path
@@ -51,7 +54,8 @@ function BatteryGlyph() {
         opacity="0.55"
       />
       <path
-        d="M3.6 2.6h11.1a1.4 1.4 0 0 1 1.4 1.4v4a1.4 1.4 0 0 1-1.4 1.4H3.6a1.4 1.4 0 0 1-1.4-1.4V4a1.4 1.4 0 0 1 1.4-1.4z"
+        data-battery-fill
+        d="M3.9 2.9h10.5a1.2 1.2 0 0 1 1.2 1.2v3.8a1.2 1.2 0 0 1-1.2 1.2H3.9a1.2 1.2 0 0 1-1.2-1.2V4.1a1.2 1.2 0 0 1 1.2-1.2z"
         fill="currentColor"
       />
       <path d="M22.4 4.1c1.3 0.5 1.3 3.3 0 3.8z" fill="currentColor" opacity="0.55" />
@@ -84,15 +88,16 @@ export function MissedCallGlyph() {
    28px, currentColor, no icon library. Scenery, not controls. */
 function CallGridGlyph({ kind }: { kind: string }) {
   const common = {
-    width: 28,
-    height: 28,
+    width: 26,
+    height: 26,
     viewBox: "0 0 28 28",
     fill: "none",
     stroke: "currentColor",
-    /* change 32: the six in-call glyphs carry ONE stroke weight — 1.5px,
-       the share/sound chrome weight. Gate 181 holds it; the marker is on
-       the family so no future glyph can opt out. */
-    strokeWidth: 1.5,
+    /* change 32: the six in-call glyphs carry ONE stroke weight. change
+       36 (B3): 1.8px at 26px, the weight iOS draws them at — the 1.5 was
+       the page's chrome weight borrowed into the device. Gate 181 holds
+       it; the marker is on the family so no future glyph can opt out. */
+    strokeWidth: 1.8,
     strokeLinecap: "round" as const,
     strokeLinejoin: "round" as const,
     "data-call-glyph": true,
@@ -239,14 +244,14 @@ function TypingRow({ index, right }: { index: number; right: boolean }) {
     <div data-typing={index} className={`mt-2 hidden ${right ? "justify-end" : "justify-start"}`}>
       <div
         className={`flex items-center gap-[5px] rounded-[20px] px-3.5 py-3 ${
-          right ? "bg-[#34C759]" : "bg-[var(--accent,#1E3A5C)]"
+          right ? "bg-[#34C759]" : "bg-[#26252A]"
         }`}
       >
         {[0, 1, 2].map((d) => (
           <span
             key={d}
             data-dot={d}
-            className={`h-[7px] w-[7px] rounded-full ${right ? "bg-white/60" : "bg-[var(--accent-ink,#8AA0B4)]/60"}`}
+            className={`h-[7px] w-[7px] rounded-full ${right ? "bg-white/60" : "bg-white/55"}`}
           />
         ))}
       </div>
@@ -306,8 +311,8 @@ function CallScreen({ preset, bizName, showBanner }: { preset: Preset; bizName: 
       {/* Upper third: who she's calling, and how it's going. change 17
           (A2): flat avatar, system-stack semibold initials, no gradient. */}
       <div className="flex w-full flex-col items-center pt-20">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--accent-soft,#162A44)]">
-          <span data-avatar-initials className="text-[22px] font-semibold text-[var(--accent,#8AA0B4)]">{initialsOf(bizName)}</span>
+        <div data-contact-avatar data-accent-ok className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--accent-soft,#162A44)]">
+          <span data-avatar-initials data-accent-ok className="text-[22px] font-semibold text-[var(--accent,#8AA0B4)]">{initialsOf(bizName)}</span>
         </div>
         <div data-call-biz className="mt-4 text-[26px] font-medium leading-tight text-ink">
           {bizName}
@@ -322,14 +327,17 @@ function CallScreen({ preset, bizName, showBanner }: { preset: Preset; bizName: 
       {/* change 17 (A1): the six-button iOS in-call grid. Scenery — it
           never takes a tap. change 26 (C2): anchored so its bottom row sits
           120px above the End circle; the name block owns the top third. */}
-      <div className="absolute inset-x-0 bottom-[238px] flex justify-center">
-        <div data-call-grid className="pointer-events-none grid grid-cols-3 gap-x-9 gap-y-5">
+      {/* change 36 (B3): Apple's own metrics — 68px buttons, 22px across
+          and 28px down (uneven, as they are on the device), labels 11px at
+          70%, row 1 starting 44px under the status line. */}
+      <div className="mt-[44px] flex w-full justify-center">
+        <div data-call-grid className="pointer-events-none grid grid-cols-3 gap-x-[22px] gap-y-[28px]">
           {COPY.call.grid.map((label) => (
-            <div key={label} data-call-grid-btn className="flex w-[72px] flex-col items-center gap-1.5">
-              <span className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-white/20 text-white">
+            <div key={label} data-call-grid-btn className="flex w-[68px] flex-col items-center gap-1.5">
+              <span className="flex h-[68px] w-[68px] items-center justify-center rounded-full bg-white/20 text-white">
                 <CallGridGlyph kind={label} />
               </span>
-              <span className="whitespace-nowrap text-[12px] text-white/85">{label}</span>
+              <span className="whitespace-nowrap text-[11px] text-white/70">{label}</span>
             </div>
           ))}
         </div>
@@ -494,8 +502,10 @@ export default function Phone({
       />
 
       {/* Status row — centered on the Island's band. */}
-      <div className="relative z-10 flex h-[46px] shrink-0 items-center justify-between px-6 pt-[10px]">
-        <span className="text-[13px] font-semibold tabular-nums text-white">
+      {/* change 36 (B5): time 15px semibold; the glyph cluster ends 14px
+          from the screen's right edge. */}
+      <div className="relative z-10 flex h-[46px] shrink-0 items-center justify-between pl-6 pr-[14px] pt-[10px]">
+        <span className="text-[15px] font-semibold tabular-nums text-white">
           {COPY.chrome.phone.statusTime}
         </span>
         <StatusGlyphs />
@@ -522,20 +532,24 @@ export default function Phone({
           bottom of a conversation can see its contact block. Cropping it in
           would also cost the OG its second bubble, which is the exchange
           the thumbnail exists to show. */}
+      {/* change 36 (B4): 56px avatar, 16px name, a 10px chevron at 40%,
+          16px off the header. The block was carrying more weight than the
+          conversation under it. */}
       {aspect && (
-      <div data-contact-block className="flex shrink-0 flex-col items-center px-4 pb-1 pt-6">
+      <div data-contact-block className="flex shrink-0 flex-col items-center px-4 pb-1 pt-4">
         <div
           data-contact-avatar
-          className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--accent-soft,#162A44)]"
+          data-accent-ok
+          className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--accent-soft,#162A44)]"
         >
-          <span data-contact-initials className="text-[22px] font-semibold text-[var(--accent,#8AA0B4)]">
+          <span data-contact-initials data-accent-ok className="text-[20px] font-semibold text-[var(--accent,#8AA0B4)]">
             {initialsOf(effectiveBizName)}
           </span>
         </div>
-        <div data-contact-name className="mt-1.5 max-w-full truncate px-2 text-[17px] font-semibold leading-tight text-ink">
+        <div data-contact-name className="mt-1.5 max-w-full truncate px-2 text-[16px] font-semibold leading-tight text-ink">
           {effectiveBizName}
         </div>
-        <div aria-hidden="true" className="mt-0.5 text-[13px] leading-none text-muted">
+        <div aria-hidden="true" className="mt-0.5 text-[10px] leading-none text-white/40">
           ›
         </div>
       </div>
@@ -603,7 +617,7 @@ export default function Phone({
                       <div className="flex justify-end">
                         <div
                           {...markEither("data-bubble", "data-s-bubble", "customer")}
-                          className={`relative max-w-[72%] rounded-[20px] bg-[#34C759] px-[14px] py-2 text-[17px] leading-[1.29] text-white ${
+                          className={`relative max-w-[72%] rounded-[20px] bg-[#34C759] pb-[9px] pl-3 pr-3 pt-2 text-[15px] leading-[1.27] text-white ${
                             runEnd ? "rounded-br-[6px]" : ""
                           }`}
                         >
@@ -613,18 +627,23 @@ export default function Phone({
                       </div>
                     ) : (
                       <div className="flex flex-col items-start">
+                        {/* change 36 (B1): the incoming bubble is iOS
+                            dark-mode gray on white text. The trade accent
+                            is off the bubbles for good — it was the loudest
+                            thing in the screen and the least authentic. */}
                         <div
                           {...markEither("data-bubble", "data-s-bubble", "business")}
-                          className={`relative max-w-[72%] rounded-[20px] bg-[var(--accent,#1E3A5C)] px-[14px] py-2 text-[17px] leading-[1.29] text-[var(--accent-ink,#E9EEF4)] ${
+                          className={`relative max-w-[72%] rounded-[20px] bg-[#26252A] pb-[9px] pl-3 pr-3 pt-2 text-[15px] leading-[1.27] text-white ${
                             runEnd ? "rounded-bl-[6px]" : ""
                           }`}
                         >
                           {skinText(b.text)}
-                          {runEnd && <BubbleTail side="left" color="var(--accent, #1E3A5C)" />}
+                          {runEnd && <BubbleTail side="left" color="#26252A" />}
                         </div>
                         {i === 0 && (
                           <div
                             data-auto-reply
+                            data-accent-ok
                             className="mt-0.5 pl-2 text-[12px]"
                             style={{ color: "color-mix(in srgb, var(--accent, #8AA0B4) 60%, transparent)" }}
                           >

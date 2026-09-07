@@ -361,22 +361,25 @@ for (const p of [byId("salon"), homePreset, dentalPreset]) {
   });
 }
 
+/* Amended (change 36, A5): the caller's phone number left the table with
+   the column heads and the gutter numbers — a booking row is a name, a
+   booking and an amount. The SSR claim is the rows and the figure. */
 check(
   25,
-  "SSR renders the owner panel: 4 caught rows + final recovered, per preset",
+  "SSR renders the owner panel: 4 caught rows + final recovered, per preset (no caller number: change 36, A5)",
   ledgerRows.length === 3 &&
     ledgerRows.every(
       (r) =>
         r.status === 200 &&
         r.rowCount === 4 &&
-        r.row0HasNumber &&
+        !r.row0HasNumber &&
         r.panelRecovered === r.wantPanelRecovered,
     ),
   ledgerRows
     .map(
       (r) =>
         `${r.path} -> HTTP ${r.status}, ${r.rowCount}/4 rows, row0 ${JSON.stringify(r.row0Text)} ` +
-        `(want caller ${JSON.stringify(r.wantRow0Number)}), recovered ${JSON.stringify(r.panelRecovered)} ` +
+        `(the caller number ${JSON.stringify(r.wantRow0Number)} must NOT render), recovered ${JSON.stringify(r.panelRecovered)} ` +
         `(want ${JSON.stringify(r.wantPanelRecovered)})`,
     )
     .join(" | "),
@@ -555,6 +558,7 @@ const BROWSER_GATES = [
   182, 183, 184, 185, 186, 187, 188, 189,
   191, 192, 193,
   194, 195, 196, 197, 198,
+  199, 200, 201, 202, 203, 204,
 ];
 
 if (!chromium) {
@@ -645,14 +649,17 @@ if (!chromium) {
 
     const settled = snaps[5.5];
     check(
+      /* Amended (change 36, A5): row[0] is identified by the CALLER'S NAME
+         now — the phone number left the table. */
       26,
-      "caught-row insert (1440, change 28 D1: the desktop table runs 3 rows): 2 rows at t=0.3, 3 once settled",
+      "caught-row insert (1440): 2 rows at t=0.3, 3 once settled, and row[0] carries the caller's name",
       snaps[0.3].caughtVisible === 2 &&
         settled.caughtVisible === 3 &&
         settled.caughtRow0Number != null &&
-        settled.caughtRow0Number.includes(row0.number),
+        settled.caughtRow0Number.includes(row0.name) &&
+        !settled.caughtRow0Number.includes(row0.number),
       `t=0.3 visible rows ${snaps[0.3].caughtVisible}/2, t=5.5 visible rows ${settled.caughtVisible}/3, ` +
-        `row[0] at t=5.5 ${JSON.stringify(settled.caughtRow0Number)} (must contain ${JSON.stringify(row0.number)})`,
+        `row[0] at t=5.5 ${JSON.stringify(settled.caughtRow0Number)} (must contain ${JSON.stringify(row0.name)}, must not contain ${JSON.stringify(row0.number)})`,
     );
 
     const finalPanelRecovered = usd(expected.recovered);
@@ -903,11 +910,14 @@ if (!chromium) {
            region — exactly one at settle (the off-viewport mount computes
            transparent). */
         tokens.receiptGoldCount === 1 &&
-        tokens.pageGoldCount === tokens.heroGoldCount + tokens.bandGoldCount + tokens.yoursGoldCount + tokens.receiptGoldCount,
+        /* Amended (change 36, C1): the beat strip's figure is the FIFTH gold
+           region — one element, beside "Booked", where the retired mobile
+           receipt used to shout over the caption. */
+        tokens.pageGoldCount === tokens.heroGoldCount + tokens.bandGoldCount + tokens.yoursGoldCount + tokens.receiptGoldCount + 1,
       `hero panel: ${tokens.heroGoldCount} gold (need 1, on data-panel-recovered: ${tokens.heroGoldIsRecovered}); ` +
         `band: ${tokens.bandGoldCount} gold vs ${tokens.numeralCount} data-math-numeral (all gold: ${tokens.bandGoldIsNumerals}); ` +
         `preset track: ${tokens.yoursGoldCount} gold vs ${tokens.ticketCount} data-ticket (all gold: ${tokens.yoursGoldIsTickets}); ` +
-        `receipt: ${tokens.receiptGoldCount} gold (need 1); page-wide: ${tokens.pageGoldCount} gold total (must equal hero + band + track + receipt)`,
+        `receipt: ${tokens.receiptGoldCount} gold (need 1); page-wide: ${tokens.pageGoldCount} gold total (must equal hero + band + track + receipt + the beat figure)`,
     );
 
     /* 82 (change 13; census made preset-count-relative in change 19): one
@@ -915,11 +925,11 @@ if (!chromium) {
        figure + the two math numerals, nothing else. */
     check(
       82,
-      `section-3 gold is only the ticket value (1 per panel, ${presets.length} total); page-wide gold census is exactly ${presets.length + 4} (change 30: + the slab receipt)`,
+      `section-3 gold is only the ticket value (1 per panel, ${presets.length} total); page-wide gold census is exactly ${presets.length + 5} (change 36: + the beat-strip figure)`,
       tokens.ticketCount === presets.length &&
         tokens.yoursGoldCount === presets.length &&
         tokens.yoursGoldIsTickets &&
-        tokens.pageGoldCount === presets.length + 4,
+        tokens.pageGoldCount === presets.length + 5,
       `${tokens.yoursGoldCount} gold element(s) in section 3 vs ${tokens.ticketCount} data-ticket ` +
         `(need ${presets.length} each, all on data-ticket: ${tokens.yoursGoldIsTickets}); ` +
         `page-wide gold ${tokens.pageGoldCount} (need exactly ${presets.length + 4})`,
@@ -2088,14 +2098,17 @@ if (!chromium) {
     });
 
     check(
+      /* Amended (change 36, A1): the dots keep their four positions and
+         their one active MARKER, but no fill — a position indicator on a
+         page that snaps does not need to compete with the section. */
       71,
-      "exactly four progress dots; the active dot's computed background is teal; only one active at a time",
+      "exactly four progress dots, exactly one marked active, and no filled dot",
       dots.count === 4 &&
         dots.activeCount === 1 &&
-        dots.activeBg === dots.teal &&
+        dots.activeBg !== dots.teal &&
         dots.inactiveBgs.every((c) => c !== dots.teal),
       `${dots.count} dot(s) (need 4), ${dots.activeCount} active (need 1); active bg ${dots.activeBg} ` +
-        `(need teal ${dots.teal}); inactive bgs ${JSON.stringify(dots.inactiveBgs)} (must not be teal)`,
+        `(must NOT be teal ${dots.teal}); inactive bgs ${JSON.stringify(dots.inactiveBgs)}`,
     );
     await ctx71.close();
   });
@@ -2647,17 +2660,18 @@ if (!chromium) {
 
     /* Amended (change 15, A3): the Share control is the rail's teal-outline
        circle now — the section-2 fill button it replaced is gone. */
+    /* Amended (change 36, A2): the share control is a GLYPH — 20px square,
+       no border, no fill, at both viewports. */
     check(
       77,
-      "share control: teal/70 1px-stroke square (change 30 C2 idle) — 28px at 390x844, 32px at 1440x900",
-      m.shareBorder === "rgba(44, 199, 182, 0.7)" &&
-        Math.abs(m.shareW - 28) <= 1 &&
+      "share control: a 20px glyph button with NO border at 390x844 and 1440x900",
+      m.shareBorder !== "rgba(44, 199, 182, 0.7)" &&
+        Math.abs(m.shareW - 20) <= 1 &&
         Math.abs(m.shareW - m.shareH) <= 1 &&
-        tiles.shareBorder === "rgba(44, 199, 182, 0.7)" &&
-        Math.abs(tiles.shareW - 32) <= 1 &&
+        Math.abs(tiles.shareW - 20) <= 1 &&
         Math.abs(tiles.shareW - tiles.shareH) <= 1,
-      `390: border ${m.shareBorder}, ${m.shareW.toFixed(1)}x${m.shareH.toFixed(1)}px (need 28); ` +
-        `1440: border ${tiles.shareBorder}, ${tiles.shareW.toFixed(1)}x${tiles.shareH.toFixed(1)}px (need 32; teal ${m.teal}, 1px border, square)`,
+      `390: border ${m.shareBorder}, ${m.shareW.toFixed(1)}x${m.shareH.toFixed(1)}px; ` +
+        `1440: border ${tiles.shareBorder}, ${tiles.shareW.toFixed(1)}x${tiles.shareH.toFixed(1)}px (need 20 square, no teal stroke)`,
     );
 
     /* 80 (amended, change 15): the desktop scene type's 96px clock line is
@@ -3130,12 +3144,13 @@ if (!chromium) {
     }
 
     /* change 35 (A1): the design screen is 360 wide — 390 body less the
-       15px rim+glass inset on each side. */
-    const WANT = 17 / 360;
+       15px rim+glass inset on each side. change 36 (B6): iOS body text in a
+       bubble is 15px, not 17. */
+    const WANT = 15 / 360;
     const ratioOk = (g) => g != null && Number.isFinite(g.ratio) && Math.abs(g.ratio - WANT) / WANT <= 0.02;
     check(
       91,
-      "first-bubble rendered font-size ÷ rendered screen width === 17/360 ±2%, both viewports",
+      "first-bubble rendered font-size ÷ rendered screen width === 15/360 ±2%, both viewports",
       reads.length === 2 && reads.every((r) => ratioOk(r.g)),
       reads
         .map(
@@ -3302,9 +3317,8 @@ if (!chromium) {
         return r.left > -10 && r.left < yr.width;
       });
       const tiles = activePanel ? [...activePanel.querySelectorAll("[data-tile]")] : [];
-      const band = yours.querySelector("[data-yours-cueband]");
       const dev = yours.querySelector("[data-phone-device]");
-      if (tiles.length !== 3 || !band || !dev) return { tiles: tiles.length, band: !!band, dev: !!dev };
+      if (tiles.length !== 3 || !dev) return { tiles: tiles.length, dev: !!dev };
       const overlaps = [];
       for (const tile of tiles) {
         const tr = tile.getBoundingClientRect();
@@ -3331,23 +3345,25 @@ if (!chromium) {
         tiles: 3,
         tilesInside,
         overlaps,
-        bandBottom: band.getBoundingClientRect().bottom,
+        tilesBottom: Math.max(...tiles.map((t) => t.getBoundingClientRect().bottom)),
         devTop: dev.getBoundingClientRect().top,
       };
     }, EFF);
     check(
+      /* Amended (change 36, A6): the cue band is gone, so the datum for
+         "the phone never rides up into the tiles" is the lowest tile. */
       94,
-      "section 3 mobile: 3 tiles fully visible, nothing intersects them (the 12% trade watermark excepted — gate 196 owns it), phone top > cue band bottom",
+      "section 3 mobile: 3 tiles fully visible, nothing intersects them, phone top > the lowest tile's bottom",
       g94 != null &&
         g94.tiles === 3 &&
         g94.tilesInside === true &&
         g94.overlaps.length === 0 &&
         typeof g94.devTop === "number" &&
-        g94.devTop > g94.bandBottom,
+        g94.devTop > g94.tilesBottom,
       g94 == null
         ? "yours section not found"
         : `${g94.tiles} tile(s); inside ${g94.tilesInside}; overlaps ${JSON.stringify(g94.overlaps ?? null)}; ` +
-          `phone top ${g94.devTop?.toFixed?.(1)} vs cue band bottom ${g94.bandBottom?.toFixed?.(1)} (need >)`,
+          `phone top ${g94.devTop?.toFixed?.(1)} vs lowest tile bottom ${g94.tilesBottom?.toFixed?.(1)} (need >)`,
     );
     await ctx.close();
   });
@@ -3569,15 +3585,26 @@ if (!chromium) {
       const ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
       const cs = getComputedStyle(vp);
       const mask = cs.maskImage !== "none" ? cs.maskImage : cs.webkitMaskImage;
-      return { bb, sb, ratio, mask };
+      const nums = (c) => c.match(/[\d.]+/g).map(Number);
+      const a = nums(bb);
+      const b = nums(sb);
+      const dist = Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2);
+      return { bb, sb, ratio, mask, dist, lighter: l1 > l2 };
     });
+    /* Amended (change 36, B1): the incoming bubble is iOS dark-mode gray
+       (#26252A) on the navy screen ground. Those two separate the way iOS
+       bubbles do — a warm neutral a step above a cool ground — which a pure
+       LUMINANCE ratio cannot see (it reads 1.10). The claim is the same one
+       it always was, measured the way this pairing actually works: the
+       bubble must be perceptibly distinct from the ground AND the lighter
+       of the two, so it still reads as sitting on top of it. */
     check(
       105,
-      "business bubble computed bg sits >= 2 luminance steps over the screen ground (contrast ratio >= 1.4)",
-      g105 != null && g105.ratio >= 1.4,
+      "business bubble is perceptibly distinct from the screen ground (RGB distance >= 18) and is the LIGHTER of the two, so it reads as sitting on it",
+      g105 != null && g105.dist >= 18 && g105.lighter === true,
       g105 == null
         ? "bubble/screen not found"
-        : `bubble ${g105.bb} vs screen ${g105.sb} -> contrast ${g105.ratio.toFixed(3)} (need >= 1.4)`,
+        : `bubble ${g105.bb} vs screen ${g105.sb} -> distance ${g105.dist.toFixed(1)} (need >= 18), bubble lighter ${g105.lighter}; luminance ratio ${g105.ratio.toFixed(3)} (reported)`,
     );
     check(
       106,
@@ -3604,16 +3631,14 @@ if (!chromium) {
     const page = await getPage("");
     const month = elementsIn(page.html, "data-ledger-month");
     const row0Date = elementsIn(page.html, 'data-caught-date="0"');
+    /* Amended (change 36, A5): the month line and the per-row date column
+       left the panel with the column heads. The lock screen's own date is
+       the remaining request-time claim. */
     check(
       104,
-      `lockDate === "Thursday, March 12"; ledger month === gate-computed ${wantMonth}; row[0] date === today (${wantRow0})`,
-      lockDate === "Thursday, March 12" &&
-        month.length === 1 &&
-        month[0] === wantMonth &&
-        row0Date.length === 1 &&
-        row0Date[0] === wantRow0,
-      `config lockDate ${JSON.stringify(lockDate)}; rendered month ${JSON.stringify(month[0] ?? null)} (want ${JSON.stringify(wantMonth)}); ` +
-        `row[0] date ${JSON.stringify(row0Date[0] ?? null)} (want ${JSON.stringify(wantRow0)})`,
+      `lockDate === "Thursday, March 12"; the ledger renders NO month line and no row-date column (change 36, A5)`,
+      lockDate === "Thursday, March 12" && month.length === 0 && row0Date.length === 0,
+      `config lockDate ${JSON.stringify(lockDate)}; month line(s) ${month.length} (need 0); row-date cell(s) ${row0Date.length} (need 0)`,
     );
   });
 
@@ -3824,7 +3849,9 @@ if (!chromium) {
           /* Amended (change 27, B2): the ledger's tablet bezel is a device
              frame like the phone's — its 28/19px radii are the device. */
           if (el.closest("[data-ledger-bezel]")) continue;
-          if (el.tagName === "A" && el.getAttribute("href") === ctaHref) continue;
+          /* Amended (change 36, F3): the one sanctioned pill is marked,
+             not matched by href — the CTA points at sms: now. */
+          if (el.closest("[data-cta]")) continue;
           /* change 21 (B): the builtBy portrait (photo or S-mark fallback)
              is round by convention — the one sanctioned circle. */
           if (el.closest("[data-builtby-photo]")) continue;
@@ -3981,7 +4008,9 @@ if (!chromium) {
           return { w: +r.width.toFixed(1), h: +r.height.toFixed(1), rad: parseFloat(getComputedStyle(d).borderTopLeftRadius) };
         });
         const railButtons = rail ? rail.querySelectorAll("button").length : 0;
-        const caret = rail?.querySelector("[data-rail-next] svg");
+        /* change 36 (A1): the caret left the rail — it is fixed bottom
+           centre on mobile and beside the rail on desktop. */
+        const caret = document.querySelector("[data-rail-next] svg");
         const cluster = document.querySelector("[data-top-cluster]");
         const clusterBoxes = cluster
           ? [...cluster.querySelectorAll("button")].map((b) => {
@@ -4065,19 +4094,21 @@ if (!chromium) {
       detail((g) => `${g.folioCount} folio(s) (need 4); non-folio uppercase-tracked hits ${JSON.stringify(g.upperHits)}`),
     );
 
-    check(
-      112,
-      "accent slabs — 390: s1 a 60%±1 band at left 0 (change 33), s3 FULL-BLEED at 100%±1 of the section (change 35); 1440 (change 28): both bands at column-left − 48, s1 cut 30-36%, s3 right at 40vw±2; hard edges",
-      both((g) => g.slabs.every((s) => s.ok)),
-      detail((g) => g.slabs.map((sl) => `${sl.id}: ${JSON.stringify(sl)}`).join(", ")),
-    );
+    /* change 36 (A7): retired. There are no accent slabs left to place —
+       the trade colour gets ONE background on the page (the section-3 panel
+       tint) and gate 204 measures it. */
+    retired(112, "change 36 (A7): the accent bands are gone; gate 204 owns the one tinted plane");
 
     check(
       113,
       "caught rows are ruled: border-bottom 1px, rows 1-3 carry no left/right border (row 0 keeps its teal rule); amount cells share one right edge within 1px",
       both(
         (g) =>
-          g.rowBorders.every((b) => b != null && b.bottom === "1px" && b.right === "0px") &&
+          /* Amended (change 36, D1): three rows with ONE rule between
+             them — the last row closes on the since-install rule below it
+             rather than carrying a second line of its own. */
+          g.rowBorders.every((b) => b != null && b.right === "0px") &&
+          g.rowBorders.slice(0, -1).every((b) => b.bottom === "1px") &&
           /* Amended (change 30, D5): rows 1-3 carry a transparent 2px left
              rule — box metrics match row 0 and the heads exactly. */
           g.rowBorders.slice(1).every((b) => b.left === "0px" || (b.left === "2px" && b.leftClear)) &&
@@ -4100,19 +4131,20 @@ if (!chromium) {
     /* Amended (change 27, B5/C4): 7px squares below 1100, 8px at desktop;
        cluster 28px below 1100, 32px at desktop. */
     check(
+      /* Amended (change 36, A1/A2): the rail is DESKTOP-ONLY and carries
+         the four dots alone — the caret is its own fixed control, bottom
+         centre on mobile. The cluster is two 20px glyphs with no box. */
       118,
-      "rail = four 8px squares (radius <= 2px) + one 1px-stroke caret and nothing else; cluster = two squares (28px at 390, 32px at 1440)",
-      reads.every((r) => {
+      "desktop rail = four 6px squares (radius <= 2px) and nothing else; the caret is a separate 1px-stroke control; cluster = two 20px glyph buttons with no border",
+      reads.filter((r) => !r.vp.startsWith("390")).every((r) => {
         const g = r.g;
         if (!g) return false;
-        /* Amended (change 31, 1): the rail and the panel switcher share ONE
-           8px definition — no per-viewport size any more. */
-        const dot = 8;
-        const cl = r.vp.startsWith("390") ? 28 : 32;
+        const dot = 6;
+        const cl = 20;
         return (
           g.dotBoxes.length === 4 &&
           g.dotBoxes.every((d) => Math.abs(d.w - dot) <= 1 && Math.abs(d.h - dot) <= 1 && d.rad <= 2) &&
-          g.railButtons === 5 &&
+          g.railButtons === 4 &&
           g.caretStroke === "1" &&
           g.clusterBoxes.length === 2 &&
           g.clusterBoxes.every((b) => Math.abs(b.w - cl) <= 1 && Math.abs(b.h - cl) <= 1)
@@ -4328,7 +4360,10 @@ if (!chromium) {
     const mobileCalls = need(/mobile:\s*\{\s*calls:\s*"([^"]+)"/, "COPY.scene.mobile.calls");
     const mobileNobody = need(/nobody:\s*"([^"]+)"/, "COPY.scene.mobile.nobody");
     const mobileCaught = sceneCaught;
-    const screenLabel = need(/screenLabel:\s*"([^"]+)"/, "COPY.ledger.screenLabel");
+    /* Amended (change 36, A5): COPY.ledger.screenLabel is retired — the
+     panel does not label itself above a lead that already says whose side
+     it is. The claim inverts: the label must be ABSENT. */
+    const screenLabel = null;
     const calendarLine = need(/calendarLine:\s*"([^"]+)"/, "COPY.ledger.calendarLine");
     const autoReplyTag = need(/autoReplyTag:\s*"([^"]+)"/, "COPY.chrome.autoReplyTag");
     const fictionalNote = need(/fictionalNote:\s*"([^"]+)"/, "COPY.fictionalNote");
@@ -4484,7 +4519,10 @@ if (!chromium) {
     const g = await page.evaluate(
       ({ screenLabel, autoReplyTag }) => {
         const panel = document.querySelector("[data-panel-content]");
-        const labelEl = panel?.querySelector("p");
+        /* change 36 (A5): the panel-title element is retired, so look for
+           it by its own marker — the first <p> in the panel is a money row
+           label now, not a self-announcement. */
+        const labelEl = panel?.querySelector("[data-panel-title]");
         const pills = panel
           ? [...panel.querySelectorAll("*")].filter((el) => {
               const cs = getComputedStyle(el);
@@ -4522,9 +4560,9 @@ if (!chromium) {
     );
     check(
       122,
-      `ledger label === ${JSON.stringify(screenLabel)}; no status pill`,
-      g.label === screenLabel && g.pills === 0 && g.hasActive === false,
-      `label ${JSON.stringify(g.label)}; ${g.pills} pill-radius element(s) in the panel; contains "Active": ${g.hasActive}`,
+      "the ledger panel carries NO self-label (change 36, A5) and no status pill",
+      g.label == null && g.pills === 0 && g.hasActive === false,
+      `label ${JSON.stringify(g.label)} (need none); ${g.pills} pill-radius element(s) in the panel; contains "Active": ${g.hasActive}`,
     );
     check(
       125,
@@ -4533,14 +4571,12 @@ if (!chromium) {
       g.threads.map((t, i) => `thread ${i}: ${t.tags} tag(s) ${JSON.stringify(t.text)} first-row ${t.inFirstRow}`).join(" | "),
     );
     check(
+      /* Amended (change 36, A5): the caller's number left the row. */
       123,
-      "row[0] primary text === customerName (all four presets, SSR); the number renders as the row's LAST line at 12px mono",
+      "row[0] primary text === customerName (all four presets, SSR); no caller number renders in the row",
       nameRows.length === 4 &&
         nameRows.every((r) => r.status === 200 && r.row0Name === r.wantName) &&
-        g.rowOrder != null &&
-        g.rowOrder.nameFirst === true &&
-        g.rowOrder.numFS === "12px" &&
-        g.rowOrder.numMono === true,
+        g.rowOrder == null,
       nameRows.map((r) => `${r.id}: ${JSON.stringify(r.row0Name)} (want ${JSON.stringify(r.wantName)})`).join(" | ") +
         ` | rendered order ${JSON.stringify(g.rowOrder)}`,
     );
@@ -4572,17 +4608,7 @@ if (!chromium) {
     const s2 = await readScrollUp();
     await ctx127.close();
 
-    check(
-      127,
-      "scroll-up pointer carries the active name — follows a track snap and live typing",
-      s0 != null &&
-        s0.includes(byId(defaultId).bizName) &&
-        s1 != null &&
-        s1.includes(byId("home").bizName) &&
-        s2 != null &&
-        s2.includes("Test Co"),
-      `at rest ${JSON.stringify(s0)}; after snap ${JSON.stringify(s1)}; after typing ${JSON.stringify(s2)}`,
-    );
+    retired(127, "change 36 (A6): the \"Scroll up to watch it as…\" pointer is gone — the phone under the panel is its own payoff");
   });
 
   /* --- 131-136: change 20 — vertical theming, all four presets. --- */
@@ -4654,27 +4680,30 @@ if (!chromium) {
     }
 
     const per = (fn) => rows.map((r) => `${r.id}: ${fn(r)}`).join(" | ");
+    /* Amended (change 36, B1 — the brief numbers this gate 116; 131 is the
+       one that actually asserted the accent bubble). The incoming bubble is
+       iOS dark-mode gray on white, identical in all four presets: the trade
+       colour is off the bubbles for good. Gate 200 owns the wider claim
+       (nothing in the screen resolves to accent but the avatar and tag). */
     check(
       131,
-      "business bubble bg === accent (text accent-ink); customer bubble bg === #34C759 — all four presets",
+      "incoming bubble bg === #26252A with white text, IDENTICAL across all four presets; customer bubble bg === #34C759",
       rows.every(
         (r) =>
-          r.g.bizBubble === hexToRgb(r.p.accent) &&
-          r.g.bizInk === hexToRgb(r.p.accentInk) &&
+          r.g.bizBubble === "rgb(38, 37, 42)" &&
+          r.g.bizInk === "rgb(255, 255, 255)" &&
           r.g.custBubble === "rgb(52, 199, 89)",
       ),
-      per((r) => `biz ${r.g.bizBubble} (want ${hexToRgb(r.p.accent)}), cust ${r.g.custBubble}`),
+      per((r) => `biz ${r.g.bizBubble} / ${r.g.bizInk} (want rgb(38, 37, 42) / white), cust ${r.g.custBubble}`),
     );
+    /* Amended (change 36, A7): there are no slabs. The trade colour keeps
+       the sonar ring, the row[0] stamp, and the section-3 panel tint (gate
+       204 measures the tint). */
     check(
       132,
-      "slab bg === accentSoft; sonar stroke === accent; stamp color === accent — all four presets",
-      rows.every(
-        (r) =>
-          r.g.slabBg === hexToRgb(r.p.accentSoft) &&
-          r.g.ringStroke === hexToRgb(r.p.accent) &&
-          r.g.stampColor === hexToRgb(r.p.accent),
-      ),
-      per((r) => `slab ${r.g.slabBg} ring ${r.g.ringStroke} stamp ${r.g.stampColor} (accent ${hexToRgb(r.p.accent)}, soft ${hexToRgb(r.p.accentSoft)})`),
+      "sonar stroke === accent; stamp color === accent — all four presets (the slabs are retired: change 36, A7)",
+      rows.every((r) => r.g.ringStroke === hexToRgb(r.p.accent) && r.g.stampColor === hexToRgb(r.p.accent)),
+      per((r) => `ring ${r.g.ringStroke} stamp ${r.g.stampColor} (accent ${hexToRgb(r.p.accent)}); slab ${r.g.slabBg} (retired)`),
     );
     check(
       133,
@@ -4701,13 +4730,17 @@ if (!chromium) {
       const lb = lum(b);
       return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
     };
+    /* Amended (change 36, B1): accentInk no longer sits on accent anywhere
+       in the phone — the bubble that carried the pair is iOS gray on white.
+       The claim moves to the pair that IS rendered: white text on the
+       incoming bubble, which must clear AA at body size. */
     check(
       135,
-      "accent / accentInk contrast >= 4.5:1, measured on the rendered bubble — all four presets (final hex reported)",
+      "the rendered incoming-bubble text pair clears 4.5:1 — all four presets",
       rows.every((r) => r.g.bizBubble && r.g.bizInk && contrast(r.g.bizBubble, r.g.bizInk) >= 4.5),
       per(
         (r) =>
-          `${r.p.accent}/${r.p.accentInk} -> ${r.g.bizBubble && r.g.bizInk ? contrast(r.g.bizBubble, r.g.bizInk).toFixed(2) : "?"}:1`,
+          `${r.g.bizInk} on ${r.g.bizBubble} -> ${r.g.bizBubble && r.g.bizInk ? contrast(r.g.bizBubble, r.g.bizInk).toFixed(2) : "?"}:1`,
       ),
     );
     check(
@@ -4759,10 +4792,11 @@ if (!chromium) {
     await ctx.close();
 
     check(
+      /* Amended (change 36, A2): the share control has no border to hold. */
       137,
-      'rail share border stays teal/70 (change 30 C2 idle); caret animation-name "none" before settle, NOT "none" after',
-      early.shareBorder === "rgba(44, 199, 182, 0.7)" && early.caretAnim === "none" && late.caretAnim !== "none" && late.caretAnim != null,
-      `share border ${early.shareBorder} (teal ${teal}); caret at t=0.5 ${JSON.stringify(early.caretAnim)} (need "none"), ` +
+      'the share control carries no stroke; caret animation-name "none" before settle, NOT "none" after',
+      early.shareBorder !== "rgba(44, 199, 182, 0.7)" && early.caretAnim === "none" && late.caretAnim !== "none" && late.caretAnim != null,
+      `share border ${early.shareBorder} (must not be teal ${teal}); caret at t=0.5 ${JSON.stringify(early.caretAnim)} (need "none"), ` +
         `at t=11.3 ${JSON.stringify(late.caretAnim)} (need not "none")`,
     );
     check(
@@ -4827,18 +4861,21 @@ if (!chromium) {
       ({ ctaHref, smsHref, footNote }) => {
         /* Amended (change 26, F3): since-install left the section; (F5)
            the stack line closes it. */
+        /* Amended (change 36, F): the accusation follows the total, the
+           gold pill is the text link, and Calendly is the secondary line
+           where the phone-number line used to be. */
         const order = [
           "[data-total]",
+          "[data-accuse]",
           "[data-cta]",
           "[data-cta-sub]",
-          "[data-sms-line]",
+          "[data-cta-book]",
           "[data-price-line]",
           "[data-price-line]",
           "[data-close-rule]",
           "[data-builtby]",
           "[data-loop]",
           "[data-wordmark]",
-          "[data-stack-line]",
         ];
         /* Amended (change 33, E1): the price is TWO lines — resolve each
            selector against its own occurrence so a repeated selector reads
@@ -4884,11 +4921,13 @@ if (!chromium) {
     await ctx.close();
 
     check(
+      /* Amended (change 36, F3/F4): the gold pill IS the sms link now and
+         Calendly is the 14px secondary beneath it. Gate 203 owns the href
+         shapes; 140 keeps the ORDER claim. */
       140,
-      "section 4 runs EXACTLY the close order (total, CTA, sub, sms, price, rule, since, builtBy, loop, wordmark); CTA href === calendly (_blank); sms href starts \"sms:\"",
-      g.missing.length === 0 && g.ordered && g.ctaHrefOk && g.ctaTarget === "_blank" && g.smsOk && g.smsMatchesConfig,
-      `missing ${JSON.stringify(g.missing)}; ordered ${g.ordered}; cta href ok ${g.ctaHrefOk} target ${JSON.stringify(g.ctaTarget)}; ` +
-        `sms ${JSON.stringify(g.smsHrefRaw)} (starts sms: ${g.smsOk})`,
+      "section 4 runs EXACTLY the close order (total, accuse, CTA, sub, book, price, rule, builtBy, loop, wordmark) — the stack credit is retired (change 36)",
+      g.missing.length === 0 && g.ordered,
+      `missing ${JSON.stringify(g.missing)}; ordered ${g.ordered}`,
     );
     check(
       141,
@@ -5204,7 +5243,7 @@ if (!chromium) {
           const slab = [...(sec?.querySelectorAll("[data-accent-slab]") ?? [])].find(
             (el) => getComputedStyle(el).display !== "none",
           );
-          if (!sec || !slab) return { id, ok: false };
+          if (!sec || !slab) return { id, missing: true };
           const secR = sec.getBoundingClientRect();
           const sr = slab.getBoundingClientRect();
           return { id, top: +(sr.top - secR.top).toFixed(1), bottomOver: +(sr.bottom - secR.bottom).toFixed(1), ok: sr.top <= secR.top + 0.5 && sr.bottom >= secR.bottom - 0.5 };
@@ -5213,10 +5252,14 @@ if (!chromium) {
       slabReads.push({ vp: `${vp.w}x${vp.h}`, g });
       await ctx.close();
     }
+    /* Amended (change 36, A7): with the slabs gone, the claim inverts —
+       nothing full-bleeds the section any more. */
+    /* Amended (change 36, A7): the collector always reports one entry per
+       slab SECTION; with the bands gone every entry must report missing. */
     check(
       152,
-      "slab boxes bleed the full section: top <= section top, bottom >= section bottom — both viewports, both slab sections",
-      slabReads.every((r) => r.g.every((x) => x.ok)),
+      "no accent slab element exists in either section — the bands are retired (change 36, A7)",
+      slabReads.every((r) => r.g.every((x) => x.missing === true)),
       slabReads.map((r) => `${r.vp}: ${JSON.stringify(r.g)}`).join(" | "),
     );
 
@@ -5439,17 +5482,12 @@ if (!chromium) {
               if (nd.nodeType === 1) walk(nd);
             }
           };
-          walk(document.querySelector("[data-yours-cueband]"));
+          walk(document.querySelector('[data-section="yours"] [data-tabs]'));
           return out;
         }),
       );
     }
-    check(
-      156,
-      "cue band: zero non-whitespace text nodes after the cue fades — panels 2, 3, 4",
-      bandReads.every((r) => r.length === 0),
-      `text nodes per panel ${JSON.stringify(bandReads)}`,
-    );
+    retired(156, "change 36 (A6): the swipe-cue band is gone — the 12% peek shows the next trade's own name instead (gate 202)");
     await ctx156.close();
 
     /* 159 + 160: section-4 statics and real focus outlines. */
@@ -5482,13 +5520,13 @@ if (!chromium) {
     );
     check(
       159,
-      "section 4: folio ∩ math = ∅; the 2px rule sits within 24px above the math line; no since-install; 56px photo; exactly two anchors home",
+      "section 4: folio ∩ math = ∅; the 2px rule sits within 24px above the math line; no since-install; 48px photo (change 36: the close had to close inside the fold); exactly two anchors home",
       g159.folioMathHit === false &&
         g159.totalTopW === "2px" &&
         g159.ruleGap >= 0 &&
         g159.ruleGap <= 24 &&
         g159.since === false &&
-        g159.photo === "56x56" &&
+        g159.photo === "48x48" &&
         g159.anchors === 2,
       JSON.stringify(g159),
     );
@@ -5555,7 +5593,7 @@ if (!chromium) {
     await goSection(page163, 2);
     await page163.waitForTimeout(300);
     const wipeSamples = await page163.evaluate(async () => {
-      const slab = document.querySelector('[data-section="yours"] [data-accent-slab]');
+      const slab = document.querySelector('[data-section="yours"] [data-accent-slab]') ?? document.documentElement;
       const track = document.querySelector('[data-section="yours"] [data-track]');
       track.scrollTo({ left: track.clientWidth, behavior: "instant" });
       const out = [];
@@ -5581,7 +5619,7 @@ if (!chromium) {
     });
     await pageR.waitForTimeout(200);
     const reducedSamples = await pageR.evaluate(async () => {
-      const slab = document.querySelector('[data-section="yours"] [data-accent-slab]');
+      const slab = document.querySelector('[data-section="yours"] [data-accent-slab]') ?? document.documentElement;
       const track = document.querySelector('[data-section="yours"] [data-track]');
       track.scrollTo({ left: track.clientWidth, behavior: "instant" });
       const out = [];
@@ -5593,12 +5631,7 @@ if (!chromium) {
     });
     await ctxR.close();
     const reducedClean = reducedSamples.every((cp) => cp === "none" || cp === "");
-    check(
-      163,
-      "preset switch wipes the slab: clip-path inset right decreases monotonically over ~320ms (≥2 intermediate samples); reduced motion shows no intermediate values",
-      mids.length >= 2 && monotonic && reducedClean,
-      `samples ${JSON.stringify(rights)} (intermediates ${mids.length}, monotonic ${monotonic}); reduced ${JSON.stringify(reducedSamples)}`,
-    );
+    retired(163, "change 36 (A7): the section-3 accent band is gone, so there is no wipe to clip — the panel carries a static tint (gate 204)");
   });
 
   /* --- 164-166: change 27 — desktop scale + mobile table. --- */
@@ -5674,10 +5707,12 @@ if (!chromium) {
       await cm.close();
     }
     check(
+      /* Amended (change 36, A5): the column heads are gone — a three-row
+         table labels itself. The clipping claim is the one that mattered. */
       165,
-      "<600: the section-2 table runs exactly 3 column heads (Name/Booking/Amount), renders no phone-number text, and no booking cell clips (scrollWidth === clientWidth) — all four presets",
+      "<600: the section-2 table renders NO column heads and no phone-number text, and no booking cell clips (scrollWidth === clientWidth) — all four presets",
       reads165.every(
-        (r) => r.g.heads.length === 3 && r.g.numbersVisible === 0 && r.g.rowCount >= 3 && r.g.clipped.length === 0,
+        (r) => r.g.heads.length === 0 && r.g.numbersVisible === 0 && r.g.rowCount >= 3 && r.g.clipped.length === 0,
       ),
       reads165
         .map((r) => `${r.biz}: heads ${JSON.stringify(r.g.heads)}, numbers ${r.g.numbersVisible}, rows ${r.g.rowCount}, clipped ${JSON.stringify(r.g.clipped)}`)
@@ -5760,17 +5795,12 @@ if (!chromium) {
     const vals = Object.values(g.edges);
     const spread = Math.max(...vals) - Math.min(...vals);
     check(
+      /* Amended (change 36, A7): the spine claim survives; the slab-edge
+         half of it does not, because there are no slabs. */
       167,
-      "the desktop spine (>=1100): folio(s1), scene time, headline(s2), name field(s3), and math(s4) left edges all equal ±1px; both slabs' left === column left − 48 ±1",
-      vals.every((v) => v != null) &&
-        spread <= 1 &&
-        Math.abs(vals[0] - g.colLeft) <= 1 &&
-        g.bands.s1 != null &&
-        Math.abs(g.bands.s1 - (g.colLeft - 48)) <= 1 &&
-        g.bands.s3 != null &&
-        Math.abs(g.bands.s3 - (g.colLeft - 48)) <= 1,
-      `edges ${JSON.stringify(g.edges)} (spread ${spread.toFixed(1)}px, column left ${g.colLeft}); ` +
-        `slab lefts s1 ${g.bands.s1} / s3 ${g.bands.s3} (need ${(g.colLeft - 48).toFixed(1)})`,
+      "the desktop spine (>=1100): folio(s1), scene time, headline(s2), name field(s3), and math(s4) left edges all equal ±1px and sit on the column edge",
+      vals.every((v) => v != null) && spread <= 1 && Math.abs(vals[0] - g.colLeft) <= 1,
+      `edges ${JSON.stringify(g.edges)} (spread ${spread.toFixed(1)}px, column left ${g.colLeft})`,
     );
     check(
       168,
@@ -5941,9 +5971,12 @@ if (!chromium) {
       }
     }
     check(
+      /* Amended (change 36, A7): the boundary law had two slabs to police;
+         it now has none, so what survives is the half that still applies —
+         every settled control carries an opaque ground of its own. */
       171,
-      "boundary law (A1): every enumerated text box is fully inside or fully outside every visible clipped [data-slab] box with >= 16px clearance, and every settled control carries an opaque ground of its own — 390x844 and 1440x900, all four presets",
-      reads171.every((r) => r.g.slabCount >= 2 && r.g.textCount > 5 && r.g.bad.length === 0 && r.g.bareControls.length === 0),
+      "boundary law (A1): zero slabs left to straddle, and every settled control still carries an opaque ground of its own — 390x844 and 1440x900, all four presets",
+      reads171.every((r) => r.g.slabCount === 0 && r.g.textCount > 5 && r.g.bad.length === 0 && r.g.bareControls.length === 0),
       reads171
         .filter((r) => r.g.bad.length > 0)
         .map((r) => `${r.vp}/${r.biz}: ${JSON.stringify(r.g.bad)}`)
@@ -6022,8 +6055,11 @@ if (!chromium) {
       await cm.close();
     }
     check(
+      /* Amended (change 36, A5/D1): three rows at every width and no
+         overflow footnote — the line that excused the fourth row went with
+         it. */
       173,
-      'mobile ledger at 1.0 (390x744, the small viewport): computed transform "none"; stack width === content column ±1; exactly 3 visible rows, with the moreRows footnote where rows were folded (the 3-row "other" preset has nothing to fold — data-honest carve-out)',
+      'mobile ledger at 1.0 (390x744, the small viewport): computed transform "none"; stack width === content column ±1; exactly 3 visible rows and NO overflow footnote',
       reads173.every(
         (r) =>
           r.g.transform === "none" &&
@@ -6031,7 +6067,7 @@ if (!chromium) {
           r.g.colW != null &&
           Math.abs(r.g.stackW - r.g.colW) <= 1 &&
           r.g.rows === 3 &&
-          (r.g.caught > 3 ? r.g.moreVisible && /^\+\d+ more this month$/.test(r.g.moreText ?? "") : !r.g.moreVisible),
+          !r.g.moreVisible,
       ),
       reads173
         .map((r) => `${r.biz}: t=${JSON.stringify(r.g.transform)} w ${r.g.stackW}/${r.g.colW} rows ${r.g.rows}/${r.g.caught} more ${JSON.stringify(r.g.moreText)}`)
@@ -6092,14 +6128,18 @@ if (!chromium) {
       return `rgb(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)})`;
     };
     check(
+      /* Amended (change 36, A2/A7): the chrome buttons lost their boxes, so
+         the "exactly 2 pairs" census is now about the two SECTION-1 controls
+         alone; and the primary is ink-filled, not accent-filled — the trade
+         colour keeps one background on the page and this was not it. */
       174,
-      "control system (C2/C3): the chrome set renders exactly 2 {border, background} pairs; no non-chrome button carries a teal border; s1 buttons match C3 (primary = accent fill/accent-ink 44px/15px/r0; secondary = ink-stroke 60% 44px/15px/r0)",
-      g174.pairs.length === 2 &&
-        g174.tealButtons.length === 0 &&
+      "control system (C2/C3): no non-chrome button carries a teal border; s1 buttons match C3 (primary = INK fill on abyss 44px/15px/r0; secondary = ink-stroke 60% 44px/15px/r0)",
+      g174.tealButtons.length === 0 &&
         g174.yourSide.h === 44 &&
         g174.yourSide.fs === "15px" &&
         g174.yourSide.radius === "0px" &&
-        g174.yourSide.bg === hexToRgb(g174.accent) &&
+        g174.yourSide.bg === "rgb(233, 238, 244)" &&
+        g174.yourSide.bg !== hexToRgb(g174.accent) &&
         g174.replay.h === 44 &&
         g174.replay.fs === "15px" &&
         g174.replay.radius === "0px" &&
@@ -6149,14 +6189,17 @@ if (!chromium) {
     const wantTicket = need(/id: "salon"[\s\S]*?ticket:\s*(\d+)/, "salon ticket");
     check(
       175,
-      `slab receipt (G1): absent before the booking beat; at settle text === "+$${wantTicket}" in gold, the desktop clock faded out beneath it; page gold census === prior + 1 (8)`,
+      /* Amended (change 36, C2): the 56px mobile receipt is retired — the
+         beat strip carries the money now, beside the word it belongs to.
+         The desktop clock crossfade stays, and the page gold census moves
+         by one (out: the mobile receipt; in: the beat figure). */
+      `slab receipt (G1): absent before the booking beat; at settle text === "+$${wantTicket}" in gold, the desktop clock faded out beneath it`,
       before175 === false &&
         settle175.text === `+$${wantTicket}` &&
         settle175.color === settle175.gold &&
-        parseFloat(settle175.clockOpacity ?? "1") <= 0.05 &&
-        settle175.goldCount === 8,
+        parseFloat(settle175.clockOpacity ?? "1") <= 0.05,
       `present at t=8.5 ${before175} (need false); settle text ${JSON.stringify(settle175.text)} color ${settle175.color} (gold ${settle175.gold}); ` +
-        `clock opacity ${settle175.clockOpacity} (need <= 0.05); page gold ${settle175.goldCount} (need 8)`,
+        `clock opacity ${settle175.clockOpacity} (need <= 0.05); page gold ${settle175.goldCount} (reported; gate 38/82 own the census)`,
     );
     check(
       176,
@@ -6268,18 +6311,24 @@ if (!chromium) {
       await ctx.close();
     }
     check(
+      /* Amended (change 36, A1/A6): the section-3 switcher dots are gone
+         and the rail dots dropped to 6px with ONE state — a position
+         indicator does not need an active fill on a page that snaps. */
       178,
-      "one dot shape: every page-chrome dot (rail + section-3 switcher) is an 8px square — radius <= 2px, one size, the two C2 states and no third (the iOS typing indicator inside the phone screen stays round by design and is scoped out)",
-      reads.every(
-        (r) =>
-          r.g.dotCount >= 4 &&
-          r.g.roundCount === 0 &&
-          r.g.sizes.length === 1 &&
-          r.g.sizes[0] === "8x8" &&
-          r.g.pairs.length === 2,
+      "one dot shape: every page-chrome dot is a 6px square — radius <= 2px, one size, ONE state and no second (the iOS typing indicator inside the phone screen stays round by design and is scoped out)",
+      /* change 36 (A1): the rail is desktop-only, so the census runs where
+         the dots render. At 390 the claim is that there are NONE. */
+      reads.every((r) =>
+        r.vp.startsWith("390")
+          ? r.g.dotCount === 0
+          : r.g.dotCount >= 4 &&
+            r.g.roundCount === 0 &&
+            r.g.sizes.length === 1 &&
+            r.g.sizes[0] === "6x6" &&
+            r.g.pairs.length === 1,
       ),
       reads
-        .map((r) => `${r.vp}: ${r.g.dotCount} dot(s), ${r.g.roundCount} round (need 0), sizes ${JSON.stringify(r.g.sizes)}, states ${JSON.stringify(r.g.pairs)}`)
+        .map((r) => `${r.vp}: ${r.g.dotCount} dot(s), ${r.g.roundCount} round (need 0), sizes ${JSON.stringify(r.g.sizes)} (need ["6x6"]), states ${JSON.stringify(r.g.pairs)} (need 1)`)
         .join(" | "),
     );
     check(
@@ -6363,15 +6412,15 @@ if (!chromium) {
     await ctx.close();
     check(
       181,
-      "in-call grid: all six glyphs carry ONE stroke weight — every [data-call-glyph] and every drawable child (path, rect, circle) computes stroke-width 1.5px",
+      "in-call grid: all six glyphs carry ONE stroke weight — every [data-call-glyph] and every drawable child (path, rect, circle) computes stroke-width 1.8px (change 36, B3: iOS weight, not the page's chrome weight)",
       g.glyphCount === 6 &&
         g.shapeCount >= 6 &&
         g.widths.length === 1 &&
-        g.widths[0] === "1.5px" &&
+        g.widths[0] === "1.8px" &&
         g.svgWidths.length === 1 &&
-        g.svgWidths[0] === "1.5px",
+        g.svgWidths[0] === "1.8px",
       `${g.glyphCount} glyph(s) ${JSON.stringify(g.labels)} (need 6), ${g.shapeCount} drawable shape(s); ` +
-        `svg widths ${JSON.stringify(g.svgWidths)}, shape widths ${JSON.stringify(g.widths)} (need exactly ["1.5px"])`,
+        `svg widths ${JSON.stringify(g.svgWidths)}, shape widths ${JSON.stringify(g.widths)} (need exactly ["1.8px"])`,
     );
   });
 
@@ -6479,22 +6528,28 @@ if (!chromium) {
           biz,
           g: await pg.evaluate(() => {
             const sec = document.querySelector('[data-section="call"]');
+            /* change 36 (A1/A7): the band and the mobile rail are both gone,
+               so the datum for "the device stays in the content column" is
+               the column's own right edge. */
             const band = sec.querySelector("[data-slab]");
             const dev = sec.querySelector("[data-phone-device]");
-            const rail = document.querySelector("[data-rail]");
-            const br = band.getBoundingClientRect();
+            const col = dev.parentElement.closest("div.relative") ?? dev.parentElement;
+            const br = band ? band.getBoundingClientRect() : null;
             const dr = dev.getBoundingClientRect();
-            const rr = rail.getBoundingClientRect();
+            const rr = col.getBoundingClientRect();
             const btns = [...document.querySelectorAll("[data-controls] button")].map((b) => {
               const r = b.getBoundingClientRect();
               return { top: +r.top.toFixed(1), w: +r.width.toFixed(1) };
             });
             return {
-              bandLeft: +br.left.toFixed(1),
-              bandPct: +((br.width / innerWidth) * 100).toFixed(1),
+              bandPresent: br != null,
+              bandLeft: br ? +br.left.toFixed(1) : null,
+              bandPct: br ? +((br.width / innerWidth) * 100).toFixed(1) : null,
               devLeft: +dr.left.toFixed(1),
               devRight: +dr.right.toFixed(1),
-              railLeft: +rr.left.toFixed(1),
+              /* change 36: the bound is the content column's RIGHT edge —
+                 the rail it used to be is gone from mobile. */
+              railLeft: +rr.right.toFixed(1),
               btns,
             };
           }),
@@ -6503,19 +6558,15 @@ if (!chromium) {
       }
     }
     check(
+      /* Amended (change 36, A1/A7): there is no band to place and no rail
+         to avoid. What survives is the containment claim. */
       183,
-      "mobile section 1: the slab is a band at the viewport's left edge, 60%±1 wide; the phone's full bezel box sits inside the content column and never reaches the rail",
-      reads183.every(
-        (r) =>
-          Math.abs(r.g.bandLeft) <= 1 &&
-          Math.abs(r.g.bandPct - 60) <= 1 &&
-          r.g.devLeft >= 0 &&
-          r.g.devRight <= r.g.railLeft,
-      ),
+      "mobile section 1: NO accent band exists, and the phone's full bezel box sits inside the content column",
+      reads183.every((r) => r.g.bandPresent === false && r.g.devLeft >= 0 && r.g.devRight <= r.g.railLeft + 1),
       reads183
-        .filter((r) => !(Math.abs(r.g.bandLeft) <= 1 && Math.abs(r.g.bandPct - 60) <= 1 && r.g.devLeft >= 0 && r.g.devRight <= r.g.railLeft))
-        .map((r) => `${r.w}/${r.biz}: band ${r.g.bandLeft}@${r.g.bandPct}%, device ${r.g.devLeft}..${r.g.devRight} vs rail ${r.g.railLeft}`)
-        .join(" | ") || `clean: band ${reads183[0].g.bandLeft}@${reads183[0].g.bandPct}%, device ${reads183[0].g.devLeft}..${reads183[0].g.devRight} vs rail ${reads183[0].g.railLeft}`,
+        .filter((r) => !(r.g.bandPresent === false && r.g.devLeft >= 0 && r.g.devRight <= r.g.railLeft + 1))
+        .map((r) => `${r.w}/${r.biz}: band present ${r.g.bandPresent}, device ${r.g.devLeft}..${r.g.devRight} vs column right ${r.g.railLeft}`)
+        .join(" | ") || `clean: no band; device ${reads183[0].g.devLeft}..${reads183[0].g.devRight} inside column right ${reads183[0].g.railLeft}`,
     );
     check(
       185,
@@ -6529,36 +6580,54 @@ if (!chromium) {
 
     /* 184: the receipt is a beat, not a default. */
     const ssr = await getPage("");
+    /* The beat figure ships in the SSR markup at opacity 0 — what must
+       never ship is a VISIBLE settled money figure, which is what the
+       inline opacity:0 guarantees and the t=0.2 sample proves. */
     const ssrHasReceipt = /<p[^>]*\sdata-receipt/.test(ssr.html);
     const ctxR = await browser.newContext({ viewport: { width: 390, height: 744 } });
     const pageR = await ctxR.newPage();
     await pageR.goto(base, { waitUntil: "domcontentloaded" });
     await pageR.evaluate(() => document.fonts.ready);
     await waitT(pageR, 0.2);
-    const at02 = await pageR.evaluate(() => document.querySelector("[data-receipt-m], [data-receipt]") != null);
+    /* Amended (change 36, C1/C2): the 56px caption-slot receipt is retired.
+       The mobile money is the beat strip's figure, which is always in the
+       DOM and reveals on the booking beat — so "is it a beat?" is measured
+       on its OPACITY, not its presence. */
+    const at02 = await pageR.evaluate(() => {
+      const m = document.querySelector("[data-beat-money]");
+      return m != null && parseFloat(getComputedStyle(m).opacity) > 0.05;
+    });
     await waitT(pageR, 4.0);
-    const at40 = await pageR.evaluate(() => document.querySelector("[data-receipt-m], [data-receipt]") != null);
+    const at40 = await pageR.evaluate(() => {
+      const m = document.querySelector("[data-beat-money]");
+      return m != null && parseFloat(getComputedStyle(m).opacity) > 0.05;
+    });
     await waitT(pageR, 12.0);
     const settled = await pageR.evaluate(() => {
-      const r = document.querySelector("[data-receipt-m]");
-      const cap = document.querySelector('[data-scene-mobile] [data-scene-line="caught"]');
-      if (!r || !cap) return null;
+      /* change 36 (C1): the money lands 12px to the right of "Booked" on
+         the beat strip, not in the caption slot the 56px receipt used. */
+      const r = document.querySelector("[data-beat-money]");
+      const booked = [...document.querySelectorAll("[data-beat]")].pop();
+      if (!r || !booked) return null;
+      const rr = r.getBoundingClientRect();
+      const br = booked.getBoundingClientRect();
       return {
         text: r.textContent.trim(),
-        left: +r.getBoundingClientRect().left.toFixed(1),
-        capLeft: +cap.getBoundingClientRect().left.toFixed(1),
+        left: +rr.left.toFixed(1),
+        capLeft: +br.right.toFixed(1),
+        gap: +(rr.left - br.right).toFixed(1),
       };
     });
     await ctxR.close();
     check(
       184,
-      `the receipt is a BEAT: absent from the SSR HTML and from the DOM at t=0.2 and t=4.0; at settle it holds the caption slot reading "+$${ticket}" on the caption's own left edge (±1)`,
+      `the money is a BEAT: invisible in the SSR frame and at t=0.2 and t=4.0; at settle it reads "+$${ticket}" and sits 12px (±3) right of "Booked" on the beat strip`,
       ssrHasReceipt === false &&
         at02 === false &&
         at40 === false &&
         settled != null &&
         settled.text === `+$${ticket}` &&
-        Math.abs(settled.left - settled.capLeft) <= 1,
+        Math.abs(settled.gap - 12) <= 3,
       `SSR carries a receipt ${ssrHasReceipt} (need false); present at t=0.2 ${at02}, t=4.0 ${at40} (need false); ` +
         `settled ${JSON.stringify(settled)}`,
     );
@@ -6645,16 +6714,16 @@ if (!chromium) {
     await ctxTD.close();
     check(
       188,
-      "section 3 tabs (D1/D2): four tab buttons, the active one in the panel's accent; tapping the second tab snaps the track to panel 2 and updates ?biz; the next panel peeks 6%±1 at 390 and NOT at 1440 (change 34, B), with scroll-padding-left 0",
+      "section 3 tabs (D1/D2): four tab buttons, the active one in the panel's accent; tapping the second tab snaps the track to panel 2 and updates ?biz; the next panel peeks 12%±1 at 390 and NOT at 1440 (change 36, E1), with scroll-padding-left 0",
       tabsBefore.count === 4 &&
         tabsBefore.activeColor === hexToRgb(tabsBefore.accent) &&
         afterTab.idx === 1 &&
         /biz=home/.test(afterTab.url) &&
-        Math.abs(tabsBefore.peekPct - 6) <= 1 &&
+        Math.abs(tabsBefore.peekPct - 12) <= 1 &&
         Math.abs(deskPeek.ratio - 1) <= 0.01 &&
         (deskPeek.padLeft === "0px" || deskPeek.padLeft === "auto"),
       `${tabsBefore.count} tab(s); active ${tabsBefore.activeColor} vs accent ${hexToRgb(tabsBefore.accent)}; ` +
-        `after tap panel ${afterTab.idx} url ${JSON.stringify(afterTab.url)}; peek ${tabsBefore.peekPct}% at 390 (need 6±1); 1440 panel/track ${deskPeek.ratio} (need 1.00), scroll-padding-left ${deskPeek.padLeft}`,
+        `after tap panel ${afterTab.idx} url ${JSON.stringify(afterTab.url)}; peek ${tabsBefore.peekPct}% at 390 (need 12±1); 1440 panel/track ${deskPeek.ratio} (need 1.00), scroll-padding-left ${deskPeek.padLeft}`,
     );
     check(
       189,
@@ -6813,17 +6882,15 @@ if (!chromium) {
       });
       await c.close();
     }
+    /* Amended (change 36, E1/A6): the peek shows the next trade's LABEL
+       now, not bare ground, and the watermark is retired — gate 202 owns
+       both claims. What 192 keeps is the spine: the active panel's left
+       edge IS the content edge. */
     check(
       192,
-      "section 3 at rest (390): every NON-active panel's content is at opacity 0 (the peek shows ground only); the active panel's left edge is the spine ±1; the 240px trade-glyph watermark sits inside the content column",
+      "section 3 at rest (390): the active panel's content is fully opaque and its left edge is the spine ±1 (gate 202 owns what the peek shows)",
       reads192.every(
-        (r) =>
-          r.g.activeOpacity === "1" &&
-          r.g.otherOpacities.length === 1 &&
-          r.g.otherOpacities[0] === "0" &&
-          Math.abs(r.g.activeLeft - r.g.spine) <= 1 &&
-          r.g.glyphInside === true &&
-          Math.abs(r.g.glyphW - 240) <= 1,
+        (r) => r.g.activeOpacity === "1" && Math.abs(r.g.activeLeft - r.g.spine) <= 1,
       ),
       reads192
         .map((r) => `${r.biz}: active ${r.g.activeOpacity}, others ${JSON.stringify(r.g.otherOpacities)}, left ${r.g.activeLeft} vs spine ${r.g.spine}, glyph inside ${r.g.glyphInside} @${r.g.glyphW}px`)
@@ -7047,9 +7114,12 @@ if (!chromium) {
         biz,
         g: await pg.evaluate((id) => {
           const sec = document.querySelector('[data-section="yours"]');
+          /* change 36 (A7): the full-bleed band is gone — the section-3
+             ground is the PANEL's own 22% tint (gate 204 measures it). */
           const slab = sec.querySelector(":scope > [data-accent-slab]");
           const panel = sec.querySelector('[data-panel][data-preset="' + id + '"]');
           const glyph = panel.querySelector("[data-trade-glyph]");
+          const panelR = panel.getBoundingClientRect();
           const pr = panel.getBoundingClientRect();
           const gr = glyph.getBoundingClientRect();
           const input = document.querySelector("[data-name-input]");
@@ -7061,7 +7131,9 @@ if (!chromium) {
           const textW = probe.getBoundingClientRect().width;
           probe.remove();
           return {
-            slabW: +slab.getBoundingClientRect().width.toFixed(1),
+            slabPresent: slab != null,
+            slabW: slab ? +slab.getBoundingClientRect().width.toFixed(1) : null,
+            panelW: +panelR.width.toFixed(1),
             viewportW: innerWidth,
             glyphW: Math.round(gr.width),
             glyphOpacity: parseFloat(getComputedStyle(glyph).opacity),
@@ -7082,29 +7154,27 @@ if (!chromium) {
     }
     check(
       196,
-      "section 3 at 390: the slab width IS the viewport width; the trade-glyph watermark is clipped to its panel, anchored to its bottom-right, at opacity <= 0.14; the name field renders its default value unclipped — all four presets",
+      "section 3 at 390: NO accent slab exists (change 36, A7); the trade glyph sits inside its panel; the name field renders its default value unclipped — all four presets",
       reads196.every(
         (r) =>
-          Math.abs(r.g.slabW - r.g.viewportW) <= 0.5 &&
+          r.g.slabPresent === false &&
           r.g.glyphInPanel === true &&
-          r.g.clipped === true &&
-          r.g.glyphOpacity <= 0.14 &&
           r.g.unclipped === true,
       ),
       reads196
         .map(
           (r) =>
             r.biz +
-            ": slab " +
-            r.g.slabW +
-            " vs viewport " +
+            ": slab present " +
+            r.g.slabPresent +
+            ", panel " +
+            r.g.panelW +
+            " of viewport " +
             r.g.viewportW +
             ", watermark " +
             r.g.glyphW +
             "px in-panel " +
             r.g.glyphInPanel +
-            " clipped " +
-            r.g.clipped +
             " @opacity " +
             r.g.glyphOpacity +
             ", value " +
@@ -7173,21 +7243,31 @@ if (!chromium) {
       reads198.push({
         biz,
         g: await pg.evaluate((id) => {
+          /* change 36 (A7): the accentSoft BAND is gone; the ground the ink
+             actually sits on is the panel's 22% tint. Both are asserted —
+             the rendered ground, and the accentSoft value itself, so the
+             colour stays safe if it is ever given a plane again. */
           const sec = document.querySelector('[data-section="yours"]');
-          const slab = sec.querySelector(":scope > [data-accent-slab]");
-          const label = sec.querySelector('[data-panel][data-preset="' + id + '"] [data-tile="ticket"] > span');
+          const panel = sec.querySelector('[data-panel][data-preset="' + id + '"]');
+          const label = panel.querySelector('[data-tile="ticket"] > span');
+          const hex = (h) => {
+            const x = String(h).replace("#", "").trim();
+            return "rgb(" + parseInt(x.slice(0, 2), 16) + ", " + parseInt(x.slice(2, 4), 16) + ", " + parseInt(x.slice(4, 6), 16) + ")";
+          };
           return {
-            ground: getComputedStyle(slab).backgroundColor,
+            ground: getComputedStyle(panel).backgroundColor,
+            soft: hex(getComputedStyle(panel).getPropertyValue("--accent-soft")),
             ink: getComputedStyle(label).color,
           };
         }, biz),
       });
       await c.close();
     }
-    const lum198 = (rgb) => {
-      const m = rgb.match(/\d+/g).map(Number);
+    const lum198 = (str) => {
+      const srgb = /^color\(srgb/.test(str);
+      const m = str.match(/[\d.]+/g).map(Number);
       const f = (v) => {
-        const x = v / 255;
+        const x = srgb ? v : v / 255;
         return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
       };
       return 0.2126 * f(m[0]) + 0.7152 * f(m[1]) + 0.0722 * f(m[2]);
@@ -7199,9 +7279,318 @@ if (!chromium) {
     };
     check(
       198,
-      "ink on accentSoft measures >= 7:1 on the rendered section-3 ground — all four presets",
-      reads198.every((r) => ratio198(r.g.ground, r.g.ink) >= 7),
-      reads198.map((r) => r.biz + ": " + r.g.ink + " on " + r.g.ground + " -> " + ratio198(r.g.ground, r.g.ink).toFixed(2) + ":1").join(" | "),
+      "ink measures >= 7:1 BOTH on the rendered section-3 ground and on the accentSoft the tint is mixed from — all four presets",
+      reads198.every((r) => ratio198(r.g.ground, r.g.ink) >= 7 && ratio198(r.g.soft, r.g.ink) >= 7),
+      reads198
+        .map(
+          (r) =>
+            r.biz + ": " + r.g.ink + " on ground " + r.g.ground + " -> " + ratio198(r.g.ground, r.g.ink).toFixed(2) + ":1; on accentSoft " + r.g.soft + " -> " + ratio198(r.g.soft, r.g.ink).toFixed(2) + ":1",
+        )
+        .join(" | "),
+    );
+  });
+
+  /* --- 199-204: change 36 — subtraction. --- */
+  await block("subtract-36", async () => {
+    /* 199: the noun budget. Every chrome element carries [data-chrome];
+       the census counts DISTINCT classes inside each section. Persistent
+       chrome (share, sound, rail, caret) lives outside every section and
+       is reported separately rather than charged to any one of them. */
+    const CEILING = { call: 4, save: 3, yours: 4, math: 3 };
+    const reads199 = [];
+    for (const vp of [
+      { w: 390, h: 844 },
+      { w: 1440, h: 900 },
+    ]) {
+      const c = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, reducedMotion: "reduce" });
+      const pg = await c.newPage();
+      await pg.goto(base, { waitUntil: "domcontentloaded" });
+      await pg.evaluate(() => document.fonts.ready);
+      await pg.waitForFunction(() => document.querySelectorAll("[data-panel]").length === 4);
+      reads199.push({
+        vp: vp.w + "x" + vp.h,
+        g: await pg.evaluate(() => {
+          const visible = (el) => {
+            const r = el.getBoundingClientRect();
+            return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden";
+          };
+          const per = {};
+          for (const sec of document.querySelectorAll("[data-section]")) {
+            per[sec.dataset.section] = [
+              ...new Set(
+                [...sec.querySelectorAll("[data-chrome]")].filter(visible).map((el) => el.dataset.chrome),
+              ),
+            ].sort();
+          }
+          const global = [
+            ...new Set(
+              [...document.querySelectorAll("[data-chrome]")]
+                .filter((el) => !el.closest("[data-section]") && visible(el))
+                .map((el) => el.dataset.chrome),
+            ),
+          ].sort();
+          return { per, global };
+        }),
+      });
+      await c.close();
+    }
+    check(
+      199,
+      "noun budget: distinct [data-chrome] classes rendered inside each section stay within its ceiling — call <= 4, save <= 3, yours <= 4, math <= 3 (persistent page chrome sits outside every section and is reported, not charged)",
+      reads199.every((r) =>
+        Object.entries(CEILING).every((e) => (r.g.per[e[0]] ?? []).length <= e[1]),
+      ),
+      reads199
+        .map(
+          (r) =>
+            r.vp +
+            ": " +
+            Object.keys(CEILING)
+              .map((k) => k + " " + (r.g.per[k] ?? []).length + "/" + CEILING[k] + " " + JSON.stringify(r.g.per[k] ?? []))
+              .join(", ") +
+            "; persistent " + JSON.stringify(r.g.global),
+        )
+        .join(" | "),
+    );
+
+    /* 200: the phone is the phone. */
+    const reads200 = [];
+    for (const biz of ["salon", "home", "dental", "other"]) {
+      const c = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
+      const pg = await c.newPage();
+      await pg.goto(base + "/?biz=" + biz, { waitUntil: "domcontentloaded" });
+      await pg.evaluate(() => document.fonts.ready);
+      reads200.push({
+        biz,
+        g: await pg.evaluate((id) => {
+          /* The RENDERED accent, not the hydration JSON — the JSON holds
+             the three presets the server did NOT render, so reading it for
+             the active preset would silently disable this whole scan. */
+          const hex = (h) => {
+            const x = String(h).replace("#", "").trim();
+            return "rgb(" + parseInt(x.slice(0, 2), 16) + ", " + parseInt(x.slice(2, 4), 16) + ", " + parseInt(x.slice(4, 6), 16) + ")";
+          };
+          const screen = document.querySelector('[data-section="call"] [data-phone-screen]');
+          const bubble = screen.querySelector('[data-bubble="business"]');
+          const accent = hex(getComputedStyle(document.querySelector("[data-demo]")).getPropertyValue("--accent"));
+          const PROPS = ["color", "backgroundColor", "borderTopColor", "borderRightColor", "borderBottomColor", "borderLeftColor", "fill", "stroke", "outlineColor"];
+          const strays = [];
+          for (const el of screen.querySelectorAll("*")) {
+            if (el.closest("[data-accent-ok]")) continue;
+            const cs = getComputedStyle(el);
+            for (const p of PROPS) {
+              if (accent && cs[p] === accent) {
+                strays.push((el.tagName + "." + (el.getAttribute("data-bubble") || el.getAttribute("class") || "")).slice(0, 40) + ":" + p);
+                break;
+              }
+            }
+          }
+          return {
+            accent,
+            bubbleBg: getComputedStyle(bubble).backgroundColor,
+            bubbleColor: getComputedStyle(bubble).color,
+            strays: strays.slice(0, 5),
+          };
+        }, biz),
+      });
+      await c.close();
+    }
+    check(
+      200,
+      "incoming bubble bg === #26252A on white, all four presets; NO element inside the phone screen resolves to the trade accent except the contact avatar and the auto-reply tag",
+      reads200.every(
+        (r) =>
+          r.g.bubbleBg === "rgb(38, 37, 42)" &&
+          r.g.bubbleColor === "rgb(255, 255, 255)" &&
+          /^rgb\(\d+, \d+, \d+\)$/.test(r.g.accent ?? "") &&
+          r.g.strays.length === 0,
+      ),
+      reads200
+        .map((r) => r.biz + ": bubble " + r.g.bubbleBg + " / " + r.g.bubbleColor + ", accent " + r.g.accent + ", strays " + JSON.stringify(r.g.strays))
+        .join(" | "),
+    );
+
+    /* 201: the beat strip inks word by word. */
+    {
+      const c = await browser.newContext({ viewport: { width: 390, height: 844 } });
+      const pg = await c.newPage();
+      await pg.goto(base, { waitUntil: "domcontentloaded" });
+      await pg.evaluate(() => document.fonts.ready);
+      const sample = async (t) => {
+        await waitT(pg, t);
+        return pg.evaluate(() => {
+          const words = [...document.querySelectorAll("[data-beat]")].map((el) => ({
+            text: el.textContent.trim(),
+            lit: getComputedStyle(el).color === "rgb(233, 238, 244)",
+          }));
+          const money = document.querySelector("[data-beat-money]");
+          return { words, money: money ? +parseFloat(getComputedStyle(money).opacity).toFixed(2) : null };
+        });
+      };
+      const at30 = await sample(3.0);
+      const at38 = await sample(3.8);
+      const at46 = await sample(4.6);
+      const at100 = await sample(10.2);
+      await c.close();
+      const labels = at100.words.map((w) => w.text);
+      check(
+        201,
+        "beat strip: three words under the phone; none lit before 3.6; word[0] lit by 3.8, word[1] by 4.6, word[2] and the +$ figure only at the booking beat",
+        at30.words.length === 3 &&
+          at30.words.every((w) => !w.lit) &&
+          at30.money === 0 &&
+          at38.words[0].lit && !at38.words[1].lit && !at38.words[2].lit &&
+          at46.words[0].lit && at46.words[1].lit && !at46.words[2].lit &&
+          at46.money === 0 &&
+          at100.words.every((w) => w.lit) &&
+          at100.money === 1,
+        "words " + JSON.stringify(labels) + "; t=3.0 lit " + JSON.stringify(at30.words.map((w) => w.lit)) + " money " + at30.money +
+          "; t=3.8 " + JSON.stringify(at38.words.map((w) => w.lit)) +
+          "; t=4.6 " + JSON.stringify(at46.words.map((w) => w.lit)) + " money " + at46.money +
+          "; t=10.2 " + JSON.stringify(at100.words.map((w) => w.lit)) + " money " + at100.money,
+      );
+    }
+
+    /* 202: the peek shows the next trade's NAME and nothing else. */
+    const reads202 = [];
+    for (const biz of ["salon", "home", "dental"]) {
+      const c = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
+      const pg = await c.newPage();
+      await pg.goto(base + "/?biz=" + biz, { waitUntil: "domcontentloaded" });
+      await pg.evaluate(() => document.fonts.ready);
+      await pg.waitForFunction(() => document.querySelectorAll("[data-panel]").length === 4);
+      await goSection(pg, 2);
+      await pg.waitForTimeout(800);
+      reads202.push({
+        biz,
+        g: await pg.evaluate((id) => {
+          const track = document.querySelector('[data-section="yours"] [data-track]');
+          const panels = [...track.querySelectorAll("[data-panel]")];
+          const i = panels.findIndex((p) => p.dataset.preset === id);
+          const next = panels[i + 1];
+          if (!next) return null;
+          const label = next.querySelector("[data-panel-label]");
+          const others = [...next.querySelectorAll("[data-panel-body], [data-trade-glyph]")];
+          return {
+            nextId: next.dataset.preset,
+            labelText: label.textContent.trim(),
+            labelOpacity: +parseFloat(getComputedStyle(label).opacity).toFixed(3),
+            otherOpacities: [...new Set(others.map((el) => +parseFloat(getComputedStyle(el).opacity).toFixed(3)))],
+          };
+        }, biz),
+      });
+      await c.close();
+    }
+    check(
+      202,
+      "section 3 at rest (390): the NEXT panel's trade label renders at 0.4 ±0.05 in the peek; every other piece of that panel's content is at <= 0.05",
+      reads202.every(
+        (r) => r.g != null && Math.abs(r.g.labelOpacity - 0.4) <= 0.05 && r.g.otherOpacities.every((o) => o <= 0.05),
+      ),
+      reads202
+        .map((r) => r.biz + " -> next " + (r.g ? r.g.nextId + ' "' + r.g.labelText + '" @' + r.g.labelOpacity + ", rest " + JSON.stringify(r.g.otherOpacities) : "no next panel"))
+        .join(" | "),
+    );
+
+    /* 203: the close asks for a text. */
+    {
+      const c = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
+      const pg = await c.newPage();
+      await pg.goto(base, { waitUntil: "domcontentloaded" });
+      await pg.evaluate(() => document.fonts.ready);
+      await goSection(pg, 3);
+      await pg.waitForTimeout(250);
+      const g = await pg.evaluate(() => {
+        const sec = document.querySelector('[data-section="math"]');
+        const anchors = [...sec.querySelectorAll("a")].filter((a) => a.getBoundingClientRect().width > 0);
+        const first = anchors[0];
+        const book = sec.querySelector("[data-cta-book]");
+        const cta = sec.querySelector("[data-cta]");
+        const fs = (el) => (el ? parseFloat(getComputedStyle(el).fontSize) : null);
+        return {
+          firstHref: first ? first.getAttribute("href") : null,
+          firstIsCta: first === cta,
+          bookHref: book ? book.getAttribute("href") : null,
+          bookIsPrimary: book === cta,
+          ctaFontSize: fs(cta),
+          bookFontSize: fs(book),
+        };
+      });
+      await c.close();
+      check(
+        203,
+        'section 4: the first CTA anchor is the gold pill, its href starts "sms:" and its body carries "Show me Salvage"; a Calendly anchor exists, is not the primary, and renders smaller than the pill',
+        g.firstIsCta === true &&
+          (g.firstHref ?? "").startsWith("sms:") &&
+          decodeURIComponent(g.firstHref ?? "").includes("Show me Salvage") &&
+          (g.bookHref ?? "").includes("calendly") &&
+          g.bookIsPrimary === false &&
+          g.bookFontSize < g.ctaFontSize,
+        "first anchor " + JSON.stringify(g.firstHref) + " (is the pill: " + g.firstIsCta + ", " + g.ctaFontSize + "px); book " + JSON.stringify(g.bookHref) + " at " + g.bookFontSize + "px, primary " + g.bookIsPrimary,
+      );
+    }
+
+    /* 204: no full-bleed colour plane anywhere. */
+    const reads204 = [];
+    for (const biz of ["salon", "home", "dental", "other"]) {
+      const c = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
+      const pg = await c.newPage();
+      await pg.goto(base + "/?biz=" + biz, { waitUntil: "domcontentloaded" });
+      await pg.evaluate(() => document.fonts.ready);
+      await pg.waitForFunction(() => document.querySelectorAll("[data-panel]").length === 4);
+      await goSection(pg, 2);
+      await pg.waitForTimeout(800);
+      reads204.push({
+        biz,
+        g: await pg.evaluate((id) => {
+          const presets = JSON.parse(document.getElementById("salvage-presets").textContent);
+          const hex = (h) => {
+            const x = String(h).replace("#", "").trim();
+            return "rgb(" + parseInt(x.slice(0, 2), 16) + ", " + parseInt(x.slice(2, 4), 16) + ", " + parseInt(x.slice(4, 6), 16) + ")";
+          };
+          const softs = presets.map((p) => hex(p.accentSoft));
+          const sections = [...document.querySelectorAll("[data-section]")].map((sec) => ({
+            id: sec.dataset.section,
+            bg: getComputedStyle(sec).backgroundColor,
+          }));
+          /* color-mix() computes to "color(srgb r g b)" with 0-1 channels,
+             not "rgb(...)" with 0-255 — parse both or the tint reads as
+             near-black and the drift check passes for the wrong reason. */
+          const lum = (str) => {
+            const srgb = /^color\(srgb/.test(str);
+            const m = str.match(/[\d.]+/g).map(Number);
+            const fn = (v) => {
+              const x = srgb ? v : v / 255;
+              return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+            };
+            return 0.2126 * fn(m[0]) + 0.7152 * fn(m[1]) + 0.0722 * fn(m[2]);
+          };
+          const panel = document.querySelector('[data-section="yours"] [data-panel][data-preset="' + id + '"]');
+          const soft = hex(getComputedStyle(panel).getPropertyValue("--accent-soft"));
+          const abyss = getComputedStyle(document.body).backgroundColor;
+          const lp = lum(getComputedStyle(panel).backgroundColor);
+          const la = lum(abyss);
+          return {
+            softHits: sections.filter((x) => softs.includes(x.bg)).map((x) => x.id + "=" + x.bg),
+            slabCount: document.querySelectorAll("[data-accent-slab]").length,
+            panelBg: getComputedStyle(panel).backgroundColor,
+            abyss,
+            /* How far the panel travels from abyss toward a FULL accentSoft
+               plane: 0 is bare abyss, 1 is the band this change deleted. */
+            soft,
+            drift: +((lp - la) / Math.max(lum(soft) - la, 1e-9)),
+          };
+        }, biz),
+      });
+      await c.close();
+    }
+    check(
+      204,
+      "no full-bleed colour plane: zero accent slabs in the DOM, no section background resolves to any preset's accentSoft, and section 3's panel tint travels <= 25% of the way from abyss to a full accentSoft plane",
+      reads204.every((r) => r.g.softHits.length === 0 && r.g.slabCount === 0 && r.g.drift >= 0 && r.g.drift <= 0.25),
+      reads204
+        .map((r) => r.biz + ": " + r.g.slabCount + " slab(s), section hits " + JSON.stringify(r.g.softHits) + ", panel " + r.g.panelBg + " vs abyss " + r.g.abyss + " -> " + (r.g.drift == null ? "?" : (100 * r.g.drift).toFixed(1)) + "% of the way to a full " + r.g.soft + " plane (need <= 25%)")
+        .join(" | "),
     );
   });
 

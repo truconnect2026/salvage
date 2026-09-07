@@ -38,7 +38,7 @@ function FlapBoard({ value, compact }: { value: number; compact: boolean }) {
             data-flap="digit"
             data-figure="hero"
             className={`relative inline-flex justify-center overflow-hidden rounded-[2px] bg-surface-2/70 px-[3px] font-medium leading-[1.15] text-ember ${
-              compact ? "text-[24px]" : "text-[44px] min-[1100px]:text-[56px]"
+              compact ? "text-[24px]" : "text-[32px] min-[1100px]:text-[32px]"
             }`}
           >
             <span data-flap-face style={{ display: "inline-block" }}>
@@ -55,7 +55,7 @@ function FlapBoard({ value, compact }: { value: number; compact: boolean }) {
             data-flap="static"
             data-figure="hero"
             className={`relative inline-flex justify-center overflow-hidden rounded-[2px] bg-surface-2/70 px-[3px] font-medium leading-[1.15] text-ember ${
-              compact ? "text-[24px]" : "text-[44px] min-[1100px]:text-[56px]"
+              compact ? "text-[24px]" : "text-[32px] min-[1100px]:text-[32px]"
             }`}
           >
             <span data-flap-face style={{ display: "inline-block" }}>
@@ -89,54 +89,36 @@ export default function Ledger({
 
   return (
     <div data-panel-content className="w-full">
-      {/* D3: the panel title — Newsreader 24 ink over a double hairline;
-          bizName + request-time month ride the title line. */}
-      <div className="flex items-end justify-between gap-4">
-        <div className="min-w-0">
-          <p data-panel-title className={`${compact ? "font-display text-[24px] font-medium leading-[1.05] tracking-[-0.01em] text-ink" : "text-[13px] text-muted min-[1100px]:font-display min-[1100px]:text-[24px] min-[1100px]:font-medium min-[1100px]:leading-[1.05] min-[1100px]:tracking-[-0.01em] min-[1100px]:text-ink"}`}>
-            {L.screenLabel}
-          </p>
-          <div data-ledger-biz className="mt-0.5 truncate text-[13px] text-muted">
-            {headerName}
-          </div>
-        </div>
-        {!compact && dates && (
-          <div data-ledger-month data-figure="data" className="shrink-0 pb-0.5 text-[13px] text-muted min-[1100px]:text-[14px]">
-            {dates.month}
-          </div>
-        )}
+      {/* change 36 (A5): "Your side", the request-time month line and the
+          double hairline under them are gone. The lead above already says
+          whose side this is; the business name alone carries the header. */}
+      <div data-ledger-biz className="truncate text-[13px] text-muted">
+        {headerName}
       </div>
-      <div className="hairline2 mt-1.5" aria-hidden="true" />
+      <div className="mt-1.5 border-t border-line" aria-hidden="true" />
 
       {/* D7/D12: the money block — Recovered 56px gold over its own double
           hairline; the flap board at 44px; labels centered on figures. The
           reply row left for the footnote (D6). */}
       <div data-money>
-        <div data-ink className={`flex items-center justify-between gap-3 ${compact ? "py-1.5" : "h-14 min-[1100px]:h-auto min-[1100px]:py-1.5"}`}>
-          <p className="text-[14px] text-muted">
-            {L.recoveredLabel}
-            {!compact && (
-              <span data-calls-caught className="ml-2 hidden text-[12px] text-ink min-[500px]:inline">
-                <span data-figure="data">{preset.callsCaught}</span> calls booked
-              </span>
-            )}
-          </p>
-          <p className={`${compact ? "text-[24px]" : "text-[64px] min-[1100px]:text-[72px]"} font-medium leading-none`} aria-live="off">
+        {/* change 36 (D1/D3): Recovered is the hero at 64px; the count
+            sits BENEATH it at 14px secondary rather than riding the label. */}
+        <div data-ink className={`flex items-center justify-between gap-3 ${compact ? "py-1.5" : "pt-2"}`}>
+          <p className="text-[14px] text-muted">{L.recoveredLabel}</p>
+          <p className={`${compact ? "text-[24px]" : "text-[64px]"} font-medium leading-none`} aria-live="off">
             <span data-panel-recovered data-ledger-recovered data-figure="hero" className="text-gold">
               {usd(preset.recovered)}
             </span>
           </p>
         </div>
-        <div className="hairline2" aria-hidden="true" />
-        <div data-ink className={`flex items-center justify-between gap-3 border-b border-line ${compact ? "py-1.5" : "h-14 min-[1100px]:h-auto min-[1100px]:py-1.5"}`}>
-          <p className="text-[14px] text-muted">
-            {L.lostLabel}
-            {!compact && (
-              <span className="ml-2 hidden text-[12px] text-ink min-[500px]:inline">
-                <span data-figure="data">{preset.missedPerMonth}</span> rang out
-              </span>
-            )}
+        {!compact && (
+          <p data-calls-caught className="pb-2 text-right text-[14px] text-muted">
+            {L.callsBooked.replace("{n}", String(preset.callsCaught))}
           </p>
+        )}
+        <div className="border-t border-line" aria-hidden="true" />
+        <div data-ink className={`flex items-center justify-between gap-3 border-b border-line ${compact ? "py-1.5" : "py-2"}`}>
+          <p className="text-[14px] text-muted">{L.lostLabel}</p>
           <FlapBoard value={preset.lost} compact={compact} />
         </div>
       </div>
@@ -148,49 +130,16 @@ export default function Ledger({
 
       <p data-ink className={`text-[13px] text-muted ${compact ? "mt-2" : "mt-2"}`}>{L.caughtLabel}</p>
 
-      {/* D4/D5: the table — gutter line numbers, ruled column heads. */}
-      <div className={compact ? "mt-1" : "mt-1"}>
-        <div
-          data-ink
-          data-col-heads
-          className={`grid ${
-            compact
-              ? "grid-cols-[20px_minmax(0,1.1fr)_minmax(0,1.3fr)_auto]"
-              : "border-l-2 border-l-transparent grid-cols-[20px_minmax(0,0.8fr)_minmax(0,1.7fr)_auto] min-[600px]:grid-cols-[20px_minmax(0,1.1fr)_minmax(0,1.3fr)_auto_76px]"
-          } items-baseline gap-x-2 border-b border-line pb-1 text-[11px] tracking-[0.04em] text-muted`}
-        >
-          <span />
-          <span data-figure="data">{L.cols.name}</span>
-          <span data-figure="data">{L.cols.booking}</span>
-          <span data-figure="data" className="text-right">{L.cols.amount}</span>
-          {/* compact (the OG card) hides row dates — a labeled empty column
-              would be worse than no column. change 27 (C1): below 600 the
-              table runs Name · Booking · Amount only. */}
-          {!compact && (
-            <span data-figure="data" className="hidden text-right min-[600px]:inline">{L.cols.date}</span>
-          )}
-        </div>
+      {/* change 36 (A5/D1): three rows, one rule between them. The column
+          heads, the gutter line numbers, the "+n more" line and the reply
+          footnote are gone — a three-row table labels itself. The OG card
+          keeps every row it always had. */}
+      <div className="mt-1">
         <CaughtRow index={0} entry={row0} compact={compact} date={dates?.rows[0]} />
         {rest.map((entry, i) => (
           <CaughtRow key={i + 1} index={i + 1} entry={entry} compact={compact} date={dates?.rows[i + 1]} />
         ))}
-        {/* change 28 (D1): the desktop table runs 3 rows at 1x — the rest
-            fold into a mono footnote. Mobile and the OG keep every row. */}
-        {!compact && preset.caught.length > 3 && (
-          <p data-more-rows data-figure="data" className="mt-1 hidden text-[12px] text-muted max-[599.98px]:block min-[1100px]:block">
-            {L.moreRows.replace("{n}", String(preset.caught.length - 3))}
-          </p>
-        )}
       </div>
-
-      {/* D6: the reply time, demoted to a mono footnote under the table. */}
-      <p data-ink data-reply-foot data-figure="data" className="mt-1.5 hidden text-[12px] text-muted min-[600px]:block">
-        {L.replyFoot}
-      </p>
-
-      {!compact && (
-        <p data-ink className="mt-2 hidden text-[12px] text-muted min-[500px]:block">{L.reviewNote}</p>
-      )}
 
       {/* Since-install: the ledger's LAST ruled row (change 18, C2). */}
       <div
@@ -232,13 +181,11 @@ function CaughtRow({
       className={`grid ${
         compact
           ? "grid-cols-[20px_minmax(0,1.1fr)_minmax(0,1.3fr)_auto]"
-          : "grid-cols-[20px_minmax(0,0.8fr)_minmax(0,1.7fr)_auto] min-[600px]:grid-cols-[20px_minmax(0,1.1fr)_minmax(0,1.3fr)_auto_76px]"
+          : "grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)_auto]"
       } items-start gap-x-2 ${compact ? "py-1.5" : "pb-1.5 pt-6 min-[600px]:py-2"}`}
     >
-      {/* D5: the gutter line number. */}
-      <span data-figure="data" className="pt-0.5 text-[12px] leading-none text-muted">
-        {String(index + 1).padStart(2, "0")}
-      </span>
+      {/* change 36 (A5): the gutter line number is gone. */}
+      {compact && <span />}
       <div className="min-w-0">
         <div
           data-caught-name={index}
@@ -246,12 +193,8 @@ function CaughtRow({
         >
           {entry.name}
         </div>
-        {/* change 27 (C1): the number line leaves the mobile table. */}
-        {!compact && (
-          <div data-caught-number={index} data-figure="data" className="mt-0.5 hidden text-[12px] text-muted min-[600px]:block">
-            {entry.number}
-          </div>
-        )}
+        {/* change 27 (C1) / change 36 (A5): the number line is gone from
+            the interactive table at every width; the OG card never had it. */}
       </div>
       <div data-caught-detail={index} className={`min-w-0 truncate text-muted max-[599.98px]:whitespace-normal ${compact ? "text-[17px]" : "text-[12px]"}`}>
         {entry.detail}
@@ -272,13 +215,7 @@ function CaughtRow({
           </span>
         )}
       </div>
-      {!compact && (
-      <div className="hidden text-right min-[600px]:block">
-        <div data-caught-date={index} data-figure="data" className="mt-0.5 text-[13px] text-muted min-[1100px]:text-[14px]">
-          {date ?? entry.date}
-        </div>
-      </div>
-      )}
+
     </div>
   );
 
@@ -294,9 +231,10 @@ function CaughtRow({
     );
   }
   return (
-    /* change 28 (D1): rows past the third leave the desktop render (the
-       moreRows footnote carries the count); mobile and the OG keep them. */
-    <div data-caught-row={index} className={`border-b border-line ${compact ? "" : "border-l-2 border-l-transparent"} ${!compact && index >= 3 ? "max-[599.98px]:hidden min-[1100px]:hidden" : ""}`}>
+    /* change 36 (A5/D1): THREE rows everywhere in the interactive panel —
+       the fourth left with the "+n more" line that used to excuse it. The
+       OG card still carries every row. */
+    <div data-caught-row={index} className={`${index < 2 || compact ? "border-b border-line" : ""} ${compact ? "" : "border-l-2 border-l-transparent"} ${!compact && index >= 3 ? "hidden" : ""}`}>
       {cells}
     </div>
   );
