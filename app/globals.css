@@ -155,10 +155,12 @@ body {
   transition: opacity 180ms ease;
 }
 @media (max-width: 1099.98px) {
-  [data-section="yours"] [data-panel][data-peek="hidden"] [data-panel-body],
-  [data-section="yours"] [data-panel][data-peek="hidden"] [data-panel-label] {
+  /* change 40 (C): the glyph AND the label show at 40% in the peek — on
+     bare abyss, with the body (rows, rules) at zero. */
+  [data-section="yours"] [data-panel][data-peek="hidden"] [data-panel-body] {
     opacity: 0;
   }
+  [data-section="yours"] [data-panel][data-peek="hidden"] [data-panel-label],
   [data-section="yours"] [data-panel][data-peek="hidden"] [data-trade-glyph] {
     opacity: 0.4;
   }
@@ -256,13 +258,15 @@ body {
    top of the "Your side" button. */
 @media (max-width: 1099.98px) {
   [data-section="call"] [data-phone-device] {
-    /* change 39 (B1): 82% of the content column, capped by the height the
-       rest of the stack leaves. 316 IS that rest — 64 + 32 + 60 + 24 + 20 +
-       16 + 36 + 64 — so the column fills the section exactly at every
-       height and the caret's band stays clear by construction. */
-    width: 82%;
-    max-width: min(390px, calc((100vh - 316px) * 390 / 810));
-    max-width: min(390px, calc((100dvh - 316px) * 390 / 810));
+    /* change 40 (A): the device HEIGHT is the viewport height less the
+       fixed stack around it — 24 + 16 + 24 + 28 + 16 + 24 + 24 + 16 + 44 +
+       64 = 280 — and the width follows from the 390:810 body. No
+       percentage, no minimum, no cap: at 740 that is 460 x 221.5, at 844
+       564 x 271.6. --vh is visualViewport.height (change 35), so the stack
+       closes on the height Safari actually gives, toolbar up or down. */
+    width: calc((100dvh - 280px) * 390 / 810);
+    width: calc((var(--vh, 100dvh) - 280px - env(safe-area-inset-bottom, 0px)) * 390 / 810);
+    max-width: none;
     /* change 33 (B2): CENTERED in the content column. The slab is a
        section band at the viewport's left edge now (B1), so the device no
        longer has to buy folio clearance with a gutter bleed. */
@@ -340,6 +344,26 @@ body {
   [data-phone-entry="run"] [data-phone-rim] {
     transform: translateY(0);
     transition: transform 500ms ease-out, box-shadow 500ms ease-out;
+  }
+}
+
+/* change 40 (2): section 4 at a 700px viewport only — the math line drops
+   from 40 to 34 so the close clears the fold. */
+@media (max-width: 1099.98px) and (max-height: 700px) {
+  [data-section="math"] [data-math] {
+    font-size: 34px;
+  }
+}
+
+/* change 40 (A): section 1's folio — top 24, height 16 — on mobile. The
+   other sections keep the change-13 mark position; this one is pinned so
+   the fixed stack under it closes. */
+@media (max-width: 1099.98px) {
+  [data-section="call"] [data-section-mark] {
+    top: 24px;
+  }
+  [data-section="call"] [data-section-mark] [data-folio] {
+    line-height: 16px;
   }
 }
 

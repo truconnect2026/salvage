@@ -565,7 +565,7 @@ const BROWSER_GATES = [
   191, 192, 193,
   194, 195, 196, 197, 198,
   199, 200, 201, 202, 203, 204,
-  205,
+  205, 206,
 ];
 
 if (!chromium) {
@@ -5979,9 +5979,13 @@ if (!chromium) {
       /* Amended (change 36, A7): the boundary law had two slabs to police;
          it now has none, so what survives is the half that still applies —
          every settled control carries an opaque ground of its own. */
+      /* Amended (change 40, A): the settled controls are TRANSPARENT by
+         specification now — a 1px ink stroke and nothing behind it. The
+         opaque-ground clause existed for the accent band, which has been
+         gone since change 36. */
       171,
-      "boundary law (A1): zero slabs left to straddle, and every settled control still carries an opaque ground of its own — 390x844 and 1440x900, all four presets",
-      reads171.every((r) => r.g.slabCount === 0 && r.g.textCount > 5 && r.g.bad.length === 0 && r.g.bareControls.length === 0),
+      "boundary law (A1): zero slabs left to straddle; the settled controls are stroke-only (reported, no longer required opaque) — 390x844 and 1440x900, all four presets",
+      reads171.every((r) => r.g.slabCount === 0 && r.g.textCount > 5 && r.g.bad.length === 0),
       reads171
         .filter((r) => r.g.bad.length > 0)
         .map((r) => `${r.vp}/${r.biz}: ${JSON.stringify(r.g.bad)}`)
@@ -6137,19 +6141,24 @@ if (!chromium) {
          the "exactly 2 pairs" census is now about the two SECTION-1 controls
          alone; and the primary is ink-filled, not accent-filled — the trade
          colour keeps one background on the page and this was not it. */
+      /* Amended (change 40, A): section 1 has ONE kind of button. Both
+         settled controls are the secondary — 1px ink stroke at 60%, ink
+         text, transparent, 44 tall. No filled button anywhere in it. */
       174,
-      "control system (C2/C3): no non-chrome button carries a teal border; s1 buttons match C3 (primary = INK fill on abyss 44px/15px/r0; secondary = ink-stroke 60% 44px/15px/r0)",
+      "control system (C2/C3): no non-chrome button carries a teal border; BOTH s1 controls are the secondary — transparent, 1px ink-stroke 60%, ink text, 44px/15px/r0",
       g174.tealButtons.length === 0 &&
         g174.yourSide.h === 44 &&
         g174.yourSide.fs === "15px" &&
         g174.yourSide.radius === "0px" &&
-        g174.yourSide.bg === "rgb(233, 238, 244)" &&
+        g174.yourSide.bg === "rgba(0, 0, 0, 0)" &&
+        g174.yourSide.border === "rgba(233, 238, 244, 0.6)" &&
         g174.yourSide.bg !== hexToRgb(g174.accent) &&
         g174.replay.h === 44 &&
         g174.replay.fs === "15px" &&
         g174.replay.radius === "0px" &&
         g174.replay.bw === "1px" &&
         g174.replay.border === "rgba(233, 238, 244, 0.6)" &&
+        g174.replay.bg === "rgba(0, 0, 0, 0)" &&
         g174.replay.color === "rgb(233, 238, 244)",
       `chrome pairs ${JSON.stringify(g174.pairs)} (need 2); teal-border buttons ${JSON.stringify(g174.tealButtons)} (need none); ` +
         `your-side ${JSON.stringify(g174.yourSide)} vs accent ${g174.accent}; replay ${JSON.stringify(g174.replay)}`,
@@ -7463,22 +7472,41 @@ if (!chromium) {
              label must be fully out, and no fragment of it may be painted
              inside the peek zone — the strip of the next panel that is
              actually on screen. */
+          /* change 40 (C): the peek shows the next trade's glyph AND label
+             at 40% on bare abyss, and nothing else — no background, no
+             rows, no rules. Anything of the next panel that is painted
+             inside the visible strip must carry no fill and no stroke. */
           const glyph = next.querySelector("[data-trade-glyph]");
           const label = next.querySelector("[data-panel-label]");
-          const others = [...next.querySelectorAll("[data-panel-body]"), label];
+          const body = next.querySelector("[data-panel-body]");
           const trackR = track.getBoundingClientRect();
-          const labelR = label.getBoundingClientRect();
-          const inZone = labelR.left < trackR.right && labelR.right > trackR.left;
+          const zone = { left: Math.max(next.getBoundingClientRect().left, trackR.left), right: trackR.right };
+          const effOpacity = (el) => {
+            let o = 1;
+            for (let n = el; n && n !== document.body; n = n.parentElement) o *= parseFloat(getComputedStyle(n).opacity);
+            return o;
+          };
+          const transparent = (c) => c === "transparent" || /^rgba\(\d+, \d+, \d+, 0\)$/.test(c);
+          const painted = [];
+          for (const el of [next, ...next.querySelectorAll("*")]) {
+            const r = el.getBoundingClientRect();
+            if (r.width === 0 || r.height === 0) continue;
+            if (!(r.left < zone.right && r.right > zone.left)) continue;
+            if (effOpacity(el) <= 0.05) continue;
+            const cs = getComputedStyle(el);
+            const hasFill = !transparent(cs.backgroundColor) || cs.backgroundImage !== "none";
+            const sides = ["Top", "Right", "Bottom", "Left"];
+            const hasStroke = sides.some((k) => parseFloat(cs["border" + k + "Width"]) > 0 && !transparent(cs["border" + k + "Color"]));
+            if (hasFill || hasStroke) painted.push(el.tagName + (hasFill ? ":fill " + cs.backgroundColor : "") + (hasStroke ? ":stroke" : ""));
+          }
           return {
             nextId: next.dataset.preset,
             labelText: label.textContent.trim(),
             glyphOpacity: +parseFloat(getComputedStyle(glyph).opacity).toFixed(3),
             glyphW: Math.round(glyph.getBoundingClientRect().width),
             labelOpacity: +parseFloat(getComputedStyle(label).opacity).toFixed(3),
-            /* A label box that overlaps the visible strip is only a fault if
-               it is actually painted — at opacity 0 nothing is on screen. */
-            labelPaintedInZone: inZone && parseFloat(getComputedStyle(label).opacity) > 0.02,
-            otherOpacities: [...new Set(others.map((el) => +parseFloat(getComputedStyle(el).opacity).toFixed(3)))],
+            bodyOpacity: +parseFloat(getComputedStyle(body).opacity).toFixed(3),
+            paintedInZone: painted.slice(0, 5),
           };
         }, biz),
       });
@@ -7486,17 +7514,18 @@ if (!chromium) {
     }
     check(
       202,
-      "section 3 at rest (390): the NEXT panel's 24px trade GLYPH renders at 0.4 ±0.05 in the peek; its label and body are at <= 0.05, and no fragment of the label is painted in the peek zone",
+      "section 3 at rest (390): the NEXT panel's 24px glyph AND its label render at 0.4 ±0.05 in the peek, its body at <= 0.05, and NO element painted in the peek zone carries a background or a border (change 40, C)",
       reads202.every(
         (r) =>
           r.g != null &&
           Math.abs(r.g.glyphOpacity - 0.4) <= 0.05 &&
           Math.abs(r.g.glyphW - 24) <= 1 &&
-          r.g.labelPaintedInZone === false &&
-          r.g.otherOpacities.every((o) => o <= 0.05),
+          Math.abs(r.g.labelOpacity - 0.4) <= 0.05 &&
+          r.g.bodyOpacity <= 0.05 &&
+          r.g.paintedInZone.length === 0,
       ),
       reads202
-        .map((r) => r.biz + " -> next " + (r.g ? r.g.nextId + " glyph " + r.g.glyphW + "px @" + r.g.glyphOpacity + ', label "' + r.g.labelText + '" @' + r.g.labelOpacity + " painted-in-zone " + r.g.labelPaintedInZone + ", rest " + JSON.stringify(r.g.otherOpacities) : "no next panel"))
+        .map((r) => r.biz + " -> next " + (r.g ? r.g.nextId + " glyph " + r.g.glyphW + "px @" + r.g.glyphOpacity + ', label "' + r.g.labelText + '" @' + r.g.labelOpacity + ", body @" + r.g.bodyOpacity + ", painted fills/strokes in zone " + JSON.stringify(r.g.paintedInZone) : "no next panel"))
         .join(" | "),
     );
 
@@ -7583,9 +7612,14 @@ if (!chromium) {
             slabCount: document.querySelectorAll("[data-accent-slab]").length,
             panelBg: getComputedStyle(panel).backgroundColor,
             abyss,
-            /* How far the panel travels from abyss toward a FULL accentSoft
-               plane: 0 is bare abyss, 1 is the band this change deleted. */
             soft,
+            /* change 40 (C): the tint is gone. Every section and every panel
+               must compute either no background at all or the abyss — any
+               other value is, by construction, colour the trade brought. */
+            tinted: [...document.querySelectorAll("[data-section], [data-panel]")]
+              .map((el) => ({ id: el.dataset.section ?? "panel:" + el.dataset.preset, bg: getComputedStyle(el).backgroundColor }))
+              .filter((x) => !(x.bg === "rgba(0, 0, 0, 0)" || x.bg === "transparent" || x.bg === abyss))
+              .map((x) => x.id + "=" + x.bg),
             drift: +((lp - la) / Math.max(lum(soft) - la, 1e-9)),
           };
         }, biz),
@@ -7594,10 +7628,10 @@ if (!chromium) {
     }
     check(
       204,
-      "no full-bleed colour plane: zero accent slabs in the DOM, no section background resolves to any preset's accentSoft, and section 3's panel tint travels <= 25% of the way from abyss to a full accentSoft plane",
-      reads204.every((r) => r.g.softHits.length === 0 && r.g.slabCount === 0 && r.g.drift >= 0 && r.g.drift <= 0.25),
+      "no colour plane of any kind: zero accent slabs, and NO section or panel background resolves to anything but transparent or the abyss (change 40, C — the section-3 tint is gone)",
+      reads204.every((r) => r.g.softHits.length === 0 && r.g.slabCount === 0 && r.g.tinted.length === 0),
       reads204
-        .map((r) => r.biz + ": " + r.g.slabCount + " slab(s), section hits " + JSON.stringify(r.g.softHits) + ", panel " + r.g.panelBg + " vs abyss " + r.g.abyss + " -> " + (r.g.drift == null ? "?" : (100 * r.g.drift).toFixed(1)) + "% of the way to a full " + r.g.soft + " plane (need <= 25%)")
+        .map((r) => r.biz + ": " + r.g.slabCount + " slab(s), tinted section/panel backgrounds " + JSON.stringify(r.g.tinted) + " (panel " + r.g.panelBg + ", abyss " + r.g.abyss + ", drift toward " + r.g.soft + " " + (100 * r.g.drift).toFixed(1) + "% reported)")
         .join(" | "),
     );
   });
@@ -7608,12 +7642,19 @@ if (!chromium) {
      is no longer evidence. Gates 91, 93 and 205 are owned here outright;
      the rest keep their Chromium implementation above and have the WebKit
      verdict folded into it. --- */
-  await block("dual-39", async () => {
-    const VP = { width: 390, height: 844 };
+  /* --- change 39 (D1) / change 40 (D): the dual-engine set. Every layout
+     gate here runs in Chromium AND WebKit at 390x740 (Safari with its
+     toolbar) AND 390x844 — gate 93 and the section-1 stack at 700 as well.
+     A gate is green only if every engine at every height agrees. Gates 91,
+     93, 205 and 206 are owned here; 46, 95, 194, 196, 197 and 201 keep
+     their Chromium implementation above and have these verdicts folded in. --- */
+  await block("dual-40", async () => {
+    const H2 = [740, 844];
+    const H3 = [700, 740, 844];
     const run = async (b, fn, opts) => {
       const o = opts ?? {};
       const c = await b.newContext({
-        viewport: o.vp ?? VP,
+        viewport: o.vp ?? { width: 390, height: o.h ?? 844 },
         deviceScaleFactor: 3,
         ...(o.ctx ?? {}),
       });
@@ -7626,22 +7667,18 @@ if (!chromium) {
       await c.close();
       return out;
     };
-
-    /* Fold a WebKit verdict into a gate the Chromium pass already recorded. */
     const amend = (n, ok, detail) => {
       const r = results.find((x) => x.n === n);
       if (!r) {
         check(n, "dual-engine fold", false, "no Chromium result to fold into — " + detail);
         return;
       }
-      r.name = r.name + " [BOTH ENGINES]";
-      r.detail =
-        "chromium " + (r.pass ? "PASS" : "FAIL") + ": " + r.detail + "  ||  webkit " + (ok ? "PASS" : "FAIL") + ": " + detail;
+      r.name = r.name + " [BOTH ENGINES, 740 + 844]";
+      r.detail = "chromium@844 " + (r.pass ? "PASS" : "FAIL") + ": " + r.detail + "  ||  " + detail;
       r.pass = r.pass && ok;
     };
-
     if (!wkBrowser) {
-      for (const n of [46, 91, 93, 95, 194, 196, 197, 201, 205]) {
+      for (const n of [46, 91, 93, 95, 194, 196, 197, 201, 205, 206]) {
         check(n, "dual-engine gate", false, "WebKit unavailable: " + (wkError ?? "not installed"));
       }
       return;
@@ -7650,20 +7687,34 @@ if (!chromium) {
       { name: "chromium", b: browser },
       { name: "webkit", b: wkBrowser },
     ];
-    const both = async (fn, opts) => {
+    /* per[engine][height] = measurement */
+    const grid = async (heights, fn, opts) => {
       const out = {};
-      for (const e of ENGINES) out[e.name] = await run(e.b, fn, opts);
+      for (const e of ENGINES) {
+        out[e.name] = {};
+        for (const h of heights) out[e.name][h] = await run(e.b, fn, { ...(opts ?? {}), h });
+      }
       return out;
     };
+    const cells = (per) => Object.entries(per).flatMap(([eng, byH]) => Object.entries(byH).map(([h, g]) => ({ eng, h, g })));
     const verdict = (n, name, per, ok, fmt) => {
-      const lines = ENGINES.map((e) => e.name + " " + (ok(per[e.name]) ? "PASS" : "FAIL") + ": " + fmt(per[e.name]));
-      check(n, name, ENGINES.every((e) => ok(per[e.name])), lines.join("  ||  "));
+      const cs = cells(per);
+      check(
+        n,
+        name,
+        cs.every((c) => ok(c.g)),
+        cs.map((c) => c.eng + "@" + c.h + " " + (ok(c.g) ? "PASS" : "FAIL") + ": " + fmt(c.g)).join("  ||  "),
+      );
     };
+    const fold = (n, per, ok, fmt) => {
+      const cs = cells(per);
+      amend(n, cs.every((c) => ok(c.g)), cs.map((c) => c.eng + "@" + c.h + " " + (ok(c.g) ? "PASS" : "FAIL") + ": " + fmt(c.g)).join("  ||  "));
+    };
+    const ABYSS = "rgb(6, 11, 20)";
 
-    /* ---- 205: no zoom, anywhere. ---- */
-    const g205 = await both((pg) =>
+    /* ---- 205: no zoom, anywhere; and the page's own type outside any scaled subtree. ---- */
+    const g205 = await grid(H2, (pg) =>
       pg.evaluate(() => {
-        /* The shipped stylesheet, rule by rule — this is the static scan. */
         const rules = [];
         for (const sheet of document.styleSheets) {
           let list;
@@ -7681,18 +7732,12 @@ if (!chromium) {
           };
           walk(list);
         }
-        /* And every rendered element — this catches inline styles and any
-           value a rule set indirectly. */
         const live = [];
         for (const el of document.querySelectorAll("*")) {
           const z = getComputedStyle(el).zoom;
           if (z && z !== "1" && z !== "normal") live.push(el.tagName + "." + String(el.className).slice(0, 24) + "=" + z);
           if (el.style && el.style.zoom) live.push("inline " + el.tagName + "=" + el.style.zoom);
         }
-        /* change 39 (A2): the page's own type must never ride inside a
-           scaled subtree — the beat strip, the caption, the settled
-           controls and the caret are siblings of the device, not children
-           of the screen, and nothing above them may carry a transform. */
         const outside = [];
         for (const sel of ["[data-beats]", "[data-scene-mobile]", "[data-controls]", "[data-rail-next]"]) {
           for (const el of document.querySelectorAll(sel)) {
@@ -7714,14 +7759,13 @@ if (!chromium) {
     );
     verdict(
       205,
-      "no CSS zoom anywhere: zero stylesheet rules declare it and zero rendered elements compute it; and the beat strip, caption, settled controls and caret all sit OUTSIDE every scaled subtree (change 39, A1/A2)",
+      "no CSS zoom anywhere: zero stylesheet rules declare it and zero rendered elements compute it; the beat strip, caption, settled controls and caret all sit OUTSIDE every scaled subtree (change 39 A1/A2) — both engines, 740 + 844",
       g205,
       (g) => g.rules.length === 0 && g.live.length === 0 && g.outside.length === 0,
-      (g) =>
-        g.scanned + " element(s) scanned; rule hits " + JSON.stringify(g.rules) + ", computed/inline hits " + JSON.stringify(g.live) + ", ancestry hits " + JSON.stringify(g.outside),
+      (g) => g.scanned + " scanned; rule hits " + JSON.stringify(g.rules) + ", computed/inline " + JSON.stringify(g.live) + ", ancestry " + JSON.stringify(g.outside),
     );
 
-    /* ---- 46: the body ratio, both viewports. ---- */
+    /* ---- 46: the body ratio. ---- */
     const ratio46 = (pg) =>
       pg.evaluate(() => {
         const d = document.querySelector("[data-phone-device]");
@@ -7729,122 +7773,203 @@ if (!chromium) {
         const r = d.getBoundingClientRect();
         return r.width > 0 ? +(r.height / r.width).toFixed(4) : null;
       });
-    const g46 = {};
-    for (const e of ENGINES) {
-      g46[e.name] = {
-        m: await run(e.b, ratio46),
-        d: await run(e.b, ratio46, { vp: { width: 1440, height: 900 } }),
-      };
-    }
+    const g46 = await grid(H2, ratio46);
+    for (const e of ENGINES) g46[e.name]["1440x900"] = await run(e.b, ratio46, { vp: { width: 1440, height: 900 } });
     const TARGET46 = 810 / 390;
-    amend(
-      46,
-      ENGINES.every((e) =>
-        [g46[e.name].m, g46[e.name].d].every((v) => v != null && Math.abs(v - TARGET46) / TARGET46 <= 0.01),
-      ),
-      ENGINES.map((e) => e.name + " 390x844 " + g46[e.name].m + " / 1440x900 " + g46[e.name].d).join(", ") +
-        " (target " + TARGET46.toFixed(4) + " ±1%)",
-    );
+    fold(46, g46, (v) => v != null && Math.abs(v - TARGET46) / TARGET46 <= 0.01, (v) => "ratio " + v + " (target " + TARGET46.toFixed(4) + " ±1%)");
 
-    /* ---- 91: the bubble's rendered size against the rendered screen. ---- */
+    /* ---- 91: the bubble against the screen, and the status row inset (A4). ---- */
     const WANT91 = 15 / 360;
-    const g91 = await both(async (pg) => {
+    const g91 = await grid(H2, async (pg) => {
       await waitT(pg, 6.5);
       return pg.evaluate(() => {
         const sec1 = document.querySelector('[data-section="call"]');
         const screen = sec1?.querySelector("[data-phone-screen]");
         const bubble = sec1?.querySelector("[data-bubble]");
-        if (!screen || !bubble || bubble.offsetWidth === 0) return null;
+        const time = screen?.querySelector("span");
+        if (!screen || !bubble || !time || bubble.offsetWidth === 0) return null;
         const sr = screen.getBoundingClientRect();
         const k = bubble.getBoundingClientRect().width / bubble.offsetWidth;
         const fs = parseFloat(getComputedStyle(bubble).fontSize) * k;
-        return { fs: +fs.toFixed(2), screenW: +sr.width.toFixed(1), ratio: +(fs / sr.width).toFixed(5), k: +k.toFixed(4) };
+        /* change 40 (A4): the status time sits >= 14 design px in from the
+           screen's left edge, and its first glyph is wholly inside the
+           screen's clip — the device defect showed "8:47" as "+7". */
+        const tr = time.getBoundingClientRect();
+        const range = document.createRange();
+        range.setStart(time.firstChild, 0);
+        range.setEnd(time.firstChild, 1);
+        const g0 = range.getBoundingClientRect();
+        return {
+          fs: +fs.toFixed(2),
+          screenW: +sr.width.toFixed(1),
+          ratio: +(fs / sr.width).toFixed(5),
+          k: +k.toFixed(4),
+          timeInsetDesign: +((tr.left - sr.left) / k).toFixed(1),
+          firstGlyphInside: g0.left >= sr.left - 0.25 && g0.right <= sr.right + 0.25 && g0.top >= sr.top - 0.25 && g0.bottom <= sr.bottom + 0.25,
+          timeText: time.textContent.trim(),
+        };
       });
     });
     verdict(
       91,
-      "first-bubble rendered font-size ÷ rendered screen width === 15/360 ±2% (change 39, A3: measured in both engines — this ratio is exactly what the retired zoom got wrong on the device)",
+      "first-bubble rendered font-size ÷ rendered screen width === 15/360 ±2%; the status time sits >= 14 design px in from the screen's left edge and its first glyph is wholly inside the screen clip (change 40, A4) — both engines, 740 + 844",
       g91,
-      (g) => g != null && Math.abs(g.ratio - WANT91) / WANT91 <= 0.02,
-      (g) => (g == null ? "nodes missing" : g.fs + "px / " + g.screenW + "px = " + g.ratio + " (want " + WANT91.toFixed(5) + " ±2%, scale " + g.k + ")"),
+      (g) => g != null && Math.abs(g.ratio - WANT91) / WANT91 <= 0.02 && g.timeInsetDesign >= 14 && g.firstGlyphInside === true,
+      (g) => (g == null ? "nodes missing" : g.fs + "px / " + g.screenW + "px = " + g.ratio + " (want " + WANT91.toFixed(5) + " ±2%, scale " + g.k + "); time " + JSON.stringify(g.timeText) + " inset " + g.timeInsetDesign + " design px (need >= 14), first glyph inside " + g.firstGlyphInside),
     );
 
-    /* ---- 93: the caret band is empty, every section, every preset. ---- */
-    const PRESETS93 = ["salon", "home", "dental", "other"];
+    /* ---- 93: the caret's band is empty, every section, every preset, 700/740/844. ---- */
+    const PRESETS = ["salon", "home", "dental", "other"];
+    const caretScan = (pg) =>
+      pg.evaluate(async () => {
+        const pager = document.querySelector("[data-pager]");
+        const caret = document.querySelector("[data-rail-next]");
+        const bad = [];
+        for (let i = 0; i < 4; i++) {
+          pager.scrollTop = i * pager.clientHeight;
+          await new Promise((r) => setTimeout(r, 320));
+          const cr = caret.getBoundingClientRect();
+          if (cr.width === 0 || cr.height === 0) continue;
+          const sec = [...document.querySelectorAll("[data-section]")].find((x) => {
+            const r = x.getBoundingClientRect();
+            return r.top > -10 && r.top < 10;
+          });
+          if (!sec) continue;
+          const rendered = (el) => {
+            let r = el.getBoundingClientRect();
+            let n = el.parentElement;
+            while (n && n !== document.body) {
+              const cs = getComputedStyle(n);
+              if (cs.overflow !== "visible" || cs.overflowX !== "visible" || cs.overflowY !== "visible") {
+                const c = n.getBoundingClientRect();
+                r = { left: Math.max(r.left, c.left), right: Math.min(r.right, c.right), top: Math.max(r.top, c.top), bottom: Math.min(r.bottom, c.bottom) };
+                if (r.left >= r.right || r.top >= r.bottom) return null;
+              }
+              n = n.parentElement;
+            }
+            return r;
+          };
+          for (const el of sec.querySelectorAll("*")) {
+            if (caret.contains(el) || el.contains(caret)) continue;
+            if (el.getAttribute("aria-hidden") === "true" || el.closest('[aria-hidden="true"]')) continue;
+            const hasText = [...el.childNodes].some((n2) => n2.nodeType === 3 && n2.textContent.trim());
+            if (!hasText && el.tagName !== "svg" && el.tagName !== "IMG" && !el.hasAttribute("data-phone-device")) continue;
+            const cs = getComputedStyle(el);
+            if (cs.visibility === "hidden" || parseFloat(cs.opacity) <= 0.05) continue;
+            const r = rendered(el);
+            if (!r || r.right - r.left <= 0 || r.bottom - r.top <= 0) continue;
+            if (r.left < cr.right && r.right > cr.left && r.top < cr.bottom && r.bottom > cr.top)
+              bad.push(sec.dataset.section + "/" + el.tagName + "@" + Math.round(r.top) + ".." + Math.round(r.bottom));
+          }
+        }
+        return bad.slice(0, 4);
+      });
     const g93 = {};
     for (const e of ENGINES) {
-      const hits = [];
-      for (const biz of PRESETS93) {
-        const out = await run(
-          e.b,
-          (pg) =>
-            pg.evaluate(async () => {
-              const pager = document.querySelector("[data-pager]");
-              const caret = document.querySelector("[data-rail-next]");
-              const bad = [];
-              for (let i = 0; i < 4; i++) {
-                pager.scrollTop = i * pager.clientHeight;
-                await new Promise((r) => setTimeout(r, 320));
-                const cr = caret.getBoundingClientRect();
-                if (cr.width === 0 || cr.height === 0) continue;
-                const sec = [...document.querySelectorAll("[data-section]")].find((x) => {
-                  const r = x.getBoundingClientRect();
-                  return r.top > -10 && r.top < 10;
-                });
-                if (!sec) continue;
-                /* The RENDERED box: clipped by every overflow ancestor, so a
-                   panel resting off-screen inside its scrollport does not
-                   count as painted where it is laid out. */
-                const rendered = (el) => {
-                  let r = el.getBoundingClientRect();
-                  let n = el.parentElement;
-                  while (n && n !== document.body) {
-                    const cs = getComputedStyle(n);
-                    if (cs.overflow !== "visible" || cs.overflowX !== "visible" || cs.overflowY !== "visible") {
-                      const c = n.getBoundingClientRect();
-                      r = {
-                        left: Math.max(r.left, c.left),
-                        right: Math.min(r.right, c.right),
-                        top: Math.max(r.top, c.top),
-                        bottom: Math.min(r.bottom, c.bottom),
-                      };
-                      if (r.left >= r.right || r.top >= r.bottom) return null;
-                    }
-                    n = n.parentElement;
-                  }
-                  return r;
-                };
-                for (const el of sec.querySelectorAll("*")) {
-                  if (caret.contains(el) || el.contains(caret)) continue;
-                  if (el.getAttribute("aria-hidden") === "true" || el.closest('[aria-hidden="true"]')) continue;
-                  const hasText = [...el.childNodes].some((n2) => n2.nodeType === 3 && n2.textContent.trim());
-                  if (!hasText && el.tagName !== "svg" && el.tagName !== "IMG" && !el.hasAttribute("data-phone-device")) continue;
-                  const cs = getComputedStyle(el);
-                  if (cs.visibility === "hidden" || parseFloat(cs.opacity) <= 0.05) continue;
-                  const r = rendered(el);
-                  if (!r || r.right - r.left <= 0 || r.bottom - r.top <= 0) continue;
-                  if (r.left < cr.right && r.right > cr.left && r.top < cr.bottom && r.bottom > cr.top)
-                    bad.push(sec.dataset.section + "/" + el.tagName + "@" + Math.round(r.top) + ".." + Math.round(r.bottom));
-                }
-              }
-              return bad.slice(0, 4);
-            }),
-          { path: "/?biz=" + biz, panels: true },
-        );
-        hits.push(...out.map((x) => biz + ":" + x));
+      g93[e.name] = {};
+      for (const h of H3) {
+        const hits = [];
+        for (const biz of PRESETS) {
+          const out = await run(e.b, caretScan, { path: "/?biz=" + biz, panels: true, h });
+          hits.push(...out.map((x) => biz + ":" + x));
+        }
+        g93[e.name][h] = hits;
       }
-      g93[e.name] = hits;
     }
     verdict(
       93,
-      "the caret's 48px band is empty: caret box ∩ every content box = ∅ in all four sections, all four presets (change 39, C1)",
+      "the caret's band is empty: caret box ∩ every content box = ∅ in all four sections, all four presets — both engines, 700 + 740 + 844 (change 40, B)",
       g93,
       (g) => g.length === 0,
-      (g) => (g.length === 0 ? "0 intersections across 4 sections x 4 presets" : g.length + " hit(s): " + JSON.stringify(g)),
+      (g) => (g.length === 0 ? "0 intersections (4 sections x 4 presets)" : g.length + " hit(s): " + JSON.stringify(g)),
     );
 
-    /* ---- 95: the ledger still closes above the fold in WebKit. ---- */
-    const g95wk = await run(wkBrowser, (pg) =>
+    /* ---- 206: the section-1 stack is the brief's numbers, top to bottom. ---- */
+    /* Measured at SETTLE under motion, not under reduced motion: with
+       motion reduced the replay control is display:none by design (change
+       12), so there is only one button to measure and the equal-width
+       clause has nothing to compare. */
+    const g206 = await grid(
+      H3,
+      async (pg) => {
+        await waitT(pg, 11.5);
+        return pg.evaluate(() => {
+          const H = innerHeight;
+          const q = (sel) => document.querySelector(sel);
+          const R = (el) => el.getBoundingClientRect();
+          const sec = q('[data-section="call"]');
+          const folio = sec.querySelector("[data-section-mark]");
+          const folioP = folio.querySelector("[data-folio]");
+          const cap = q("[data-scene-mobile]");
+          const dev = sec.querySelector("[data-phone-device]");
+          const strip = q("[data-beats]");
+          const word = strip.querySelector("[data-beat]");
+          const money = q("[data-beat-money]");
+          const ctrl = q("[data-controls]");
+          const btns = [...ctrl.querySelectorAll("button")];
+          const caret = q("[data-rail-next]");
+          const secR = R(sec);
+          const r = (el) => ({ t: +(R(el).top - secR.top).toFixed(1), b: +(R(el).bottom - secR.top).toFixed(1), h: +R(el).height.toFixed(1), w: +R(el).width.toFixed(1), l: +R(el).left.toFixed(1) });
+          const bs = btns.map((b) => {
+            const cs = getComputedStyle(b);
+            return { h: +R(b).height.toFixed(1), w: +R(b).width.toFixed(1), bg: cs.backgroundColor, border: cs.borderTopColor, bw: cs.borderTopWidth, color: cs.color };
+          });
+          const cr = R(caret);
+          return {
+            H,
+            secH: +secR.height.toFixed(1),
+            folio: r(folioP),
+            caption: r(cap),
+            phone: r(dev),
+            strip: r(strip),
+            stripFS: getComputedStyle(word).fontSize,
+            stripFamily: getComputedStyle(word).fontFamily.split(",")[0],
+            moneyFS: getComputedStyle(money).fontSize,
+            controls: r(ctrl),
+            buttons: bs,
+            caret: { t: +(cr.top - secR.top).toFixed(1), b: +(cr.bottom - secR.top).toFixed(1), cx: +((cr.left + cr.right) / 2).toFixed(1) },
+            vw: innerWidth,
+          };
+        });
+      },
+    );
+    const near = (a, b, tol) => Math.abs(a - b) <= tol;
+    const ok206 = (g) => {
+      const expectedH = g.H - 280;
+      return (
+        near(g.secH, g.H, 1) &&
+        near(g.folio.t, 24, 0.5) &&
+        near(g.folio.h, 16, 0.5) &&
+        near(g.caption.t, g.folio.b + 24, 0.5) &&
+        near(g.caption.h, 28, 0.5) &&
+        near(g.phone.t, g.caption.b + 16, 1) &&
+        near(g.phone.h, expectedH, 1) &&
+        near(g.phone.w, (expectedH * 390) / 810, 1) &&
+        near(g.strip.t, g.phone.b + 24, 1) &&
+        near(g.strip.h, 24, 0.5) &&
+        g.stripFS === "13px" &&
+        g.moneyFS === "20px" &&
+        near(g.controls.t, g.strip.b + 16, 1) &&
+        near(g.controls.h, 44, 0.5) &&
+        g.buttons.length === 2 &&
+        near(g.buttons[0].w, g.buttons[1].w, 1) &&
+        g.buttons.every((b) => near(b.h, 44, 0.5) && b.bg === "rgba(0, 0, 0, 0)" && b.bw === "1px" && b.border === "rgba(233, 238, 244, 0.6)" && b.color === "rgb(233, 238, 244)") &&
+        g.controls.b <= g.secH - 64 + 0.5 &&
+        near(g.caret.b, g.secH - 12, 1) &&
+        near(g.caret.cx, g.vw / 2, 1)
+      );
+    };
+    verdict(
+      206,
+      "section 1 fixed stack (change 40, A): folio top 24/h 16; caption 24 below/h 28; phone 16 below, HEIGHT = H − 280 and width = height × 390/810; strip 24 below/h 24 at 13px with the +$ figure at 20px; controls 16 below/h 44, two equal transparent ink-stroke secondaries; controls clear the 64px band; caret bottom at 12 (env 0), centred — both engines, 700 + 740 + 844",
+      g206,
+      ok206,
+      (g) =>
+        "H " + g.H + ": folio " + g.folio.t + "/" + g.folio.h + ", caption " + g.caption.t + "/" + g.caption.h + ", phone " + g.phone.t + " h" + g.phone.h + " w" + g.phone.w + " (want h" + (g.H - 280) + " w" + (((g.H - 280) * 390) / 810).toFixed(1) + "), strip " + g.strip.t + "/" + g.strip.h + " " + g.stripFS + " " + g.stripFamily + " money " + g.moneyFS + ", controls " + g.controls.t + "/" + g.controls.h + " btns " + g.buttons.map((b) => b.w + "x" + b.h + " " + b.bg).join(" & ") + ", controls bottom " + g.controls.b + " (band from " + (g.secH - 64) + "), caret " + g.caret.t + ".." + g.caret.b + " cx " + g.caret.cx,
+    );
+
+    /* ---- 95: the ledger closes above the fold. ---- */
+    const g95 = await grid(H2, (pg) =>
       pg.evaluate(async () => {
         const pager = document.querySelector("[data-pager]");
         pager.scrollTop = pager.clientHeight;
@@ -7852,19 +7977,13 @@ if (!chromium) {
         const sec = document.querySelector('[data-section="save"]');
         const strip = sec.querySelector("[data-since-strip]");
         if (!strip) return null;
-        const sr = sec.getBoundingClientRect();
-        const tr = strip.getBoundingClientRect();
-        return { gap: +(sr.bottom - tr.bottom).toFixed(1) };
+        return { gap: +(sec.getBoundingClientRect().bottom - strip.getBoundingClientRect().bottom).toFixed(1) };
       }),
     );
-    amend(
-      95,
-      g95wk != null && g95wk.gap >= 16,
-      g95wk == null ? "since-install strip not found" : "since-install closes " + g95wk.gap + "px above the fold (need >= 16)",
-    );
+    fold(95, g95, (g) => g != null && g.gap >= 16, (g) => (g == null ? "since-install strip not found" : "since-install closes " + g.gap + "px above the fold (need >= 16)"));
 
-    /* ---- 194: the device's three layers, in WebKit. ---- */
-    const g194wk = await run(wkBrowser, (pg) =>
+    /* ---- 194: the device's three layers. ---- */
+    const g194 = await grid(H2, (pg) =>
       pg.evaluate(() => {
         const dev = document.querySelector('[data-section="call"] [data-phone-device]');
         const rim = dev?.querySelector("[data-phone-rim]");
@@ -7882,70 +8001,75 @@ if (!chromium) {
         };
       }),
     );
-    amend(
+    fold(
       194,
-      g194wk != null &&
-        Math.abs(g194wk.ratio - 2.077) <= 0.01 &&
-        g194wk.inset.every((v) => Math.abs(v - 15) <= 0.5) &&
-        g194wk.rimGradient === true &&
-        g194wk.glassBg === "rgb(5, 6, 8)" &&
-        g194wk.nubs.length === 3 &&
-        g194wk.nubs.every((v) => Math.abs(v - 2.5) <= 0.5),
-      g194wk == null
-        ? "device layers not found"
-        : "ratio " + g194wk.ratio + ", inset " + JSON.stringify(g194wk.inset) + ", rim gradient " + g194wk.rimGradient + ", glass " + g194wk.glassBg + ", nubs " + JSON.stringify(g194wk.nubs),
+      g194,
+      (g) => g != null && Math.abs(g.ratio - 2.077) <= 0.01 && g.inset.every((v) => Math.abs(v - 15) <= 0.5) && g.rimGradient === true && g.glassBg === "rgb(5, 6, 8)" && g.nubs.length === 3 && g.nubs.every((v) => Math.abs(v - 2.5) <= 0.5),
+      (g) => (g == null ? "device layers not found" : "ratio " + g.ratio + ", inset " + JSON.stringify(g.inset) + ", rim gradient " + g.rimGradient + ", glass " + g.glassBg + ", nubs " + JSON.stringify(g.nubs)),
     );
 
-    /* ---- 196: section 3 at 390, in WebKit. ---- */
-    const r196 = [];
-    for (const biz of PRESETS93) {
-      r196.push({
-        biz,
-        g: await run(
-          wkBrowser,
-          (pg) =>
-            pg.evaluate(async (id) => {
-              const pager = document.querySelector("[data-pager]");
-              pager.scrollTop = 2 * pager.clientHeight;
-              await new Promise((r) => setTimeout(r, 700));
-              const sec = document.querySelector('[data-section="yours"]');
-              const panel = sec.querySelector('[data-panel][data-preset="' + id + '"]');
-              const glyph = panel.querySelector("[data-trade-glyph]");
-              const pr = panel.getBoundingClientRect();
-              const gr = glyph.getBoundingClientRect();
-              const input = document.querySelector("[data-name-input]");
-              const cs = getComputedStyle(input);
-              const probe = document.createElement("span");
-              probe.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;font:" + cs.font;
-              probe.textContent = input.placeholder;
-              document.body.appendChild(probe);
-              const textW = probe.getBoundingClientRect().width;
-              probe.remove();
-              return {
-                slabPresent: sec.querySelector(":scope > [data-accent-slab]") != null,
-                glyphInPanel: gr.left >= pr.left - 1 && gr.right <= pr.right + 1 && gr.bottom <= pr.bottom + 1,
-                unclipped: textW <= input.clientWidth + 0.5,
-                valueW: +textW.toFixed(1),
-                fieldW: input.clientWidth,
-              };
-            }, id),
-          { path: "/?biz=" + biz, panels: true },
-        ),
-      });
+    /* ---- 196: section 3 at 390, all presets. ---- */
+    const g196 = {};
+    for (const e of ENGINES) {
+      g196[e.name] = {};
+      for (const h of H2) {
+        const rows = [];
+        for (const biz of PRESETS) {
+          rows.push({
+            biz,
+            g: await run(
+              e.b,
+              (pg) =>
+                pg.evaluate(async (id) => {
+                  const pager = document.querySelector("[data-pager]");
+                  pager.scrollTop = 2 * pager.clientHeight;
+                  await new Promise((r) => setTimeout(r, 700));
+                  const sec = document.querySelector('[data-section="yours"]');
+                  const panel = sec.querySelector('[data-panel][data-preset="' + id + '"]');
+                  const glyph = panel.querySelector("[data-trade-glyph]");
+                  const pr = panel.getBoundingClientRect();
+                  const gr = glyph.getBoundingClientRect();
+                  const input = document.querySelector("[data-name-input]");
+                  const cs = getComputedStyle(input);
+                  const probe = document.createElement("span");
+                  probe.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;font:" + cs.font;
+                  probe.textContent = input.placeholder;
+                  document.body.appendChild(probe);
+                  const textW = probe.getBoundingClientRect().width;
+                  probe.remove();
+                  /* change 40 (C): the rows and their rules span the full
+                     content column — every rule is as wide as the panel
+                     content box. */
+                  const content = panel.querySelector("[data-panel-content]").getBoundingClientRect();
+                  const rules = [...panel.querySelectorAll("[data-tile]")].map((t) => +(t.getBoundingClientRect().width - content.width).toFixed(1));
+                  return {
+                    slabPresent: sec.querySelector(":scope > [data-accent-slab]") != null,
+                    glyphInPanel: gr.left >= pr.left - 1 && gr.right <= pr.right + 1 && gr.bottom <= pr.bottom + 1,
+                    unclipped: textW <= input.clientWidth + 0.5,
+                    ruleShortfalls: rules,
+                  };
+                }, biz),
+              { path: "/?biz=" + biz, panels: true, h },
+            ),
+          });
+        }
+        g196[e.name][h] = rows;
+      }
     }
-    amend(
+    fold(
       196,
-      r196.every((r) => r.g.slabPresent === false && r.g.glyphInPanel && r.g.unclipped),
-      r196.map((r) => r.biz + ": slab " + r.g.slabPresent + ", glyph in panel " + r.g.glyphInPanel + ", value " + r.g.valueW + "/" + r.g.fieldW + "px").join(" | "),
+      g196,
+      (rows) => rows.every((r) => r.g.slabPresent === false && r.g.glyphInPanel && r.g.unclipped && r.g.ruleShortfalls.every((d) => Math.abs(d) <= 1)),
+      (rows) => rows.map((r) => r.biz + " slab " + r.g.slabPresent + " glyph-in " + r.g.glyphInPanel + " unclipped " + r.g.unclipped + " rule Δ " + JSON.stringify(r.g.ruleShortfalls)).join("; "),
     );
 
-    /* ---- 197: the visual-viewport fit, in WebKit. ---- */
-    const r197 = [];
-    for (const H of [740, 844]) {
-      r197.push({
-        H,
-        g: await run(
-          wkBrowser,
+    /* ---- 197: the visual-viewport fit (forced 740 / 844), both engines. ---- */
+    const g197 = {};
+    for (const e of ENGINES) {
+      g197[e.name] = {};
+      for (const Hf of H2) {
+        g197[e.name][Hf] = await run(
+          e.b,
           async (pg) => {
             await pg.evaluate(() => window.visualViewport.dispatchEvent(new Event("resize")));
             await pg.waitForTimeout(150);
@@ -7956,36 +8080,39 @@ if (!chromium) {
               const sec = document.querySelector('[data-section="save"]');
               const strip = sec.querySelector("[data-since-strip]");
               const sr = sec.getBoundingClientRect();
-              return {
-                vh: getComputedStyle(document.documentElement).getPropertyValue("--vh").trim(),
-                sectionH: +sr.height.toFixed(1),
-                stripBottom: +(strip.getBoundingClientRect().bottom - sr.top).toFixed(1),
-              };
+              return { vh: getComputedStyle(document.documentElement).getPropertyValue("--vh").trim(), sectionH: +sr.height.toFixed(1), stripBottom: +(strip.getBoundingClientRect().bottom - sr.top).toFixed(1), Hf: innerHeight };
             });
           },
           {
+            h: 844,
             init: (forced) => {
               Object.defineProperty(window.visualViewport, "height", { get: () => forced, configurable: true });
             },
-            initArg: H,
+            initArg: Hf,
           },
-        ),
-      });
+        );
+      }
     }
-    amend(
+    fold(
       197,
-      r197.every((r) => r.g.vh === r.H + "px" && Math.abs(r.g.sectionH - r.H) <= 1 && r.g.stripBottom <= r.H - 12),
-      r197.map((r) => "vv " + r.H + ": --vh " + r.g.vh + ", section " + r.g.sectionH + ", strip bottom " + r.g.stripBottom).join(" | "),
+      g197,
+      (g) => g.vh === Object.keys(g197.chromium).find((k) => g197.chromium[k] === g) + "px" || true,
+      (g) => "--vh " + g.vh + ", section " + g.sectionH + ", strip bottom " + g.stripBottom,
     );
+    /* The real 197 predicate, per forced height. */
+    {
+      const r = results.find((x) => x.n === 197);
+      const cs = cells(g197);
+      const ok = cs.every((c) => c.g.vh === c.h + "px" && Math.abs(c.g.sectionH - Number(c.h)) <= 1 && c.g.stripBottom <= Number(c.h) - 12);
+      if (r) r.pass = r.pass && ok;
+    }
 
-    /* ---- 201: the beat strip, in WebKit. ---- */
+    /* ---- 201: the beat strip, in WebKit at 844 (timing, not layout). ---- */
     const g201wk = await run(wkBrowser, async (pg) => {
       const sample = async (t) => {
         await waitT(pg, t);
         return pg.evaluate(() => {
-          const words = [...document.querySelectorAll("[data-beat]")].map(
-            (el) => getComputedStyle(el).color === "rgb(233, 238, 244)",
-          );
+          const words = [...document.querySelectorAll("[data-beat]")].map((el) => getComputedStyle(el).color === "rgb(233, 238, 244)");
           const money = document.querySelector("[data-beat-money]");
           return { words, money: money ? +parseFloat(getComputedStyle(money).opacity).toFixed(2) : null };
         });
@@ -7994,17 +8121,8 @@ if (!chromium) {
     });
     amend(
       201,
-      g201wk.at30.words.length === 3 &&
-        g201wk.at30.words.every((w) => !w) &&
-        g201wk.at30.money === 0 &&
-        g201wk.at38.words[0] && !g201wk.at38.words[1] && !g201wk.at38.words[2] &&
-        g201wk.at46.words[0] && g201wk.at46.words[1] && !g201wk.at46.words[2] &&
-        g201wk.at100.words.every((w) => w) &&
-        g201wk.at100.money === 1,
-      "t=3.0 " + JSON.stringify(g201wk.at30.words) + " money " + g201wk.at30.money +
-        "; t=3.8 " + JSON.stringify(g201wk.at38.words) +
-        "; t=4.6 " + JSON.stringify(g201wk.at46.words) +
-        "; t=10.2 " + JSON.stringify(g201wk.at100.words) + " money " + g201wk.at100.money,
+      g201wk.at30.words.length === 3 && g201wk.at30.words.every((w) => !w) && g201wk.at30.money === 0 && g201wk.at38.words[0] && !g201wk.at38.words[1] && !g201wk.at38.words[2] && g201wk.at46.words[0] && g201wk.at46.words[1] && !g201wk.at46.words[2] && g201wk.at100.words.every((w) => w) && g201wk.at100.money === 1,
+      "webkit@844: t=3.0 " + JSON.stringify(g201wk.at30.words) + " money " + g201wk.at30.money + "; t=3.8 " + JSON.stringify(g201wk.at38.words) + "; t=4.6 " + JSON.stringify(g201wk.at46.words) + "; t=10.2 " + JSON.stringify(g201wk.at100.words) + " money " + g201wk.at100.money,
     );
   });
 

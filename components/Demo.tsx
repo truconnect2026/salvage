@@ -905,18 +905,15 @@ const beatZeroTotals = (p: Preset): Totals => ({
 });
 
 /* change 30 (C3): the button system — PRIMARY is the accent fill. */
-const btnPrimary =
-  "h-9 rounded-none bg-ink px-3 text-[12px] font-medium text-abyss min-[1100px]:h-11 min-[1100px]:px-5 min-[1100px]:text-[15px] " +
-  "transition-opacity hover:opacity-90 outline-none " +
-  "focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2";
-
 /* change 30 (C3): SECONDARY — 1px ink stroke at 60%, ink text, hard
    corners, 44px tall. The gold CTA keeps the page's one pill; no teal
    buttons anywhere. */
 const btnSecondary =
-  /* change 33: an OPAQUE ground — a control that crosses the section band
-     must carry its own field, never let the band split its label. */
-  "h-9 rounded-none border border-[rgba(233,238,244,0.6)] bg-abyss px-3 text-[12px] font-medium text-ink min-[1100px]:h-11 min-[1100px]:px-5 min-[1100px]:text-[15px] " +
+  /* change 33 gave this an opaque ground so the accent band could never
+     split its label; the band is gone (change 36) and change 40 fixes the
+     control as TRANSPARENT: 1px ink stroke at 60%, ink text, 44 tall, one
+     kind of button in section 1 — no fill anywhere in it. */
+  "h-11 rounded-none border border-[rgba(233,238,244,0.6)] bg-transparent px-3 text-[12px] font-medium text-ink min-[1100px]:px-5 min-[1100px]:text-[15px] " +
   "transition-colors hover:bg-white/5 outline-none " +
   "focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2";
 
@@ -2044,7 +2041,7 @@ export default function Demo({
         type="button"
         onClick={() => goSection(activeSection + 1)}
         aria-label={COPY.a11y.next}
-        className={`fixed bottom-2 left-1/2 z-40 flex h-8 w-5 -translate-x-1/2 items-center justify-center text-teal outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-teal-bright ${
+        className={`fixed bottom-[calc(env(safe-area-inset-bottom)+12px)] left-1/2 z-40 flex h-8 w-5 -translate-x-1/2 items-center justify-center text-teal outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-teal-bright ${
           activeSection >= SECTIONS.length - 1 ? "hidden" : ""
         }`}
       >
@@ -2067,7 +2064,7 @@ export default function Demo({
         {/* change 27 (B1): >=1100 a [1fr_auto_1fr] grid — the DEVICE is the
             centered column, the scene type right-aligned in the left third,
             vertically centered on the phone. */}
-        <div data-section-content className="relative z-10 flex h-full w-full items-center justify-center gap-16 pb-16 pl-6 pr-14 pt-16 min-[1100px]:mx-auto min-[1100px]:grid min-[1100px]:max-w-[1240px] min-[1100px]:grid-cols-[61fr_auto_39fr] min-[1100px]:gap-x-0 min-[1100px]:px-12 min-[1100px]:pb-12 min-[1100px]:pt-6">
+        <div data-section-content className="relative z-10 flex h-full w-full items-center justify-center gap-16 pb-[calc(64px+env(safe-area-inset-bottom))] pl-6 pr-14 pt-16 max-[1099.98px]:items-start min-[1100px]:mx-auto min-[1100px]:grid min-[1100px]:max-w-[1240px] min-[1100px]:grid-cols-[61fr_auto_39fr] min-[1100px]:gap-x-0 min-[1100px]:px-12 min-[1100px]:pb-12 min-[1100px]:pt-6">
           <div data-scene data-client-world className="relative hidden shrink-0 min-[1100px]:block min-[1100px]:justify-self-start min-[1100px]:self-center min-[1100px]:-translate-y-8">
             {/* change 30 (G1): the slab receipt — the clock crossfades out
                 beneath it on the booking beat. Gold census +1 (gate 175);
@@ -2132,17 +2129,17 @@ export default function Demo({
                 centered above the phone, height reserved, riding the same
                 three beats as the desktop scene type (same slots, one
                 clock). SSR seeds the settled "caught" line. */}
-            <div data-scene-mobile data-chrome="caption" data-client-world className="relative mb-[60px] h-[32px] text-left min-[1100px]:hidden">
+            <div data-scene-mobile data-chrome="caption" data-client-world className="relative mb-4 h-7 text-left min-[1100px]:hidden">
               <p
                 data-scene-line="closed"
-                className="absolute left-0 top-0 w-fit max-w-[145px] whitespace-nowrap font-caption text-[15px] font-normal italic leading-[30px] text-ink"
+                className="absolute left-0 top-0 w-fit whitespace-nowrap font-caption text-[22px] font-normal italic leading-7 text-ink"
                 style={{ opacity: 0 }}
               >
                 {COPY.scene.mobile.calls}
               </p>
               <p
                 data-scene-line="dialing"
-                className="absolute left-0 top-0 w-fit max-w-[145px] whitespace-nowrap font-caption text-[15px] font-normal italic leading-[30px] text-ink"
+                className="absolute left-0 top-0 w-fit whitespace-nowrap font-caption text-[22px] font-normal italic leading-7 text-ink"
                 style={{ opacity: 0 }}
               >
                 {COPY.scene.mobile.nobody}
@@ -2153,7 +2150,7 @@ export default function Demo({
                   keeps the clock crossfade (C2). */}
               <p
                 data-scene-line="caught"
-                className="absolute left-0 top-0 w-fit max-w-[145px] whitespace-nowrap font-caption text-[15px] font-normal italic leading-[30px] text-ink"
+                className="absolute left-0 top-0 w-fit whitespace-nowrap font-caption text-[22px] font-normal italic leading-7 text-ink"
                 style={{ opacity: 1 }}
               >
                 {COPY.scene.mobile.caught.pre}
@@ -2167,8 +2164,8 @@ export default function Demo({
                 lands 12px right of "Booked" on the booking beat. This is
                 where the money lives now — section 1 leads with what the
                 product DOES and closes on what it made. */}
-            <div data-beats data-chrome="beats" className="mt-6 flex items-center justify-center">
-              <div className="flex items-center gap-6 font-figures text-[12px]">
+            <div data-beats data-chrome="beats" className="mt-6 flex h-6 items-center justify-center">
+              <div className="flex items-center gap-6 font-figures text-[13px] leading-none">
                 {[COPY.beats.missed, COPY.beats.text, COPY.beats.booked].map((w, i) => (
                   <Fragment key={w}>
                     {i > 0 && (
@@ -2201,7 +2198,7 @@ export default function Demo({
               <button data-replay type="button" onClick={onReplay} className={`w-[46%] max-w-[180px] ${btnSecondary}`}>
                 {COPY.replayLabel}
               </button>
-              <button data-your-side data-client-world type="button" onClick={() => goSection(1)} className={`w-[46%] max-w-[180px] ${btnPrimary}`}>
+              <button data-your-side data-client-world type="button" onClick={() => goSection(1)} className={`w-[46%] max-w-[180px] ${btnSecondary}`}>
                 {COPY.yourSideLabel}
               </button>
             </div>
@@ -2217,7 +2214,7 @@ export default function Demo({
       <section data-section="save" data-entry-fx={fxReady ? (entered[1] ? "run" : "pending") : undefined}>
         <SectionMark {...COPY.sections.save} />
 
-        <div data-section-content className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pb-12 pl-6 pr-14 pt-[60px] min-[1100px]:max-w-[1240px] min-[1100px]:px-12 min-[1100px]:pb-12 min-[1100px]:pt-[84px]">
+        <div data-section-content className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pb-[calc(64px+env(safe-area-inset-bottom))] pl-6 pr-14 pt-[60px] min-[1100px]:max-w-[1240px] min-[1100px]:px-12 min-[1100px]:pb-16 min-[1100px]:pt-[84px]">
           <div
             data-save-grid
             className="flex min-h-0 w-full flex-1 flex-col min-[1100px]:grid min-[1100px]:grid-cols-[42fr_58fr] min-[1100px]:grid-rows-[auto_minmax(0,1fr)] min-[1100px]:items-start min-[1100px]:gap-x-12"
@@ -2343,7 +2340,7 @@ export default function Demo({
           ref={yoursPanelRef}
           data-yours-panel
           data-section-content
-          className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pb-12 pl-6 pr-14 pt-[112px] min-[1100px]:grid min-[1100px]:max-w-[1240px] min-[1100px]:grid-cols-2 min-[1100px]:grid-rows-[auto_minmax(0,1fr)] min-[1100px]:gap-x-12 min-[1100px]:px-12 min-[1100px]:pb-12 min-[1100px]:pt-[124px]"
+          className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pb-[calc(64px+env(safe-area-inset-bottom))] pl-6 pr-14 pt-[112px] min-[1100px]:grid min-[1100px]:max-w-[1240px] min-[1100px]:grid-cols-2 min-[1100px]:grid-rows-[auto_minmax(0,1fr)] min-[1100px]:gap-x-12 min-[1100px]:px-12 min-[1100px]:pb-16 min-[1100px]:pt-[124px]"
         >
           {/* change 33 (D1/D3): the tab strip is the switcher's label —
               four trades under the folio, the active one accented and
@@ -2459,10 +2456,9 @@ export default function Demo({
                         "--accent": p.accent,
                         "--accent-soft": p.accentSoft,
                         "--accent-ink": p.accentInk,
-                        /* change 36 (A7): the ONE background the trade
-                           colour is allowed — abyss carried 22% toward
-                           accentSoft. A tint, not a plane. */
-                        background: `color-mix(in srgb, ${p.accentSoft} 22%, var(--color-abyss))`,
+                        /* change 40 (C): no plane of any kind — the ground is
+                           abyss, and the trade colour lives in the active
+                           tab, the label and the glyph only. */
                       } as CSSProperties
                     }
                   >
@@ -2533,7 +2529,7 @@ export default function Demo({
 
         {/* change 30 (F1/F2): flowed from the folio — folio bottom + 16 ->
             the 2px rule; mobile left-aligns on the spine like desktop. */}
-        <div className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col items-start justify-start gap-4 pb-3 pl-6 pr-14 pt-[44px] text-left min-[1100px]:max-w-[1240px] min-[1100px]:items-stretch min-[1100px]:gap-14 min-[1100px]:px-12 min-[1100px]:pb-8 min-[1100px]:pt-[68px]">
+        <div data-section-content className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col items-start justify-start gap-4 pb-[calc(24px+env(safe-area-inset-bottom))] pl-6 pr-14 pt-[44px] text-left min-[1100px]:max-w-[1240px] min-[1100px]:items-stretch min-[1100px]:gap-14 min-[1100px]:px-12 min-[1100px]:pb-16 min-[1100px]:pt-[68px]">
           {/* change 18 (C5): the math line is the ledger's TOTAL — a 2px
               rule above, 1px below, numerals in mono at display size. */}
           <div data-total className="w-full border-b border-t-2 border-line py-4">
@@ -2695,7 +2691,10 @@ export default function Demo({
               </p>
             </div>
 
-            <button data-loop data-chrome="loop" type="button" onClick={onLoop} className={btnSecondary}>
+            {/* change 40: the 44px control height is section 1's spec; the
+                close's loop button keeps its 36px, or the close runs 7px past
+                a 740 fold. Same stroke, same ink — one size down. */}
+            <button data-loop data-chrome="loop" type="button" onClick={onLoop} className={btnSecondary.replace("h-11", "h-9")}>
               {COPY.close.loopLabel}
             </button>
 
