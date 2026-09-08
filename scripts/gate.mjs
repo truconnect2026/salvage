@@ -7983,6 +7983,10 @@ if (!chromium) {
     fold(95, g95, (g) => g != null && g.gap >= 16, (g) => (g == null ? "since-install strip not found" : "since-install closes " + g.gap + "px above the fold (need >= 16)"));
 
     /* ---- 194: the device's three layers. ---- */
+    /* Under REDUCED motion, like its Chromium original: the A5 entry rise
+       translates the rim 16px for 500ms after load, and a sample taken
+       mid-flight reads the inset as 31/-1 — which is exactly what the
+       first live run caught on a slower load. */
     const g194 = await grid(H2, (pg) =>
       pg.evaluate(() => {
         const dev = document.querySelector('[data-section="call"] [data-phone-device]');
@@ -8000,6 +8004,7 @@ if (!chromium) {
           nubs: [...dev.querySelectorAll("[data-nub]")].map((n) => +n.getBoundingClientRect().width.toFixed(2)),
         };
       }),
+      { ctx: { reducedMotion: "reduce" } },
     );
     fold(
       194,
