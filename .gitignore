@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Twilio lookup cache - lead phone numbers, never commit
+/scripts/lookup_cache.json*
