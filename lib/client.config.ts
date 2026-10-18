@@ -216,6 +216,41 @@ export const COPY = {
       wordmark: "Davy Jones' Locker",
     },
   },
+
+  // change 42 (APPROVED, verbatim): the /go customer page. Appended LAST in
+  // COPY so the gates' first-match config reads (closed:, call:, close:)
+  // keep resolving to the demo's own strings.
+  go: {
+    open: "Open now", closed: "Closed now. You can still book.",
+    book: "Book a time", nextLabel: "Next available",
+    text: "Text us", call: "Call", emergency: "Emergency? Call now",
+    quote: "Send a photo for a quote", save: "Save our number",
+    smsBody: "Hi {biz}, I need help with a job.",
+    stepJob: "What do you need?", stepTime: "Pick a time", stepYou: "Your name and number",
+    namePh: "Your name", phonePh: "Phone number",
+    nameErr: "Add your name.", phoneErr: "Add a 10-digit phone number.",
+    confirm: "Confirm booking", sendQuote: "Send photo", back: "Back", close: "Close",
+    doneTitle: "You're booked.", doneSub: "{biz} will text you to confirm.",
+    quoteDoneTitle: "Photo sent.", quoteDoneSub: "{biz} will text you a quote.",
+    addCal: "Add to calendar", copyNumber: "Copy number", copied: "Copied",
+    ownerSide: "On the owner's phone, right now:",
+    demoNote: "Demo. Nothing is sent.",
+    poweredBy: "Missed-call recovery by Salvage",
+  },
+  jobs: {
+    plumbing: ["Leak or burst pipe","Water heater","Drain clog","Toilet or fixture","Something else"],
+    hvac: ["No heat or no AC","Strange noise or smell","Tune-up","New system quote","Something else"],
+    electrical: ["Power out in part of the house","Breaker keeps tripping","Outlet or switch","Panel upgrade","Something else"],
+    roofing: ["Active leak","Storm damage","Inspection","New roof quote","Something else"],
+    garage: ["Door won't open","Broken spring","Opener","New door quote","Something else"],
+    salon: ["Filler","Color","Facial","Lash fill","Something else"],
+    dental: ["Toothache or chip","Cleaning","Filling","Crown","Something else"],
+    other: ["New appointment","Quote","Question","Something else"],
+  },
+  tradeLabels: { plumbing: "Plumbing", hvac: "Heating and air", electrical: "Electrical", roofing: "Roofing", garage: "Garage doors" },
+  // change 42: Andy's real voice line for /go demo mode. Texts use
+  // contact.smsHref above; calls ring this one.
+  goTel: "tel:+18044953492",
 };
 
 export const PRESETS: Preset[] = [

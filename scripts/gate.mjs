@@ -8141,6 +8141,21 @@ if (!chromium) {
   }
 }
 
+/* ---------- 207-212: /go (change 42), in their own module ----------------- */
+
+{
+  const GO_GATES = [207, 208, 209, 210, 211, 212];
+  try {
+    if (!chromium) throw new Error(`playwright unavailable: ${browserError}`);
+    const { runGoGates } = await import("./gate-go.mjs");
+    await runGoGates({ base, pw: { chromium, webkit }, check });
+  } catch (err) {
+    for (const n of GO_GATES) {
+      if (!results.some((r) => r.n === n)) check(n, "go gate", false, `not reached — ${String(err.message).slice(0, 160)}`);
+    }
+  }
+}
+
 /* ---------- report ------------------------------------------------------- */
 
 results.sort((a, b) => a.n - b.n);

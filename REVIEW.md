@@ -223,3 +223,25 @@ limit: Playwright pre-grants user activation and allows autoplay, so
 UA-level gesture suspension is asserted mechanically (gate 90 drives the
 restored context into the suspended state a real browser hands over) and
 reasoned for the legacy matrix, not measured on-device.
+
+## Change 42 — adversarial review (1 lens)
+
+Lens: can /go show a customer a wrong time, a wrong number, or someone
+else's markup — and does the owner's money line ever come from math?
+
+| # | Finding | Verdict |
+|---|---------|---------|
+| 1 | A 40-char name with no spaces set at the 26px floor with `overflow-wrap: anywhere` broke into THREE lines at 390 — gate 210 caught it on the first run. | **Fixed.** The fit reruns its binary search with breaks allowed (floor 14px) only when no size fits with normal wrapping. Gate 210 now holds 2 lines for both a spaced and a solid 200-char input. |
+| 2 | Slot instants computed with the offset of "now" put every post-fall-back slot an hour early (7:00 AM shown for an 8:00 AM start). | **Prevented by construction, held by gate 209.** `etToUtc` settles the offset at the target instant in two passes; the mutation that uses `Date.now()`'s offset turns 209 red at 2026-11-01 01:30 EDT. |
+| 3 | A reload with the sheet open restores `history.state.goSheet`; the next open then needs two Backs to close. | **Fixed.** Mount clears the stale flag with `replaceState`. |
+| 4 | Every quote reopen leaked the previous preview's object URL. | **Fixed.** Revoked on reopen. |
+| 5 | The fit script rendered inside a client component (React warns; it never runs on client renders). | **Fixed.** `FitName` is a server component passed into `GoCard` as a slot; GoCard re-calls `window.__goFit` after hydration. |
+| 6 | CRLF injection via `?biz=%0D%0A...` into the .ics/.vcf. | **Traced clean.** Both builders escape `\n` per RFC 5545 / vCard 3.0 and fold at 75 octets; tel is a config constant; the sms body is `encodeURIComponent`. ref/lead are cut to `[\w.-]{0,64}` and only reach analytics. |
+| 7 | The OG card could not live at `app/go/opengraph-image`: that convention receives params only, never the query, and a file-based og:image overrides `generateMetadata`. | **Deviation, documented.** Route handler at `/go/og`, wired from `generateMetadata` with the RESOLVED (sanitized, capped) values. |
+| 8 | Live mode (biz set, no demo=1) still rings Andy's lines — the URL carries no business number. | **Open — owner's call.** Needs a per-client number source before any live client. |
+| 9 | iOS handling of a blob `.ics` / `.vcf` download (download prompt vs. direct Calendar/Contacts sheet) is unverified on a device. | **Open.** Gate 208 proves the bytes; the iOS hand-off needs one real-phone tap. |
+
+Data note held: the owner line renders `preset.ticket` (stored). Gate 212's
+mutation renders `recovered` instead and goes red ("+$4,250" vs "+$850").
+The accent paints only the primary slot, the status dot and the trade
+label; emergency uses an ember rule, confirm is gold, focus is teal.
