@@ -608,3 +608,369 @@ body {
     display: none;
   }
 }
+
+/* ===================== change 42: /go ===================================
+   The customer page. Its own document scroll (the demo's pager locks html
+   and body), one column, 440 max in landscape. Every rule is scoped to
+   [data-go-root] or to a document that contains it. */
+html:has([data-go-root]),
+html:has([data-go-root]) body {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+html:has([data-go-root]) {
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+/* The sheet locks the page without moving it: overflow only, no position
+   swap, so the offset survives and the reserved gutter keeps x still. */
+html[data-go-locked] {
+  overflow: hidden;
+}
+/* Exempt from the rotate guard wherever it is mounted (change 41 moved it
+   to the layout): /go is one column and reads fine sideways. */
+html:has([data-go-root]) [data-rotate-guard] {
+  display: none !important;
+}
+
+[data-go-root] {
+  min-height: 100svh;
+  background: var(--color-abyss);
+  -webkit-tap-highlight-color: transparent;
+}
+.go-col {
+  max-width: 440px;
+  margin: 0 auto;
+  padding: max(28px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+}
+@media (orientation: landscape) and (max-height: 500px) {
+  .go-col {
+    padding-top: 20px;
+  }
+}
+
+[data-go-name] {
+  font-size: var(--go-name-est, 44px);
+  line-height: 1.04;
+  letter-spacing: -0.012em;
+  text-wrap: balance;
+  overflow-wrap: normal;
+}
+
+.go-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 26px;
+  padding: 3px 10px 3px 8px;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--color-ink);
+}
+.go-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+[data-open="0"] .go-dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+/* ---- slots ---- */
+.go-slot {
+  position: relative;
+  display: flex;
+  min-height: 56px;
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 70ms ease-out, border-color 120ms ease;
+}
+.go-slot:active {
+  transform: scale(0.98);
+}
+.go-slot:focus-visible,
+.go-chip:focus-visible,
+.go-row:focus-visible,
+.go-icon-btn:focus-visible,
+.go-cta:focus-visible,
+.go-input:focus-visible,
+.go-pick:focus-within {
+  outline: 2px solid var(--color-teal);
+  outline-offset: 2px;
+}
+@media (hover: hover) {
+  .go-slot:hover {
+    border-color: color-mix(in srgb, var(--color-teal) 45%, var(--color-line));
+  }
+  .go-primary:hover {
+    border-color: var(--accent);
+  }
+}
+.go-glyph {
+  display: flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.go-slot-row {
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+}
+.go-primary {
+  min-height: 76px;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.go-emergency {
+  border-left: 2px solid var(--color-ember);
+}
+.go-tile {
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 104px;
+  padding: 14px;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+.go-tile-sm {
+  min-height: 88px;
+}
+
+/* ---- entrance: one 420ms stagger, CSS only ----
+   `backwards` fill, never `both`: after the run the element holds no
+   animated transform, so :active's scale still lands. */
+@keyframes go-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .go-in {
+    animation: go-rise 240ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+    animation-delay: calc(var(--i, 0) * 30ms);
+  }
+  [data-open="1"] .go-dot {
+    animation: go-blink 2.4s ease-in-out infinite;
+  }
+}
+@keyframes go-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ---- the sheet: [data-go-panel] is the one transform owner ---- */
+.go-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  visibility: hidden;
+  transition: visibility 0s linear 260ms;
+}
+.go-sheet[data-go-sheet="open"] {
+  visibility: visible;
+  transition: none;
+}
+.go-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 11, 20, 0.72);
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+[data-go-sheet="open"] .go-backdrop {
+  opacity: 1;
+}
+.go-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-width: 440px;
+  margin: 0 auto;
+  max-height: min(92svh, 760px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-line);
+  border-bottom: 0;
+  border-radius: 14px 14px 0 0;
+  background: var(--color-surface);
+  transform: translateY(100%);
+  transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+[data-go-sheet="open"] .go-panel {
+  transform: translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .go-panel,
+  .go-backdrop {
+    transition: none;
+  }
+  .go-sheet {
+    transition: none;
+  }
+}
+.go-panel-inner {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 16px max(20px, env(safe-area-inset-bottom));
+}
+.go-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 44px;
+  min-width: 44px;
+  justify-content: center;
+  color: var(--color-muted);
+  border-radius: 6px;
+}
+.go-row {
+  display: flex;
+  width: 100%;
+  min-height: 56px;
+  align-items: center;
+  gap: 12px;
+  font-size: 16px;
+  color: var(--color-ink);
+  text-align: left;
+  transition: transform 70ms ease-out;
+}
+.go-row:active,
+.go-chip:active,
+.go-cta:active {
+  transform: scale(0.98);
+}
+.go-fast {
+  border-color: var(--color-teal);
+}
+.go-chip {
+  min-height: 56px;
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+  background: var(--color-surface-2);
+  color: var(--color-ink);
+  font-size: 14px;
+  touch-action: manipulation;
+  transition: transform 70ms ease-out;
+}
+.go-input {
+  width: 100%;
+  min-height: 56px;
+  padding: 0 14px;
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+  background: var(--color-abyss);
+  color: var(--color-ink);
+  font-size: 16px;
+}
+.go-input::placeholder {
+  color: var(--color-muted);
+}
+.go-input[aria-invalid="true"] {
+  border-color: var(--color-ember);
+}
+.go-cta {
+  width: 100%;
+  min-height: 56px;
+  border-radius: 6px;
+  background: var(--color-gold);
+  color: var(--color-abyss);
+  font-size: 16px;
+  font-weight: 500;
+  touch-action: manipulation;
+  transition: transform 70ms ease-out;
+}
+.go-cta:disabled {
+  background: var(--color-surface-3);
+  color: var(--color-muted);
+}
+.go-pick {
+  display: flex;
+  height: 180px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+  background: var(--color-abyss);
+  cursor: pointer;
+}
+
+/* ---- done: the drawn check ---- */
+.go-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .go-draw-ring {
+    animation: go-stroke 300ms ease-out backwards;
+  }
+  .go-draw-tick {
+    animation: go-stroke 220ms ease-out 240ms backwards;
+  }
+}
+@keyframes go-stroke {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+
+/* ---- demo done: the owner's lock screen ---- */
+.go-mini-phone {
+  width: 232px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 12px 12px 18px;
+  border: 1px solid var(--color-line);
+  border-radius: 30px;
+  background: var(--color-abyss);
+  overflow: hidden;
+}
+.go-notify {
+  border-top: 1px solid var(--color-line);
+  border-bottom: 1px solid var(--color-line);
+  border-left: 2px solid var(--color-teal);
+  padding: 10px 0 10px 12px;
+}
+.go-ledger {
+  display: flex;
+  align-items: baseline;
+  border-bottom: 1px solid var(--color-line);
+  padding: 4px 0 8px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .go-notify {
+    animation: go-notify-in 420ms cubic-bezier(0.2, 0.8, 0.2, 1) 500ms backwards;
+  }
+  .go-ledger {
+    animation: go-ink 300ms ease-out 1000ms backwards;
+  }
+}
+@keyframes go-notify-in {
+  from {
+    opacity: 0;
+    transform: translateY(-140%);
+  }
+}
+@keyframes go-ink {
+  from {
+    opacity: 0;
+  }
+}
