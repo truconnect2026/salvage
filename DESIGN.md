@@ -1,0 +1,70 @@
+# DESIGN.md — Salvage design system (changes 43–48)
+
+The bar: a Richmond HVAC owner, on an iPhone, in the Facebook browser, **does
+something within 3 seconds**. Watching is failure. Touching is success. Every
+section of `/` and `/go` must survive that test.
+
+## 1. Type scale (both pages)
+
+Faces are the ones the site loads, and only their loaded weights:
+Newsreader 500, IBM Plex Sans 400/500, IBM Plex Mono 400 (Andy, v2 GO —
+keeps change 18's `KEEP_BRAND_FONTS = false`).
+
+| Role | Spec |
+|---|---|
+| display | Newsreader 500 — 44 / 48 / 56, −0.01em |
+| headline | Newsreader 500 — 28 |
+| label | IBM Plex Sans 500 — 17 |
+| body | IBM Plex Sans 400 — 16 |
+| caption | IBM Plex Sans 500 — 13, +0.04em, uppercase |
+| data | IBM Plex Mono 400, tabular — 20 and 28 (`[data-figure="data"]`) |
+
+- No size outside this table on a surface built from change 43 on.
+- Money gained (recovered, a booked ticket) is **gold**. Money lost is
+  **ember** (change 18) — never gold, never gray.
+
+## 2. Motion
+
+- Entrance: 480ms, `cubic-bezier(.22, 1, .36, 1)`.
+- Press: 120ms.
+- Slider spring: stiffness 420, damping 34, mass 1.
+- Nothing runs longer than 600ms except phase-driven sequences (the s1 call).
+- Reduced motion = the state changes, nothing travels.
+- **One transform owner per element. One rAF loop per page.**
+
+## 3. Surface
+
+- Ground: abyss (`--color-abyss` #060B14).
+- Regions are separated by **one** hairline rule: ink at 14%
+  (`color-mix(in srgb, var(--color-ink) 14%, transparent)`).
+- **One** lifted surface — `--color-surface` (#0F1E33) — for the phone and
+  the sheet only.
+- No stacked cards.
+
+## 4. Accent discipline
+
+- Trade accent: on the **active instrument only**.
+- Gold: on **money gained only**.
+- Teal: on **controls only**.
+- Every change's review in REVIEW.md counts accent uses per section.
+
+## 5. Forbidden
+
+Gradients, glows, particles, blur cards, emoji, icon libraries, Tailwind
+default radii and shadows, centered-everything, fake stats, fake reviews, fake
+names beyond the stored presets, and any copy not in `lib/client.config.ts`.
+Hand-drawn inline SVG only. Existing tokens and fonts only.
+
+## 6. Known gaps in already-shipped code
+
+Not rewritten by this file; each change that touches one of these says so in
+its review.
+
+1. **Hairline.** Older surfaces rule with `--color-line` (#22384F), not ink
+   at 14% (≈ #26303B on abyss).
+2. **Blur cards.** The demo's iOS banners use `backdrop-filter: blur(16px)`
+   — the device's own look.
+3. **Gradients.** `components/Phone.tsx` draws the titanium rim, the call
+   screen ground and the glass streak with gradients.
+4. **Default radii.** Shipped code uses Tailwind's `rounded-full`,
+   `rounded-2xl` and friends.
