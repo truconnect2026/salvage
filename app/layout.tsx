@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Newsreader } from "next/font/google";
-import { META, SITE } from "@/lib/client.config";
+import { COPY, META, SITE } from "@/lib/client.config";
 import "./globals.css";
 
 /* change 22: this Next build emits NO font preload links of its own (the
@@ -108,6 +108,31 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <link key={href} rel="preload" href={href} as="font" type="font/woff2" crossOrigin="anonymous" />
         ))}
         {children}
+        {/* change 41 (step 2/3): the orientation gate — a deliberate title
+            card, not an error state. Fixed, inset 0, above every section,
+            shown by a two-term media query in globals.css ((orientation:
+            landscape) and (max-height: 500px)); the pager is locked
+            underneath it by the same query. Every string comes from
+            client.config.ts. */}
+        <div
+          data-rotate-guard
+          role="dialog"
+          aria-modal="true"
+          aria-label={COPY.rotatePrompt}
+          className="fixed inset-0 z-[100] flex-col items-center justify-center gap-4 bg-abyss px-8 text-center"
+        >
+          <p data-rotate-eyebrow data-figure="data" className="text-[12px] uppercase tracking-[0.08em] text-teal">
+            {COPY.rotate.eyebrow}
+          </p>
+          <span aria-hidden="true" className="block h-px w-12 bg-line" />
+          <p data-rotate-line className="max-w-[24ch] font-display text-[32px] font-medium leading-[1.08] tracking-[-0.01em] text-ink">
+            {COPY.rotatePrompt}
+          </p>
+          <p data-rotate-sub className="text-[14px] text-muted">{COPY.rotate.sub}</p>
+          <p data-rotate-folio data-figure="data" className="absolute bottom-6 text-[11px] uppercase tracking-[0.28em] text-muted">
+            {COPY.rotate.folio}
+          </p>
+        </div>
         <Analytics />
       </body>
     </html>

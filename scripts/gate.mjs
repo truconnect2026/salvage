@@ -565,7 +565,7 @@ const BROWSER_GATES = [
   191, 192, 193,
   194, 195, 196, 197, 198,
   199, 200, 201, 202, 203, 204,
-  205, 206,
+  205, 206, 213, 214, 215, 216,
 ];
 
 if (!chromium) {
@@ -1838,19 +1838,27 @@ if (!chromium) {
     /* Amended (change 33, B2): the device CENTERS in the guttered content
        column again — the slab is a section band at the viewport edge now, so
        the phone no longer buys folio clearance with a gutter bleed. */
+    /* Amended (change 41, edit 2): there is no gutter left to centre inside.
+       Change 37 cut the rail; the 56px pr-14 it stood in survived it by two
+       changes and pulled the device 16px left of the viewport centre — the
+       defect this gate was holding IN PLACE. The column is 24/24 now, so
+       "centred in the content column" and "centred in the viewport" are the
+       same sentence, and gate 214 states the second one directly. Every
+       other claim here is unchanged: the device is wholly inside the first
+       frame with a 24px margin on all four sides. */
     check(
       57,
-      "first load 390x844: phone device fully within the viewport, left margin >= 24px, clear of the 56px rail gutter, centered in the content column",
+      "first load 390x844: phone device fully within the viewport, margins >= 24px on all four sides, centered in the symmetric content column",
       g != null &&
         g.top >= 23.5 &&
         g.bottom <= g.vh - 23.5 + 0.5 &&
         g.left >= 23.5 &&
-        g.right <= g.vw - 55.5 &&
-        Math.abs((g.left - 24) - (g.vw - 56 - g.right)) <= 2,
+        g.right <= g.vw - 23.5 &&
+        Math.abs((g.left - 24) - (g.vw - 24 - g.right)) <= 2,
       g == null
         ? "device not found"
         : `device top ${g.top.toFixed(1)}, bottom ${g.bottom.toFixed(1)}, left ${g.left.toFixed(1)}, ` +
-          `right ${g.right.toFixed(1)} (viewport ${g.vw}x${g.vh}; need left >= 24, right clear of the 56px gutter, centered in the column)`,
+          `right ${g.right.toFixed(1)} (viewport ${g.vw}x${g.vh}; need every margin >= 24, left and right equal within 2px)`,
     );
     await ctx.close();
   });
@@ -8111,6 +8119,253 @@ if (!chromium) {
       const ok = cs.every((c) => c.g.vh === c.h + "px" && Math.abs(c.g.sectionH - Number(c.h)) <= 1 && c.g.stripBottom <= Number(c.h) - 12);
       if (r) r.pass = r.pass && ok;
     }
+
+    /* ---- 213: landscape — the gate covers the viewport and nothing under it
+            is reachable or visible. Both engines at 844x390. ---- */
+    const g213 = {};
+    for (const e of ENGINES) {
+      g213[e.name] = {};
+      g213[e.name]["844x390"] = await run(
+        e.b,
+        async (pg) => {
+          /* The accessibility tree itself, not a computed-style proxy: the
+             page's ARIA snapshot must carry none of the section text. */
+          const aria = await pg.locator("body").ariaSnapshot();
+          const out = await pg.evaluate(() => {
+            const guard = document.querySelector("[data-rotate-guard]");
+            if (!guard) return null;
+            const gcs = getComputedStyle(guard);
+            const gr = guard.getBoundingClientRect();
+            /* Visible = painted: the guard is opaque abyss over everything,
+               so any section text still "visible" must have escaped it —
+               a box outside the guard's rect, or a z-index above it. */
+            const root = document.querySelector("[data-app-root]");
+            const rootVis = root ? getComputedStyle(root).display : null;
+            const leaks = [];
+            for (const el of document.querySelectorAll("[data-section] *")) {
+              if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
+              const cs = getComputedStyle(el);
+              if (cs.visibility === "hidden" || cs.display === "none") continue;
+              const r = el.getBoundingClientRect();
+              if (r.width === 0 || r.height === 0) continue;
+              leaks.push((el.textContent || "").trim().slice(0, 16));
+            }
+            /* Every distinct section string of 6+ chars — none may appear in
+               the ARIA snapshot. */
+            const own = guard.textContent || "";
+            const strings = new Set();
+            for (const el of document.querySelectorAll("[data-section] *"))
+              for (const n of el.childNodes) {
+                const t = n.nodeType === 3 ? n.textContent.trim() : "";
+                /* strings the card itself carries (eyebrow, folio) are not leaks */
+                if (t.length >= 6 && !own.includes(t)) strings.add(t);
+              }
+            return {
+              display: gcs.display,
+              position: gcs.position,
+              covers: gr.left <= 0 && gr.top <= 0 && gr.right >= innerWidth && gr.bottom >= innerHeight,
+              box: [Math.round(gr.left), Math.round(gr.top), Math.round(gr.width), Math.round(gr.height)],
+              viewport: [innerWidth, innerHeight],
+              inRoot: guard.parentElement === document.body,
+              rootDisplay: rootVis,
+              leaks: leaks.slice(0, 4),
+              strings: [...strings],
+              pagerOverflow: getComputedStyle(document.querySelector("[data-pager]")).overflowY,
+            };
+          });
+          if (!out) return null;
+          const exposedList = out.strings.filter((t) => aria.includes(t));
+          return { ...out, strings: undefined, sectionStrings: out.strings.length, exposed: exposedList.length, exposedSample: exposedList.slice(0, 3), ariaLines: aria.split("\n").length };
+        },
+        { vp: { width: 844, height: 390 }, panels: true },
+      );
+    }
+    verdict(
+      213,
+      "landscape 844x390: the orientation gate is a fixed overlay mounted in the root layout that covers the full viewport; zero underlying section text is visible or exposed to the accessibility tree; the pager is locked — both engines (change 41, defect 1)",
+      g213,
+      (g) => g != null && g.display === "flex" && g.position === "fixed" && g.covers && g.inRoot && g.rootDisplay === "none" && g.leaks.length === 0 && g.exposed === 0 && g.pagerOverflow === "hidden",
+      (g) => (g == null ? "no [data-rotate-guard]" : "display " + g.display + " " + g.position + ", box " + JSON.stringify(g.box) + " over " + JSON.stringify(g.viewport) + " covers " + g.covers + ", in root " + g.inRoot + ", app-root display " + g.rootDisplay + ", visible leaks " + JSON.stringify(g.leaks) + ", section strings in the ARIA snapshot " + g.exposed + "/" + g.sectionStrings + (g.exposed ? " " + JSON.stringify(g.exposedSample) : "") + " (snapshot " + g.ariaLines + " lines), pager overflow " + g.pagerOverflow),
+    );
+
+    /* ---- 216: the keyboard case. An in-app browser squashes the layout
+            viewport to about 375x349 while the phone is held UPRIGHT and a
+            section-3 input has focus. CSS calls 375x349 "landscape"
+            (width > height) and it is under 500 tall, so the first two
+            terms of the guard's query both match — only min-aspect-ratio
+            3/2 keeps the card off the screen. Nothing may be covered or
+            locked here. Both engines. ---- */
+    const g216 = {};
+    for (const e of ENGINES) {
+      g216[e.name] = {};
+      g216[e.name]["375x349"] = await run(
+        e.b,
+        (pg) =>
+          pg.evaluate(() => {
+            const guard = document.querySelector("[data-rotate-guard]");
+            const root = document.querySelector("[data-app-root]");
+            const pager = document.querySelector("[data-pager]");
+            if (!guard || !root || !pager) return null;
+            const gr = guard.getBoundingClientRect();
+            const input = document.querySelector('[data-section="yours"] [data-name-input]');
+            return {
+              guardDisplay: getComputedStyle(guard).display,
+              guardBox: [Math.round(gr.width), Math.round(gr.height)],
+              rootDisplay: getComputedStyle(root).display,
+              rootVisible: root.offsetParent != null || getComputedStyle(root).position === "fixed",
+              pagerOverflow: getComputedStyle(pager).overflowY,
+              viewport: [innerWidth, innerHeight],
+              ratio: +(innerWidth / innerHeight).toFixed(3),
+              /* why the first two terms are not enough, in the record */
+              mqLandscape: matchMedia("(orientation: landscape)").matches,
+              mqShort: matchMedia("(max-height: 500px)").matches,
+              mqWide: matchMedia("(min-aspect-ratio: 3/2)").matches,
+              /* the input that puts the keyboard up in the first place */
+              inputPresent: input != null,
+            };
+          }),
+        { vp: { width: 375, height: 349 }, panels: true },
+      );
+    }
+    verdict(
+      216,
+      "a keyboard-squashed 375x349 viewport is NOT gated: the rotate card stays hidden, the app root stays visible and the pager stays unlocked, even though (orientation: landscape) and (max-height: 500px) both match — both engines (change 41, edit 4)",
+      g216,
+      (g) =>
+        g != null &&
+        g.guardDisplay === "none" &&
+        g.guardBox[0] === 0 &&
+        g.guardBox[1] === 0 &&
+        g.rootDisplay !== "none" &&
+        g.rootVisible === true &&
+        g.pagerOverflow !== "hidden" &&
+        g.mqLandscape === true &&
+        g.mqShort === true &&
+        g.mqWide === false &&
+        g.inputPresent === true,
+      (g) =>
+        g == null
+          ? "missing [data-rotate-guard] / [data-app-root] / [data-pager]"
+          : "viewport " +
+            JSON.stringify(g.viewport) +
+            " ratio " +
+            g.ratio +
+            "; media landscape " +
+            g.mqLandscape +
+            " (need true), max-height:500 " +
+            g.mqShort +
+            " (need true), min-aspect-ratio:3/2 " +
+            g.mqWide +
+            " (need false); rotate card display " +
+            g.guardDisplay +
+            ' (need "none") box ' +
+            JSON.stringify(g.guardBox) +
+            "; app root display " +
+            g.rootDisplay +
+            " visible " +
+            g.rootVisible +
+            " (need true); pager overflow " +
+            g.pagerOverflow +
+            ' (must not be "hidden"); section-3 input present ' +
+            g.inputPresent,
+    );
+
+    /* ---- 214: the phone frame is centred on the viewport — sections 1 and
+            2, both engines, 700/740/844. Section 2's device is desktop-only
+            (change 15, A1), so at 390 it is section 1 alone. ---- */
+    const g214 = await grid(
+      H3,
+      (pg) =>
+        pg.evaluate(async () => {
+          const pager = document.querySelector("[data-pager]");
+          const out = [];
+          for (const [i, id] of [[0, "call"], [1, "save"]]) {
+            pager.scrollTop = i * pager.clientHeight;
+            await new Promise((r) => setTimeout(r, 300));
+            const dev = document.querySelector('[data-section="' + id + '"] [data-phone-device]');
+            const r = dev ? dev.getBoundingClientRect() : null;
+            if (!r || r.width === 0) {
+              out.push({ id, present: false });
+              continue;
+            }
+            out.push({ id, present: true, offset: +((r.left + r.right) / 2 - innerWidth / 2).toFixed(2) });
+          }
+          return out;
+        }),
+      { ctx: { reducedMotion: "reduce" } },
+    );
+    verdict(
+      214,
+      "phone frame centre X === viewport centre X within 1px — sections 1 and 2 (where a device renders), both engines, 700/740/844 (change 41, defect 2)",
+      g214,
+      (rows) => rows.some((x) => x.present) && rows.every((x) => !x.present || Math.abs(x.offset) <= 1),
+      (rows) => rows.map((x) => x.id + (x.present ? " offset " + x.offset + "px" : " no device at 390")).join(", "),
+    );
+
+    /* ---- 215: the cue chevron's box intersects no text box, any section,
+            both engines, 700/740/844. Boxes are RENDERED (clipped by every
+            overflow ancestor), so a device bleeding off section 3 by design
+            counts only where it is painted. ---- */
+    const g215 = await grid(
+      H3,
+      (pg) =>
+        pg.evaluate(async () => {
+          const pager = document.querySelector("[data-pager]");
+          const caret = document.querySelector("[data-rail-next]");
+          const rendered = (el) => {
+            let r = el.getBoundingClientRect();
+            let n = el.parentElement;
+            while (n && n !== document.body) {
+              const cs = getComputedStyle(n);
+              if (cs.overflow !== "visible" || cs.overflowX !== "visible" || cs.overflowY !== "visible") {
+                const c = n.getBoundingClientRect();
+                r = { left: Math.max(r.left, c.left), right: Math.min(r.right, c.right), top: Math.max(r.top, c.top), bottom: Math.min(r.bottom, c.bottom) };
+                if (r.left >= r.right || r.top >= r.bottom) return null;
+              }
+              n = n.parentElement;
+            }
+            return r;
+          };
+          const hits = [];
+          for (let i = 0; i < 4; i++) {
+            pager.scrollTop = i * pager.clientHeight;
+            await new Promise((r) => setTimeout(r, 300));
+            const cr = caret.getBoundingClientRect();
+            if (cr.width === 0 || cr.height === 0) continue;
+            const sec = [...document.querySelectorAll("[data-section]")].find((x) => Math.abs(x.getBoundingClientRect().top) < 10);
+            if (!sec) continue;
+            for (const el of sec.querySelectorAll("*")) {
+              if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
+              const cs = getComputedStyle(el);
+              if (cs.visibility === "hidden" || parseFloat(cs.opacity) <= 0.05) continue;
+              /* The TEXT box, not the element box: a row's padding is not
+                 ink. Range rects give the line boxes of the text itself. */
+              const range = document.createRange();
+              range.selectNodeContents(el);
+              for (const lb of range.getClientRects()) {
+                let r = { left: lb.left, right: lb.right, top: lb.top, bottom: lb.bottom };
+                const clip = rendered(el);
+                if (!clip) { r = null; break; }
+                r = { left: Math.max(r.left, clip.left), right: Math.min(r.right, clip.right), top: Math.max(r.top, clip.top), bottom: Math.min(r.bottom, clip.bottom) };
+                if (r.left >= r.right || r.top >= r.bottom) continue;
+                if (r.left < cr.right && r.right > cr.left && r.top < cr.bottom && r.bottom > cr.top) {
+                  hits.push(sec.dataset.section + ":" + (el.textContent || "").trim().slice(0, 14) + "@" + Math.round(r.bottom) + ">" + Math.round(cr.top));
+                  break;
+                }
+              }
+            }
+          }
+          return hits.slice(0, 5);
+        }),
+      { ctx: { reducedMotion: "reduce" } },
+    );
+    verdict(
+      215,
+      "the cue chevron's box intersects no text line box in any section — both engines, 700/740/844 (change 41, defect 3)",
+      g215,
+      (g) => g.length === 0,
+      (g) => (g.length === 0 ? "0 intersections across 4 sections" : g.length + " hit(s): " + JSON.stringify(g)),
+    );
 
     /* ---- 201: the beat strip, in WebKit at 844 (timing, not layout). ---- */
     const g201wk = await run(wkBrowser, async (pg) => {

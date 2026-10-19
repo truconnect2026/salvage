@@ -138,6 +138,15 @@ export const COPY = {
   beats: { missed: "Missed call", text: "Text sent", booked: "Booked" },
 
   rotatePrompt: "Turn your phone upright.",
+  // change 41 (step 3): the landscape title card. Eyebrow and folio REUSE
+  // existing approved strings (productName, the wordmark); the line is the
+  // existing rotatePrompt. `sub` is new copy, APPROVED at close-out — the
+  // proposed version repeated "phone held upright" from the line above it.
+  rotate: {
+    eyebrow: "Salvage",
+    sub: "Built for a phone held upright.",
+    folio: "Davy Jones' Locker",
+  },
 
   // The snap pager (change 12, A4). Approved copy. Kicker + title are
   // wayfinding, not headlines — small, top-left of each section.

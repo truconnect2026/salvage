@@ -75,31 +75,9 @@ export default async function Home({
 
   return (
     <>
-      {/* Orientation guard (C4): landscape on a coarse-pointer device shows
-          only this. Pure CSS gate in globals.css — no JS, no hydration. */}
-      <div
-        data-rotate-guard
-        className="fixed inset-0 z-50 flex-col items-center justify-center gap-5 bg-abyss text-center"
-      >
-        <svg
-          width="44"
-          height="44"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="text-teal"
-          aria-hidden="true"
-        >
-          <rect x="7" y="3" width="10" height="18" rx="2.5" />
-          <path d="M20.5 8.5a9 9 0 0 1 0 7" />
-          <path d="M19 17.5l1.5-2l2 1.5" />
-        </svg>
-        <p className="text-[15px] text-ink">{COPY.rotatePrompt}</p>
-      </div>
-
+      {/* change 41 (step 2): the orientation gate lives in the ROOT layout
+          now, as a fixed full-viewport overlay above everything — it was
+          mounted here, inside the page subtree, and leaked. */}
       <Demo initialPreset={preset} activeIndex={activeIndex} initialName={initialName} dates={dates} hasPhoto={hasPhoto} refDjl={refDjl} />
       <script
         type="application/json"

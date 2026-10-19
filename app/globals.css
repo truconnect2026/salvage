@@ -347,6 +347,23 @@ body {
   }
 }
 
+/* change 41 (edit 3): section 2 at 740px and under shows TWO caught rows,
+   not three — the third row plus its rule is ~72px, and at 700 the "Since
+   install" line ran 53px past the content box into the cue (gate 215). The
+   row count already varies by preset (salon 3, plumbing 2), so two reads as
+   a list, not as a truncation. Scoped to section 2: the OG card is compact,
+   carries every row, and must not inherit this. */
+@media (max-height: 740px) {
+  [data-section="save"] [data-caught-row="2"] {
+    display: none;
+  }
+  /* Row 1 is the last row here, and a last row carries no rule of its own
+     — "Since install" brings one. Transparent, not removed: same geometry. */
+  [data-section="save"] [data-caught-row="1"] {
+    border-bottom-color: transparent;
+  }
+}
+
 /* change 40 (2): section 4 at a 700px viewport only — the math line drops
    from 40 to 34 so the close clears the fold. */
 @media (max-width: 1099.98px) and (max-height: 700px) {
@@ -591,18 +608,29 @@ body {
   }
 }
 
-/* Orientation guard (change 10, C4): landscape on a coarse-pointer device
-   gets a full-screen rotate prompt and nothing else. */
+/* Orientation guard (change 10, C4) / change 41 (steps 2-4): a fixed
+   full-viewport overlay mounted in the ROOT layout, above every section —
+   it used to sit inside the page subtree, where it leaked.
+
+   THREE terms. (pointer: coarse) is gone: it was the term that let the
+   portrait layout render at landscape width on a real device with no gate
+   at all. (min-aspect-ratio: 3/2) is KEPT from change 10 and it is not
+   decoration — section 3 has a live text input, and in an in-app browser
+   the keyboard squashes the viewport to about 375x349 portrait, which
+   (orientation: landscape) alone reads as landscape and would cover the
+   screen mid-typing. A real landscape phone is >= 1.7. Gate 216 holds the
+   375x349 case; gate 213 holds the 844x390 case.
+
+   While the gate is up the pager is locked underneath it. */
 [data-rotate-guard] {
   display: none;
 }
-/* min-aspect-ratio 3/2: a real landscape phone is >= 1.7; a portrait layout
-   viewport squashed by an in-app browser's keyboard (~375x349 = 1.07) must
-   NOT trip the guard mid-typing (review lens 1, finding 3 — Facebook's
-   WKWebView is this demo's primary channel). */
-@media (pointer: coarse) and (max-height: 500px) and (orientation: landscape) and (min-aspect-ratio: 3/2) {
+@media (orientation: landscape) and (max-height: 500px) and (min-aspect-ratio: 3/2) {
   [data-rotate-guard] {
     display: flex;
+  }
+  [data-pager] {
+    overflow: hidden;
   }
   [data-app-root] {
     display: none;

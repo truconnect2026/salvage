@@ -2064,7 +2064,7 @@ export default function Demo({
         {/* change 27 (B1): >=1100 a [1fr_auto_1fr] grid — the DEVICE is the
             centered column, the scene type right-aligned in the left third,
             vertically centered on the phone. */}
-        <div data-section-content className="relative z-10 flex h-full w-full items-center justify-center gap-16 pb-[calc(64px+env(safe-area-inset-bottom))] pl-6 pr-14 pt-16 max-[1099.98px]:items-start min-[1100px]:mx-auto min-[1100px]:grid min-[1100px]:max-w-[1240px] min-[1100px]:grid-cols-[61fr_auto_39fr] min-[1100px]:gap-x-0 min-[1100px]:px-12 min-[1100px]:pb-12 min-[1100px]:pt-6">
+        <div data-section-content className="relative z-10 flex h-full w-full items-center justify-center gap-16 pb-[calc(64px+env(safe-area-inset-bottom))] pl-6 pr-6 pt-16 max-[1099.98px]:items-start min-[1100px]:mx-auto min-[1100px]:grid min-[1100px]:max-w-[1240px] min-[1100px]:grid-cols-[61fr_auto_39fr] min-[1100px]:gap-x-0 min-[1100px]:px-12 min-[1100px]:pb-12 min-[1100px]:pt-6">
           <div data-scene data-client-world className="relative hidden shrink-0 min-[1100px]:block min-[1100px]:justify-self-start min-[1100px]:self-center min-[1100px]:-translate-y-8">
             {/* change 30 (G1): the slab receipt — the clock crossfades out
                 beneath it on the booking beat. Gold census +1 (gate 175);
@@ -2214,7 +2214,7 @@ export default function Demo({
       <section data-section="save" data-entry-fx={fxReady ? (entered[1] ? "run" : "pending") : undefined}>
         <SectionMark {...COPY.sections.save} />
 
-        <div data-section-content className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pb-[calc(64px+env(safe-area-inset-bottom))] pl-6 pr-14 pt-[60px] min-[1100px]:max-w-[1240px] min-[1100px]:px-12 min-[1100px]:pb-16 min-[1100px]:pt-[84px]">
+        <div data-section-content className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pb-[calc(64px+env(safe-area-inset-bottom))] pl-6 pr-6 pt-[60px] min-[1100px]:max-w-[1240px] min-[1100px]:px-12 min-[1100px]:pb-16 min-[1100px]:pt-[84px]">
           <div
             data-save-grid
             className="flex min-h-0 w-full flex-1 flex-col min-[1100px]:grid min-[1100px]:grid-cols-[42fr_58fr] min-[1100px]:grid-rows-[auto_minmax(0,1fr)] min-[1100px]:items-start min-[1100px]:gap-x-12"
@@ -2340,7 +2340,7 @@ export default function Demo({
           ref={yoursPanelRef}
           data-yours-panel
           data-section-content
-          className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pb-[calc(64px+env(safe-area-inset-bottom))] pl-6 pr-14 pt-[112px] min-[1100px]:grid min-[1100px]:max-w-[1240px] min-[1100px]:grid-cols-2 min-[1100px]:grid-rows-[auto_minmax(0,1fr)] min-[1100px]:gap-x-12 min-[1100px]:px-12 min-[1100px]:pb-16 min-[1100px]:pt-[124px]"
+          className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col pb-[calc(64px+env(safe-area-inset-bottom))] pl-6 pr-6 pt-[112px] min-[1100px]:grid min-[1100px]:max-w-[1240px] min-[1100px]:grid-cols-2 min-[1100px]:grid-rows-[auto_minmax(0,1fr)] min-[1100px]:gap-x-12 min-[1100px]:px-12 min-[1100px]:pb-16 min-[1100px]:pt-[124px]"
         >
           {/* change 33 (D1/D3): the tab strip is the switcher's label —
               four trades under the folio, the active one accented and
@@ -2529,7 +2529,7 @@ export default function Demo({
 
         {/* change 30 (F1/F2): flowed from the folio — folio bottom + 16 ->
             the 2px rule; mobile left-aligns on the spine like desktop. */}
-        <div data-section-content className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col items-start justify-start gap-4 pb-[calc(24px+env(safe-area-inset-bottom))] pl-6 pr-14 pt-[44px] text-left min-[1100px]:max-w-[1240px] min-[1100px]:items-stretch min-[1100px]:gap-14 min-[1100px]:px-12 min-[1100px]:pb-16 min-[1100px]:pt-[68px]">
+        <div data-section-content className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col items-start justify-start gap-4 pb-[calc(24px+env(safe-area-inset-bottom))] pl-6 pr-6 pt-[44px] text-left min-[1100px]:max-w-[1240px] min-[1100px]:items-stretch min-[1100px]:gap-14 min-[1100px]:px-12 min-[1100px]:pb-16 min-[1100px]:pt-[68px]">
           {/* change 18 (C5): the math line is the ledger's TOTAL — a 2px
               rule above, 1px below, numerals in mono at display size. */}
           <div data-total className="w-full border-b border-t-2 border-line py-4">
