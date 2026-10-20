@@ -2,11 +2,11 @@
  * change 45: the front door's hand-drawn glyphs. 24-unit boxes, 1.5 stroke,
  * currentColor — the demo's drawing language. No icon library.
  *
- * Job glyphs are keyed "<set>-<index>" against COPY.jobs, never by label,
- * so no copy string lives in this file. The label every set shares is
- * keyed "else" and has one drawing. A key with no drawing renders NOTHING —
- * gate 223 (45g) holds every key present, so a missing glyph is red, never
- * silently papered over.
+ * Job glyphs are keyed by a semantic id; config's JOB_GLYPH maps each
+ * approved job string to its id (change 45.1), so a reordered list keeps
+ * every glyph on its own job and no copy string lives in this file. A key
+ * with no drawing renders NOTHING — gate 223 (45g) holds every job matched,
+ * so a missing or wrong glyph is red, never silently papered over.
  */
 import type { ReactNode } from "react";
 
@@ -44,51 +44,51 @@ const TOOTH =
 
 const JOB: Record<string, ReactNode> = {
   /* plumbing */
-  "plumbing-0": (
+  "pipe-burst": (
     <>
       <path d="M2.5 7h7.5v5H2.5M21.5 7H14v5h7.5" />
       <path d="M11.2 8.4l.9-1.6M12.8 10.6l1 1.4" />
       <path d="M12 14.6c-1.3 1.6-2 2.7-2 3.6a2 2 0 0 0 4 0c0-.9-.7-2-2-3.6z" />
     </>
   ),
-  "plumbing-1": (
+  "water-heater": (
     <>
       <rect x="7" y="4" width="10" height="14.5" rx="2" />
       <path d="M10 4V2.2M14 4V2.2M8.6 18.5v2M15.4 18.5v2" />
       <path d="M12 15.6c-1.2-.7-1.6-1.8-.6-3.2.2.8.7 1.1 1 .8.7.8.7 1.8-.4 2.4z" />
     </>
   ),
-  "plumbing-2": (
+  "drain": (
     <>
       <circle cx="12" cy="12" r="8.5" />
       <path d="M8.7 9.4h6.6M8 12h8M8.7 14.6h6.6" />
     </>
   ),
-  "plumbing-3": (
+  "toilet": (
     <>
       <path d="M5.5 3.5h5v7h-5z" />
       <path d="M5.5 10.5h13a5.5 5.5 0 0 1-5.5 5.5H12l.8 4.5H8.2l.8-4.8A4.8 4.8 0 0 1 5.5 11z" />
     </>
   ),
   /* hvac */
-  "hvac-0": (
+  "thermostat": (
     <>
       <path d="M8.5 13.6V5.2a2 2 0 0 1 4 0v8.4a3.6 3.6 0 1 1-4 0z" />
       <circle cx="10.5" cy="16.6" r="1.3" fill="currentColor" stroke="none" />
       <path d="M18 4.2v5.6M15.6 5.6l4.8 2.8M20.4 5.6l-4.8 2.8" />
     </>
   ),
-  "hvac-1": (
+  "noise": (
     <>
       <path d="M3 8.5c1.5-1.6 3 1.6 4.5 0s3 1.6 4.5 0 3 1.6 4.5 0 3 1.6 4.5 0" />
       <path d="M3 12.5c1.5-1.6 3 1.6 4.5 0s3 1.6 4.5 0 3 1.6 4.5 0 3 1.6 4.5 0" />
       <path d="M3 16.5c1.5-1.6 3 1.6 4.5 0s3 1.6 4.5 0" />
     </>
   ),
-  "hvac-2": (
+  "wrench": (
     <path d="M20.6 6.6a4.6 4.6 0 0 1-6.1 4.3l-7.1 7.1a2.4 2.4 0 0 1-3.4-3.4l7.1-7.1a4.6 4.6 0 0 1 6-5.9l-3 3 1.1 3.3 3.3 1.1z" />
   ),
-  "hvac-3": (
+  "condenser": (
     <>
       <rect x="3.5" y="5" width="17" height="13.5" rx="1" />
       <circle cx="9.8" cy="11.75" r="4" />
@@ -96,95 +96,95 @@ const JOB: Record<string, ReactNode> = {
     </>
   ),
   /* electrical */
-  "electrical-0": (
+  "power-out": (
     <>
       <path d="M3.5 11L12 4l8.5 7M5.6 9.4V20h12.8V9.4" />
       <path d="M12.6 10.2l-2.4 3.9h3.4l-2.4 3.9" />
     </>
   ),
-  "electrical-1": (
+  "breaker": (
     <>
       <rect x="7" y="3.5" width="10" height="17" rx="1" />
       <rect x="9.8" y="6.5" width="4.4" height="5.5" fill="currentColor" stroke="none" />
       <path d="M9.8 15.4h4.4M9.8 17.8h4.4" />
     </>
   ),
-  "electrical-2": (
+  "outlet": (
     <>
       <rect x="5" y="3.5" width="14" height="17" rx="2" />
       <path d="M9.6 8.4v3.2M14.4 8.4v3.2" />
       <circle cx="12" cy="15.6" r="1.3" />
     </>
   ),
-  "electrical-3": (
+  "panel": (
     <>
       <rect x="3.5" y="3.5" width="11" height="17" rx="1" />
       <path d="M6.4 7.5h5.2M6.4 10.5h5.2M6.4 13.5h5.2M19 18.5V6M16.6 8.4L19 6l2.4 2.4" />
     </>
   ),
   /* roofing */
-  "roofing-0": (
+  "roof-leak": (
     <>
       <path d="M2.5 11L12 4l9.5 7" />
       <path d="M12 11.6c-1.6 2-2.5 3.3-2.5 4.5a2.5 2.5 0 0 0 5 0c0-1.2-.9-2.5-2.5-4.5z" />
     </>
   ),
-  "roofing-1": (
+  "storm": (
     <>
       <path d="M7 15.5a4 4 0 0 1 .4-8 5 5 0 0 1 9.6 1.3 3.4 3.4 0 0 1-.5 6.7" />
       <path d="M12.6 11.8l-2.1 3.6h3l-2.1 3.6" />
     </>
   ),
-  "roofing-2": (
+  "inspect": (
     <>
       <path d="M2.5 12.5L10 6.2l7.5 6.3" />
       <circle cx="15" cy="15" r="3.6" />
       <path d="M17.6 17.6l3.6 3.6" />
     </>
   ),
-  "roofing-3": (
+  "roof-new": (
     <>
       <path d="M2.5 12.5L12 4.5l9.5 8M5 11v8.5h14V11" />
       <path d="M8 14.2h8M8 16.9h8" />
     </>
   ),
   /* garage doors */
-  "garage-0": (
+  "garage-stuck": (
     <>
       <path d="M3.5 20V9L12 4l8.5 5v11" />
       <path d="M7 20v-8.5h10V20M7 14.4h10M7 17.2h10M15 9.6l-6 0" />
       <path d="M9.5 12.6l5 6.2" />
     </>
   ),
-  "garage-1": (
+  "spring": (
     <path d="M2.5 12h2l1.4-3 2 6 2-6 1.1 2.3M13 11.3l1.1-2.3 2 6 2-6 1.4 3h2" />
   ),
-  "garage-2": (
+  "opener": (
     <>
       <rect x="5" y="3.5" width="8" height="17" rx="2" />
       <circle cx="9" cy="8.6" r="1.9" />
       <path d="M7.6 13.6h2.8M7.6 16.2h2.8M16 7.6a3.4 3.4 0 0 1 0 4.8M18.4 5.4a6.6 6.6 0 0 1 0 9.2" />
     </>
   ),
-  "garage-3": (
+  "garage-new": (
     <>
       <rect x="4" y="5" width="16" height="15" rx="0.5" />
       <path d="M4 10h16M4 15h16M12 5v15" />
     </>
   ),
   /* salon */
-  "salon-0": (
+  "syringe": (
     <g transform="rotate(-45 12 12)">
       <path d="M2 12h4M6 9.6h10.4v4.8H6zM9 9.6v1.8M12 9.6v1.8M16.4 12h3.2M19.6 9.6v4.8" />
     </g>
   ),
-  "salon-1": (
+  "dye": (
     <>
       <path d="M12 3.5c-3 4-4.5 6.5-4.5 8.7a4.5 4.5 0 0 0 9 0c0-2.2-1.5-4.7-4.5-8.7z" />
       <path d="M6 20.5h12" />
     </>
   ),
-  "salon-2": (
+  "face": (
     <>
       <path d="M12 3.5c3.6 0 6 3 6 7.2 0 4.8-2.7 9.8-6 9.8s-6-5-6-9.8c0-4.2 2.4-7.2 6-7.2z" />
       <circle cx="9.6" cy="10.4" r="0.9" fill="currentColor" stroke="none" />
@@ -192,7 +192,7 @@ const JOB: Record<string, ReactNode> = {
       <path d="M10 14.8c1.2.9 2.8.9 4 0" />
     </>
   ),
-  "salon-3": (
+  "lash": (
     <>
       <path d="M3 12.5c2.5-4 5.5-6 9-6s6.5 2 9 6c-2.5 4-5.5 6-9 6s-6.5-2-9-6z" />
       <circle cx="12" cy="12.5" r="2.5" />
@@ -200,45 +200,45 @@ const JOB: Record<string, ReactNode> = {
     </>
   ),
   /* dental */
-  "dental-0": (
+  "tooth-chip": (
     <>
       <path d={TOOTH} />
       <path d="M12.4 4.4l-1.2 2.4 1.8 1.4-1.1 2.3" />
     </>
   ),
-  "dental-1": (
+  "toothbrush": (
     <>
       <path d="M3.5 20.5l8.6-8.6" />
       <path d="M12.1 11.9l3.4-3.4 4 4-3.4 3.4z" />
       <path d="M14.4 6.4l.9-.9M16.6 8.6l.9-.9M18.8 10.8l.9-.9" />
     </>
   ),
-  "dental-2": (
+  "filling": (
     <>
       <path d={TOOTH} />
       <circle cx="12" cy="8.2" r="1.7" fill="currentColor" stroke="none" />
     </>
   ),
-  "dental-3": (
+  "crown": (
     <>
       <path d="M5 9.4l3.4 3 3.6-5.2 3.6 5.2 3.4-3v5.8H5z" />
       <path d="M7.4 15.2v3.4c0 1.1.7 1.9 1.4 1.9s1.4-.8 1.4-1.9v-1.4h3.6v1.4c0 1.1.7 1.9 1.4 1.9s1.4-.8 1.4-1.9v-3.4" />
     </>
   ),
   /* other */
-  "other-0": (
+  "calendar-plus": (
     <>
       <rect x="3.5" y="5" width="17" height="15.5" rx="0.75" />
       <path d="M3.5 9.5h17M8 3v4M16 3v4M12 12.4v5.2M9.4 15h5.2" />
     </>
   ),
-  "other-1": (
+  "document": (
     <>
       <path d="M6 3.5h8l4 4v13H6z" />
       <path d="M14 3.5v4h4M9 11.5h6M9 14.5h6M9 17.5h3.6" />
     </>
   ),
-  "other-2": (
+  "question": (
     <>
       <path d="M4 5h16v10.5h-8.5L7 19.5v-4H4z" />
       <path d="M10.2 8.6a1.9 1.9 0 1 1 2.6 1.8c-.5.3-.8.6-.8 1.1v.4" />
@@ -247,8 +247,8 @@ const JOB: Record<string, ReactNode> = {
   ),
 };
 
-/** The server keys each job (lib/go-params.ts jobsFor): "<set>-<index>",
-    or "else" for the label every set shares. */
+/** The server keys each job by its STRING through config's JOB_GLYPH
+    (lib/go-params.ts jobsFor) — never by its place in the list. */
 export function jobGlyph(key: string): ReactNode | null {
   return key === "else" ? ELSE : (JOB[key] ?? null);
 }

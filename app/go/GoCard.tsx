@@ -85,7 +85,8 @@ type Props = {
   installHint: boolean;
   schedule: Schedule;
   serverNow: number;
-  proof: GoProof;
+  /** Demo mode only (change 45.1); null on a live door. */
+  proof: GoProof | null;
   /** Demo mode's standing owner card: a stored caller and job. */
   sample: { name: string; job: string } | null;
   copy: GoCopy;
@@ -281,6 +282,49 @@ export default function GoCard(props: Props) {
      sheet waits until the sheet closes, so its landing is seen. */
   const [cards, setCards] = useState<OwnerCard[]>([]);
   const pendingCard = useRef<OwnerCard | null>(null);
+  /* change 45.1 (the fold): in demo mode the standing owner card first
+     arrives as an iOS banner pinned to the top safe area — 480ms in (CSS,
+     from first paint), a 4s hold, then it flies to its docked spot under
+     the slots. The banner's transform has ONE owner, the stylesheet: the
+     entrance keyframes, then the dock transition; JS only measures and
+     writes the --go-dx/--go-dy/--go-ds it travels by. Opening the sheet
+     docks it at once. Reduced motion: no banner, docked from the start. */
+  const [dock, setDock] = useState<"banner" | "moving" | "done">(demo && props.sample ? "banner" : "done");
+  const bannerRef = useRef<HTMLDivElement>(null);
+  const sampleRef = useRef<HTMLLIElement>(null);
+  const dockNow = useCallback((travel: boolean) => {
+    const b = bannerRef.current;
+    const d = sampleRef.current;
+    if (!travel || !b || !d) {
+      setDock("done");
+      return;
+    }
+    const br = b.getBoundingClientRect();
+    const dr = d.getBoundingClientRect();
+    b.style.setProperty("--go-dx", `${(dr.left - br.left).toFixed(1)}px`);
+    b.style.setProperty("--go-dy", `${(dr.top - br.top).toFixed(1)}px`);
+    b.style.setProperty("--go-ds", (dr.width / Math.max(1, br.width)).toFixed(4));
+    setDock("moving");
+    let landed = false;
+    const land = () => {
+      if (landed) return;
+      landed = true;
+      setDock("done");
+    };
+    b.addEventListener("transitionend", land, { once: true });
+    setTimeout(land, 700);
+  }, []);
+  useEffect(() => {
+    if (dock !== "banner") return;
+    if (reduced()) {
+      setDock("done");
+      return;
+    }
+    /* The entrance ran from first paint: dock 4s after it landed. */
+    const fcp = performance.getEntriesByName("first-contentful-paint")[0]?.startTime ?? performance.now();
+    const t = setTimeout(() => dockNow(true), Math.max(0, fcp + 480 + 4000 - performance.now()));
+    return () => clearTimeout(t);
+  }, [dock, dockNow]);
   const cardSeq = useRef(1);
   /* Starts booked in this visit leave the offer: the owner's phone never
      shows a slot the page is still selling. */
@@ -312,6 +356,7 @@ export default function GoCard(props: Props) {
 
   const openSheet = (m: Exclude<Mode, null>, trigger: HTMLElement) => {
     triggerRef.current = trigger;
+    if (dock !== "done") setDock("done");
     if (m === "book") {
       const d = offer(Date.now());
       setDays(d);
@@ -639,7 +684,14 @@ export default function GoCard(props: Props) {
                 <span aria-hidden="true" className="go-island" />
                 <ul data-go-cards className="go-cards">
                   {ownerCards.map((c) => (
-                    <li key={c.id} data-go-notify data-fresh={c.fresh ? "1" : undefined} className="go-notify">
+                    <li
+                      key={c.id}
+                      ref={c.id === 0 ? sampleRef : undefined}
+                      data-go-notify
+                      data-go-sample={c.id === 0 ? dock : undefined}
+                      data-fresh={c.fresh ? "1" : undefined}
+                      className="go-notify"
+                    >
                       <div className="flex items-center gap-1.5">
                         <SMark mark={copy.mark} />
                         <span className="text-[13px] font-medium leading-4 text-muted">{copy.notify.appTag}</span>
@@ -666,7 +718,9 @@ export default function GoCard(props: Props) {
           )}
         </section>
 
-        {/* 5. Proof: config data only, under the DJL compass rose */}
+        {/* 5. Proof: config data only, under the DJL compass rose. Demo mode
+            only (change 45.1): a live door has no data of its own yet. */}
+        {props.proof && (
         <section data-go-proof className="go-proof go-in" style={{ ["--i" as string]: 8 }}>
           <span className="text-muted">
             <CompassRose />
@@ -688,6 +742,7 @@ export default function GoCard(props: Props) {
             )}
           </div>
         </section>
+        )}
 
         {/* 6. Folio */}
         <footer data-go-folio className="go-folio go-in" style={{ ["--i" as string]: 9 }}>
@@ -703,6 +758,30 @@ export default function GoCard(props: Props) {
           {props.installHint && <InstallHint text={copy.installHint} />}
         </footer>
       </main>
+
+      {/* change 45.1: the demo's arrival banner — the standing owner card,
+          pinned to the top safe area, then flown to its dock. A duplicate
+          of the docked card, so it stays out of the accessibility tree. */}
+      {props.sample && dock !== "done" && (
+        <div ref={bannerRef} data-go-banner data-phase={dock} aria-hidden="true" className="go-banner font-phone">
+          <div className="flex items-center gap-1.5">
+            <SMark mark={copy.mark} />
+            <span className="text-[13px] font-medium leading-4 text-muted">{copy.notify.appTag}</span>
+            <span className="ml-auto text-[13px] leading-4 text-muted">{copy.notify.nowLabel}</span>
+          </div>
+          <div className="mt-1.5 flex items-end gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[15px] font-semibold leading-5 text-ink">
+                {copy.notify.bookedLabel} · {props.sample.name}
+              </p>
+              <p className="truncate text-[13px] leading-4.5 text-muted">{props.sample.job}</p>
+            </div>
+            <span data-figure="data" className="go-data20 shrink-0 text-gold">
+              +{usd(props.ticket)}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* The sheet. One transform owner: [data-go-panel]. The backdrop only
           fades. Closed, it is invisible and out of the tab order. */}
@@ -901,8 +980,20 @@ export default function GoCard(props: Props) {
               </form>
             )}
 
-            {/* Done: the check draws, then the booked line types in */}
-            {mode === "book" && step === "done" && booking && (
+            {/* Done, LIVE door (change 45.1): nothing is sent anywhere yet, so
+                no "booked" — the booked line and the two real ways to send
+                it: the page's own Text and Call actions. */}
+            {mode === "book" && step === "done" && booking && !demo && (
+              <div data-go-done data-go-live-actions className="pb-1">
+                <h2 id="go-sheet-title" ref={headRef} tabIndex={-1} data-go-step="done" className="go-headline mt-1 outline-none">
+                  {booking.job} · <span data-figure="data">{booking.slot.label}</span>
+                </h2>
+                <LiveActions copy={copy} sms={sms} tel={props.tel} />
+              </div>
+            )}
+
+            {/* Done, demo: the check draws, then the booked line types in */}
+            {mode === "book" && step === "done" && booking && demo && (
               <div data-go-done className="pb-1">
                 <DrawnCheck />
                 <h2 id="go-sheet-title" ref={headRef} tabIndex={-1} data-go-step="done" className="go-headline mt-3 outline-none">
@@ -968,7 +1059,19 @@ export default function GoCard(props: Props) {
                 </button>
               </div>
             )}
-            {mode === "quote" && quoteDone && (
+            {mode === "quote" && quoteDone && !demo && (
+              <div data-go-quote-done data-go-live-actions className="pb-1">
+                <h2 id="go-sheet-title" ref={headRef} tabIndex={-1} data-go-step="quote-done" className="go-headline mt-1 outline-none">
+                  {copy.quote}
+                </h2>
+                {photo && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={photo} alt="" className="mt-4 h-20 w-20 border border-(--go-rule) object-cover" />
+                )}
+                <LiveActions copy={copy} sms={sms} tel={props.tel} />
+              </div>
+            )}
+            {mode === "quote" && quoteDone && demo && (
               <div data-go-quote-done className="pb-1">
                 <DrawnCheck />
                 <h2 id="go-sheet-title" ref={headRef} tabIndex={-1} data-go-step="quote-done" className="go-headline mt-3 outline-none">
@@ -994,6 +1097,26 @@ export default function GoCard(props: Props) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* The live door's two real ways through: the page's own Text us and Call. */
+function LiveActions({ copy, sms, tel }: { copy: GoCopy; sms: string; tel: string }) {
+  return (
+    <div className="mt-4 grid grid-cols-2 gap-2.5">
+      <a data-go-live="text" href={sms} className="go-slot go-tile go-tile-sm">
+        <span className="go-glyph">
+          <Glyph size={32}>{SLOT.text}</Glyph>
+        </span>
+        <span className="go-label">{copy.text}</span>
+      </a>
+      <a data-go-live="call" href={tel} className="go-slot go-tile go-tile-sm">
+        <span className="go-glyph">
+          <Glyph size={32}>{SLOT.call}</Glyph>
+        </span>
+        <span className="go-label">{copy.call}</span>
+      </a>
     </div>
   );
 }

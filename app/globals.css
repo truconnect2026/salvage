@@ -959,7 +959,8 @@ html:has([data-go-root]) [data-rotate-guard] {
   align-items: center;
   justify-content: center;
   border-radius: 3px;
-  background: var(--color-teal);
+  /* change 45.1: ink, not teal — teal is for controls only */
+  background: var(--color-ink);
   color: var(--color-abyss);
   font-family: var(--font-newsreader), Georgia, serif;
   font-weight: 500;
@@ -971,6 +972,50 @@ html:has([data-go-root]) [data-rotate-guard] {
   }
   .go-notify[data-fresh] [data-go-ticket] {
     animation: go-ink 300ms ease-out 360ms backwards;
+  }
+}
+/* change 45.1: the demo's arrival banner. ONE transform owner — these
+   rules: the entrance keyframes from first paint, then the dock transition
+   by the --go-dx/--go-dy/--go-ds JS measured. The docked card holds its
+   place, unseen, until the banner lands on it. Reduced motion and no-JS:
+   no banner, the docked card from the start. */
+.go-banner {
+  position: fixed;
+  z-index: 50;
+  top: max(8px, env(safe-area-inset-top));
+  left: 8px;
+  right: 8px;
+  max-width: 424px;
+  margin: 0 auto;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--go-rule);
+  border-radius: 16px;
+  background: var(--color-surface);
+  pointer-events: none;
+  transform-origin: 0 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .go-banner {
+    animation: go-banner-in 480ms var(--go-ease) backwards;
+  }
+  .go-banner[data-phase="moving"] {
+    transform: translate(var(--go-dx, 0), var(--go-dy, 0)) scale(var(--go-ds, 1));
+    transition: transform 480ms var(--go-ease);
+  }
+  [data-go-sample="banner"],
+  [data-go-sample="moving"] {
+    visibility: hidden;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .go-banner {
+    display: none;
+  }
+}
+@keyframes go-banner-in {
+  from {
+    opacity: 0;
+    transform: translateY(calc(-100% - 16px));
   }
 }
 @keyframes go-land {

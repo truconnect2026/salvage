@@ -8084,6 +8084,14 @@ if (!chromium) {
         g197[e.name][Hf] = await run(
           e.b,
           async (pg) => {
+            /* change 45.1: the resize must land AFTER hydration, or the
+               listener that writes --vh is not attached yet and the read
+               finds it empty (seen once in WebKit at 844 — the strip itself
+               measured fine). A numeric data-t is the engine's mount signal. */
+            await pg.waitForFunction(() => {
+              const v = document.querySelector("[data-demo]")?.getAttribute("data-t");
+              return v != null && v !== "settled";
+            });
             await pg.evaluate(() => window.visualViewport.dispatchEvent(new Event("resize")));
             await pg.waitForTimeout(150);
             return pg.evaluate(async () => {
@@ -8396,10 +8404,10 @@ if (!chromium) {
   }
 }
 
-/* ---------- 207-212 (change 42), 217-223 (change 45): /go, in their own module */
+/* ---------- 207-212 (change 42), 217-225 (change 45 / 45.1): /go, in their own module */
 
 {
-  const GO_GATES = [207, 208, 209, 210, 211, 212, 217, 218, 219, 220, 221, 222, 223, 224];
+  const GO_GATES = [207, 208, 209, 210, 211, 212, 217, 218, 219, 220, 221, 222, 223, 224, 225];
   try {
     if (!chromium) throw new Error(`playwright unavailable: ${browserError}`);
     const { runGoGates } = await import("./gate-go.mjs");

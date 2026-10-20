@@ -310,3 +310,18 @@ client clock (the dial's minute) before reading the next-open line; a read
 at networkidle once saw the server's request-time line in WebKit. Gate
 222's colour parser learned the `color(srgb … / a)` form that `color-mix()`
 computes to; it threw on the first 45f mutation instead of measuring it.
+
+## Change 45.1 — the fix pass on Andy's veto
+
+Andy's five calls on change 45's open findings, each gated and proven red on
+a mutated build (Chromium + WebKit). Frames in review/change-45.1.
+
+| # | Call | What changed | Proof |
+|---|------|--------------|-------|
+| 1 | The fold (45 lens 1 #6) | In demo mode the standing owner card arrives as an iOS banner pinned to the top safe area — 480ms in from first paint, a 4s hold, then it flies to its docked spot under the slots (FLIP: JS measures, the stylesheet owns the banner's one transform). Opening the sheet docks it at once. Reduced motion and no-JS: no banner, docked from the start. | Gate 220 amended: at 390x664 the banner is wholly in view at full opacity at t=1s; at t=6s the banner is gone and the card stands docked; reduced motion shows no banner. Red on a banner delayed 1.2s that never docks ("banner -94--8px, opacity 0"; "banner STILL UP, docked hidden"). |
+| 2 | Live mode (45 lens 3 #7) | A live door (no demo=1) renders no proof row, and the booking and quote endings are the booked line plus the page's own Text us and Call — never "You're booked." or "Photo sent." Demo is unchanged. | New gate 225, both directions. Red on a live door with the proof row and the demo confirmation ("proof SHOWN, booking ends CONFIRMED"). |
+| 3 | Per-preset hours (45 lens 3 #7, the dental 8 o'clock) | `GO_SCHEDULE` keeps what every door shares (zone, starts, lead); each preset carries its own `hours`. Dental opens 08:00. | Gate 219 holds the approved hours per preset (and config must equal them) and checks home and dental under frozen clocks: dental is closed at Mon 07:00 and 07:59, open at 08:00. Red on dental opening at 7 ("config DIFFERS dental", dental Mon 07:00 "Open now"). |
+| 4 | The S mark (45 lens 2 #4) | Ink, not teal, everywhere on /go. | — |
+| 5 | Glyph keys (45 lens 3 #8) | Config's `JOB_GLYPH` maps each approved job STRING to a semantic glyph id; the list's order no longer matters. | Gate 223 asserts each chip carries the glyph its own string maps to. With jobs.plumbing reversed it stays green — still matched; with the same reversal and glyphs assigned by position it goes red ("Something else=pipe-burst want else"). |
+
+Unchanged by call: Text us still goes to 757, Call and Save to 804.

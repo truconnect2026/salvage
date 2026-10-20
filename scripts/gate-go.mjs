@@ -29,10 +29,16 @@ const V2 = [
   { width: 844, height: 390 },
   { width: 1440, height: 900 },
 ];
-/* The hours Andy approved (v2 change 45, gate 45c). Held HERE as well as
-   read from config: a gate that only read GO_SCHEDULE would move with an
-   off-by-one there and never catch it. */
-const APPROVED_HOURS = { days: [1, 2, 3, 4, 5, 6], open: 7, close: 18 };
+/* The hours Andy approved — v2 change 45 (Mon-Sat 07-18) and change 45.1
+   (dental opens 08:00) — per preset. Held HERE as well as read from config:
+   a gate that only read config would move with an off-by-one there and
+   never catch it. */
+const APPROVED_HOURS = {
+  salon: { days: [1, 2, 3, 4, 5, 6], open: 7, close: 18 },
+  home: { days: [1, 2, 3, 4, 5, 6], open: 7, close: 18 },
+  dental: { days: [1, 2, 3, 4, 5, 6], open: 8, close: 18 },
+  other: { days: [1, 2, 3, 4, 5, 6], open: 7, close: 18 },
+};
 const BIZ = "Robinson's Heating & Air";
 const IOS_UA =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1";
@@ -63,20 +69,18 @@ function expectations(src) {
     proofReply: (go.match(/proofReply:\s*"([^"]+)"/) ?? [])[1],
     proofRadius: (go.match(/proofRadius:\s*"([^"]+)"/) ?? [])[1],
     installHint: (go.match(/installHint:\s*"([^"]+)"/) ?? [])[1],
+    doneTitle: (go.match(/doneTitle:\s*"([^"]+)"/) ?? [])[1],
+    quoteDoneTitle: (go.match(/quoteDoneTitle:\s*"([^"]+)"/) ?? [])[1],
     jobs: (() => {
       const block = src.slice(src.indexOf("  jobs: {"), src.indexOf("  tradeLabels:"));
       const out = {};
       for (const m of block.matchAll(/(\w+):\s*\[([^\]]*)\]/g)) out[m[1]] = [...m[2].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
       return out;
     })(),
-    schedule: (() => {
-      const block = src.slice(src.indexOf("export const GO_SCHEDULE"));
-      return {
-        days: JSON.parse(need(/days:\s*(\[[\d,\s]+\])/, "GO_SCHEDULE.days")),
-        open: +need(/export const GO_SCHEDULE[\s\S]*?\bopen:\s*(\d+)/, "GO_SCHEDULE.open"),
-        close: +need(/export const GO_SCHEDULE[\s\S]*?\bclose:\s*(\d+)/, "GO_SCHEDULE.close"),
-        block: block.length,
-      };
+    jobGlyph: (() => {
+      const block = src.slice(src.indexOf("export const JOB_GLYPH"));
+      const body = block.slice(0, block.indexOf("};"));
+      return Object.fromEntries([...body.matchAll(/^\s*"([^"]+)":\s*"([^"]+)",/gm)].map((m) => [m[1], m[2]]));
     })(),
     presets: (() => {
       const marks = [...src.matchAll(/id: "([a-z]+)"/g)].map((m) => ({ id: m[1], at: m.index }));
@@ -87,6 +91,10 @@ function expectations(src) {
           accent: (b.match(/accent:\s*"(#[0-9A-Fa-f]{6})"/) ?? [])[1],
           accentInk: (b.match(/accentInk:\s*"(#[0-9A-Fa-f]{6})"/) ?? [])[1],
           radius: +((b.match(/radius:\s*(\d+)/) ?? [])[1] ?? NaN),
+          hours: (() => {
+            const m = b.match(/hours:\s*\{\s*days:\s*(\[[\d,\s]+\]),\s*open:\s*(\d+),\s*close:\s*(\d+)\s*\}/);
+            return m ? { days: JSON.parse(m[1]), open: +m[2], close: +m[3] } : null;
+          })(),
           thread: [...b.matchAll(/\{\s*from:\s*"(business|customer)",\s*time:\s*"([^"]+)"/g)].map((m) => ({ from: m[1], time: m[2] })),
         };
       });
@@ -539,109 +547,129 @@ export async function runGoGates({ base, pw, check }) {
     { viewports: V2 },
   );
 
-  /* --- 219 (45c): the dial — its arc spans the approved hours (the gate
-         holds 07-18 itself AND config must equal it); closed at Sun 12:05
-         and Mon 06:59, open at Mon 07:00, ET; the hand at the frozen minute;
-         the arc in accent on an open day and muted on Sunday. --- */
+  /* --- 219 (45c, change 45.1 per preset): the dial — its arc spans the
+         preset's APPROVED hours (held here; config must equal them), drawn
+         clockwise the short way through the window's middle hour; open and
+         closed under frozen ET clocks; the hand at the frozen minute; the
+         arc in accent on an open day and a muted hairline on Sunday. Home
+         (07-18) and dental (08-18) — the two hours the presets carry. --- */
   await gate(
     219,
-    "go 45c: the dial matches Mon-Sat 07-18 ET under frozen clocks",
+    "go 45c: the dial matches each preset's hours (home 07-18, dental 08-18 ET) under frozen clocks",
     async (browser, vp) => {
-      const cfgOk =
-        JSON.stringify(X.schedule.days) === JSON.stringify(APPROVED_HOURS.days) && X.schedule.open === APPROVED_HOURS.open && X.schedule.close === APPROVED_HOURS.close;
-      const clocks = [
-        { label: "Sun 12:05", now: Date.parse("2026-10-18T16:05:00Z"), open: false, minute: 12 * 60 + 5, day: false },
-        { label: "Mon 06:59", now: Date.parse("2026-10-19T10:59:00Z"), open: false, minute: 6 * 60 + 59, day: true },
-        { label: "Mon 07:00", now: Date.parse("2026-10-19T11:00:00Z"), open: true, minute: 7 * 60, day: true },
+      const out = [];
+      let ok = true;
+      const cfgBad = X.presets.filter((pr) => JSON.stringify(pr.hours) !== JSON.stringify(APPROVED_HOURS[pr.id])).map((pr) => `${pr.id} ${JSON.stringify(pr.hours)}`);
+      ok &&= cfgBad.length === 0;
+      out.push(`config ${cfgBad.length ? "DIFFERS " + cfgBad.join(", ") : "== approved, every preset"}`);
+      const runs = [
+        { id: "home", q: bizQ, clocks: [["Sun 12:05", "2026-10-18T16:05:00Z", false, 725, false], ["Mon 06:59", "2026-10-19T10:59:00Z", false, 419, true], ["Mon 07:00", "2026-10-19T11:00:00Z", true, 420, true]] },
+        { id: "dental", q: "preset=dental&demo=1", clocks: [["Mon 07:00", "2026-10-19T11:00:00Z", false, 420, true], ["Mon 07:59", "2026-10-19T11:59:00Z", false, 479, true], ["Mon 08:00", "2026-10-19T12:00:00Z", true, 480, true]] },
       ];
-      const out = [`config ${cfgOk ? "== approved" : "DIFFERS " + JSON.stringify(X.schedule)}`];
-      let ok = cfgOk;
-      const accent = hexRgb(X.presets.find((x) => x.id === "home").accent);
-      for (const c of clocks) {
-        const ctx = await ctxFor(browser, vp);
-        const page = await ctx.newPage();
-        await page.clock.install({ time: c.now });
-        await page.goto(url(bizQ), { waitUntil: "networkidle" });
-        await page.waitForFunction((m) => document.querySelector("[data-go-dial]")?.getAttribute("data-minute") === String(m), c.minute, { timeout: 8000 });
-        const d = await page.evaluate(() => {
-          const dial = document.querySelector("[data-go-dial]");
-          const arc = dial?.querySelector("[data-go-arc]");
-          const hand = dial?.querySelector("[data-go-hand]");
-          const box = dial?.viewBox.baseVal;
-          return {
-            open: dial?.getAttribute("data-open"),
-            minute: dial?.getAttribute("data-minute"),
-            d: arc?.getAttribute("d"),
-            stroke: arc ? getComputedStyle(arc).stroke : null,
-            hand: hand ? [+hand.getAttribute("x2"), +hand.getAttribute("y2")] : null,
-            c: box ? box.width / 2 : null,
-            status: document.querySelector("[data-go-status]")?.textContent.trim(),
-            mid: arc ? (() => {
-              const pt = arc.getPointAtLength(arc.getTotalLength() / 2);
-              return [pt.x, pt.y];
-            })() : null,
+      for (const run of runs) {
+        const H = APPROVED_HOURS[run.id];
+        const accent = hexRgb(X.presets.find((x) => x.id === run.id).accent);
+        for (const [label, iso, wantOpen, minute, day] of run.clocks) {
+          const ctx = await ctxFor(browser, vp);
+          const page = await ctx.newPage();
+          await page.clock.install({ time: Date.parse(iso) });
+          await page.goto(url(run.q), { waitUntil: "networkidle" });
+          await page.waitForFunction((m) => document.querySelector("[data-go-dial]")?.getAttribute("data-minute") === String(m), minute, { timeout: 8000 });
+          const d = await page.evaluate(() => {
+            const dial = document.querySelector("[data-go-dial]");
+            const arc = dial?.querySelector("[data-go-arc]");
+            const hand = dial?.querySelector("[data-go-hand]");
+            const box = dial?.viewBox.baseVal;
+            const pt = arc ? arc.getPointAtLength(arc.getTotalLength() / 2) : null;
+            return {
+              open: dial?.getAttribute("data-open"),
+              d: arc?.getAttribute("d"),
+              stroke: arc ? getComputedStyle(arc).stroke : null,
+              hand: hand ? [+hand.getAttribute("x2"), +hand.getAttribute("y2")] : null,
+              c: box ? box.width / 2 : null,
+              mid: pt ? [pt.x, pt.y] : null,
+              status: document.querySelector("[data-go-status]")?.textContent.trim(),
+            };
+          });
+          await ctx.close();
+          /* Angles back to hours, noon at the top: h = 12 + atan2(dx, -dy)/2pi*24. */
+          const hourOf = (x, y) => (((12 + (Math.atan2(x - d.c, d.c - y) / (2 * Math.PI)) * 24) % 24) + 24) % 24;
+          const nums = (d.d ?? "").match(/-?[\d.]+/g)?.map(Number) ?? [];
+          const from = nums.length >= 9 ? hourOf(nums[0], nums[1]) : NaN;
+          const to = nums.length >= 9 ? hourOf(nums[7], nums[8]) : NaN;
+          const mid = d.mid ? hourOf(d.mid[0], d.mid[1]) : NaN;
+          const hand = d.hand ? hourOf(d.hand[0], d.hand[1]) : NaN;
+          const checks = {
+            arcFrom: Math.abs(from - H.open) < 0.05,
+            arcTo: Math.abs(to - H.close) < 0.05,
+            sweep: nums[6] === 1 && nums[5] === (H.close - H.open > 12 ? 1 : 0),
+            mid: Math.abs(mid - (H.open + H.close) / 2) < 0.1,
+            open: d.open === (wantOpen ? "1" : "0"),
+            status: d.status === (wantOpen ? X.goOpen : X.goClosed),
+            hand: Math.abs(hand - minute / 60) < 0.05,
+            arcInk: day ? d.stroke === accent : d.stroke !== accent,
           };
-        });
-        await ctx.close();
-        /* Angles back to hours, noon at the top: h = 12 + atan2(dx, -dy)/2pi*24. */
-        const hourOf = (x, y) => (((12 + (Math.atan2(x - d.c, d.c - y) / (2 * Math.PI)) * 24) % 24) + 24) % 24;
-        const nums = (d.d ?? "").match(/-?[\d.]+/g)?.map(Number) ?? [];
-        const from = nums.length >= 9 ? hourOf(nums[0], nums[1]) : NaN;
-        const to = nums.length >= 9 ? hourOf(nums[7], nums[8]) : NaN;
-        const hand = d.hand ? hourOf(d.hand[0], d.hand[1]) : NaN;
-        /* The endpoints alone cannot tell the day's arc from the night's:
-           the flags must draw it clockwise the short way, and its middle
-           must sit at the window's middle hour. */
-        const largeWant = APPROVED_HOURS.close - APPROVED_HOURS.open > 12 ? 1 : 0;
-        const mid = d.mid ? hourOf(d.mid[0], d.mid[1]) : NaN;
-        const checks = {
-          sweep: nums[6] === 1 && nums[5] === largeWant,
-          mid: Math.abs(mid - (APPROVED_HOURS.open + APPROVED_HOURS.close) / 2) < 0.1,
-          arcFrom: Math.abs(from - APPROVED_HOURS.open) < 0.05,
-          arcTo: Math.abs(to - APPROVED_HOURS.close) < 0.05,
-          open: d.open === (c.open ? "1" : "0"),
-          status: d.status === (c.open ? X.goOpen : X.goClosed),
-          hand: Math.abs(hand - c.minute / 60) < 0.05,
-          arcInk: c.day ? d.stroke === accent : d.stroke !== accent,
-        };
-        const bad = Object.entries(checks).filter(([, v]) => !v).map(([k]) => k);
-        ok &&= bad.length === 0;
-        out.push(`${c.label}: arc ${from.toFixed(2)}-${to.toFixed(2)}h via ${mid.toFixed(2)}h (flags ${nums[5]}/${nums[6]}), hand ${hand.toFixed(2)}h, ${JSON.stringify(d.status)}${bad.length ? " RED " + bad.join(",") : " ok"}`);
+          const bad = Object.entries(checks).filter(([, v]) => !v).map(([k]) => k);
+          ok &&= bad.length === 0;
+          out.push(`${run.id} ${label}: arc ${from.toFixed(2)}-${to.toFixed(2)}h via ${mid.toFixed(2)}h, ${JSON.stringify(d.status)}${bad.length ? " RED " + bad.join(",") : " ok"}`);
+        }
       }
       return { ok, detail: out.join("; ") };
     },
     { viewports: V2 },
   );
 
-  /* --- 220 (45d): demo mode, 390x844, on load — the owner card and its
-         gold +ticket sit wholly inside the first viewport, at full opacity,
-         with no scroll. --- */
+  /* --- 220 (45d, amended change 45.1 — the fold): demo mode, 390x664 (the
+         Safari-visible height of a 390x844 phone). At t=1s the owner card is
+         an iOS banner WHOLLY inside the viewport at full opacity; at t=6s the
+         banner is gone and the card stands docked, visible, under the slots.
+         Reduced motion: no banner at all, the docked card from the start. --- */
   await gate(
     220,
-    "go 45d: the demo owner card is in the first viewport at 390x844",
+    "go 45d: the demo owner card arrives as a banner in a 390x664 viewport at t=1s and is docked at t=6s",
     async (browser, vp) => {
+      const probe = (page) =>
+        page.evaluate(() => {
+          const eff = (el) => {
+            let o = 1;
+            for (let x = el; x && x.nodeType === 1; x = x.parentElement) o *= parseFloat(getComputedStyle(x).opacity);
+            return o;
+          };
+          const bn = document.querySelector("[data-go-banner]");
+          const br = bn?.getBoundingClientRect();
+          const sm = document.querySelector("[data-go-owner] [data-go-sample]");
+          return {
+            t: Math.round(performance.now()),
+            banner: bn && getComputedStyle(bn).display !== "none" ? { top: Math.round(br.top), bottom: Math.round(br.bottom), left: Math.round(br.left), right: Math.round(br.right), o: +eff(bn).toFixed(2), text: bn.textContent } : null,
+            docked: sm ? { vis: getComputedStyle(sm).visibility, o: +eff(sm).toFixed(2), h: Math.round(sm.getBoundingClientRect().height) } : null,
+            vw: innerWidth,
+            vh: innerHeight,
+          };
+        });
       const ctx = await ctxFor(browser, vp);
       const page = await ctx.newPage();
-      await page.goto(url(bizQ), { waitUntil: "networkidle" });
-      await page.waitForTimeout(900);
-      const m = await page.evaluate(() => {
-        const n = document.querySelector("[data-go-owner] [data-go-notify]");
-        const t = n?.querySelector("[data-go-ticket]");
-        const eff = (el) => {
-          let o = 1;
-          for (let x = el; x && x.nodeType === 1; x = x.parentElement) o *= parseFloat(getComputedStyle(x).opacity);
-          return o;
-        };
-        if (!n || !t) return null;
-        const r = n.getBoundingClientRect();
-        const tr = t.getBoundingClientRect();
-        return { top: Math.round(r.top), bottom: Math.round(r.bottom), tBottom: Math.round(tr.bottom), vh: innerHeight, scroll: scrollY, o: +eff(n).toFixed(2) };
-      });
+      await page.goto(url(bizQ), { waitUntil: "domcontentloaded" });
+      await page.waitForFunction(() => performance.now() >= 1000);
+      const t1 = await probe(page);
+      await page.waitForFunction(() => performance.now() >= 6000, undefined, { timeout: 15000 });
+      const t6 = await probe(page);
       await ctx.close();
-      const ok = !!m && m.top >= 0 && m.bottom <= m.vh && m.tBottom <= m.vh && m.scroll === 0 && m.o >= 0.99;
-      return { ok, detail: m ? `card ${m.top}-${m.bottom}px, ticket bottom ${m.tBottom}px, viewport ${m.vh}, scrollY ${m.scroll}, opacity ${m.o}` : "no owner card" };
+      const rm = await ctxFor(browser, vp, { reducedMotion: "reduce" });
+      const rp = await rm.newPage();
+      await rp.goto(url(bizQ), { waitUntil: "domcontentloaded" });
+      await rp.waitForFunction(() => performance.now() >= 1000);
+      const r1 = await probe(rp);
+      await rm.close();
+      const b = t1.banner;
+      const inView = !!b && b.top >= 0 && b.left >= 0 && b.right <= t1.vw && b.bottom <= t1.vh && b.o >= 0.98 && b.text.includes(X.bookedLabel);
+      const docked = !t6.banner && !!t6.docked && t6.docked.vis === "visible" && t6.docked.o >= 0.99 && t6.docked.h > 0;
+      const reducedOk = !r1.banner && !!r1.docked && r1.docked.vis === "visible";
+      return {
+        ok: inView && docked && reducedOk,
+        detail: `t=${t1.t}ms banner ${b ? `${b.top}-${b.bottom}px of ${t1.vh}, opacity ${b.o}` : "ABSENT"}${inView ? "" : " RED"}; t=${t6.t}ms ${t6.banner ? "banner STILL UP" : "banner gone"}, docked ${t6.docked ? t6.docked.vis : "missing"}${docked ? "" : " RED"}; reduced motion: banner ${r1.banner ? "SHOWN" : "none"}, docked ${r1.docked?.vis}${reducedOk ? "" : " RED"}`,
+      };
     },
-    { viewports: [{ width: 390, height: 844 }] },
+    { viewports: [{ width: 390, height: 664 }] },
   );
 
   /* --- 221 (45e): "typical reply" is the STORED thread's gap, per preset —
@@ -768,7 +796,7 @@ export async function runGoGates({ base, pw, check }) {
          so a missing glyph is red here. --- */
   await gate(
     223,
-    "go 45g: a drawn glyph on every job of every preset",
+    "go 45g: every job of every preset carries the drawn glyph its own string maps to",
     async (browser, vp) => {
       const sets = [
         ["plumbing", "preset=home&trade=plumbing&demo=1"],
@@ -801,15 +829,73 @@ export async function runGoGates({ base, pw, check }) {
         );
         const want = X.jobs[set] ?? [];
         const missing = chips.filter((c) => !c.key || c.drawn === 0).map((c) => c.label);
-        const keys = chips.map((c) => c.key).filter((k) => k && k !== "else");
-        const good = chips.length === want.length && chips.every((c, i) => c.label === want[i]) && missing.length === 0 && new Set(keys).size === keys.length;
+        /* change 45.1: each chip carries the glyph config assigns to ITS
+           string — whatever order the list is in. */
+        const wrong = chips.filter((c) => c.key && c.key !== X.jobGlyph[c.label]).map((c) => `${c.label}=${c.key} want ${X.jobGlyph[c.label]}`);
+        const good = chips.length === want.length && chips.every((c, i) => c.label === want[i]) && missing.length === 0 && wrong.length === 0;
         ok &&= good;
-        out.push(`${set} ${chips.length}/${want.length}${missing.length ? " MISSING " + JSON.stringify(missing) : ""}`);
+        out.push(`${set} ${chips.length}/${want.length}${missing.length ? " MISSING " + JSON.stringify(missing) : ""}${wrong.length ? " WRONG " + JSON.stringify(wrong.slice(0, 2)) : ""}`);
       }
       await ctx.close();
       return { ok, detail: out.join("; ") };
     },
     { viewports: V2 },
+  );
+
+  /* --- 225 (change 45.1): a LIVE door (no demo=1) claims nothing it cannot
+         back: no proof row, and the booking / quote endings are the page's
+         own Text us and Call actions — never "You're booked." or "Photo
+         sent.". The demo door keeps both, so this is a mode switch, not a
+         deletion. --- */
+  await gate(
+    225,
+    "go: a live door shows no proof row and ends bookings and quotes on Text / Call, not confirmations",
+    async (browser, vp) => {
+      const ending = async (q) => {
+        const ctx = await ctxFor(browser, vp, { userAgent: ANDROID_UA });
+        const page = await ctx.newPage();
+        await page.goto(url(q), { waitUntil: "networkidle" });
+        const proof = await page.evaluate(() => !!document.querySelector("[data-go-proof]"));
+        await book(page);
+        const bookEnd = await page.evaluate(() => {
+          const panel = document.querySelector("[data-go-panel]");
+          return {
+            text: panel.textContent,
+            live: [...panel.querySelectorAll("[data-go-live]")].map((a) => [a.getAttribute("data-go-live"), a.getAttribute("href")]),
+          };
+        });
+        await page.click("[data-go-close]");
+        await page.waitForFunction(() => document.querySelector("[data-go-sheet]")?.getAttribute("data-go-sheet") === "closed");
+        await page.click("[data-go-slot=quote]");
+        await page.setInputFiles("[data-go-photo]", { name: "p.png", mimeType: "image/png", buffer: Buffer.from("89504e470d0a1a0a", "hex") });
+        await page.click("[data-go-send]");
+        await page.waitForSelector("[data-go-quote-done]");
+        const quoteEnd = await page.evaluate(() => {
+          const panel = document.querySelector("[data-go-panel]");
+          return { text: panel.textContent, live: [...panel.querySelectorAll("[data-go-live]")].map((a) => [a.getAttribute("data-go-live"), a.getAttribute("href")]) };
+        });
+        await ctx.close();
+        return { proof, bookEnd, quoteEnd };
+      };
+      const smsWant = `${X.smsHref}?body=${encodeURIComponent(X.smsBody.replace(/\{biz\}/g, BIZ))}`;
+      const liveLinks = (e) => JSON.stringify(e.live) === JSON.stringify([["text", smsWant], ["call", X.goTel]]);
+      const live = await ending(`biz=${encodeURIComponent(BIZ)}&trade=hvac`);
+      const demo = await ending(bizQ);
+      const checks = {
+        liveNoProof: !live.proof,
+        liveNoBooked: !live.bookEnd.text.includes(X.doneTitle) && liveLinks(live.bookEnd),
+        liveNoSent: !live.quoteEnd.text.includes(X.quoteDoneTitle) && liveLinks(live.quoteEnd),
+        demoProof: demo.proof,
+        demoBooked: demo.bookEnd.text.includes(X.doneTitle) && demo.bookEnd.live.length === 0,
+        demoSent: demo.quoteEnd.text.includes(X.quoteDoneTitle) && demo.quoteEnd.live.length === 0,
+      };
+      const bad = Object.entries(checks).filter(([, v]) => !v).map(([k]) => k);
+      return {
+        ok: bad.length === 0,
+        detail: `live: proof ${live.proof ? "SHOWN" : "none"}, booking ends ${live.bookEnd.text.includes(X.doneTitle) ? "CONFIRMED" : "on " + live.bookEnd.live.map((x) => x[0]).join("+")}, quote ends ${live.quoteEnd.text.includes(X.quoteDoneTitle) ? "CONFIRMED" : "on " + live.quoteEnd.live.map((x) => x[0]).join("+")}; demo: proof ${demo.proof}, booked ${demo.bookEnd.text.includes(X.doneTitle)}, sent ${demo.quoteEnd.text.includes(X.quoteDoneTitle)}${bad.length ? " | RED " + bad.join(",") : ""}`,
+      };
+    },
+    { viewports: [{ width: 390, height: 844 }] },
   );
 
   /* --- 224 (change 45 review): the plumbing nobody sees — the analytics

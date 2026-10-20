@@ -10,7 +10,7 @@
  *   demo=1  demo mode — also on whenever biz is empty
  *   ref, lead  pass-through only: kept to a URL-safe alphabet, never shown
  */
-import { COPY, GO_SCHEDULE, PRESETS, resolveName, type Preset } from "@/lib/client.config";
+import { COPY, GO_SCHEDULE, JOB_GLYPH, PRESETS, resolveName, type Preset } from "@/lib/client.config";
 import { fillN, hoursLine, typicalReply } from "@/lib/go";
 
 export type GoPresetId = "salon" | "home" | "dental" | "other";
@@ -63,12 +63,10 @@ export function tradeLabel(p: GoParams): string {
   return p.preset.label;
 }
 
-/** change 45: each job with the key of its hand-drawn glyph
-    (app/go/glyphs.tsx): "<set>-<index>", or "else" for the label EVERY set
-    shares — found from the data, not named in code. */
+/** change 45 / 45.1: each job with the id of its hand-drawn glyph, looked
+    up by the job's own STRING (config JOB_GLYPH) — a reordered list keeps
+    every glyph on its job. An unmapped job gets no glyph (gate 223 red). */
 export type GoJob = { label: string; glyph: string };
-const JOB_SETS = Object.values(COPY.jobs) as readonly (readonly string[])[];
-const SHARED_JOBS = new Set(JOB_SETS[0].filter((j) => JOB_SETS.every((set) => set.includes(j))));
 
 export function jobSet(p: GoParams): keyof typeof COPY.jobs {
   if (p.trade) return p.trade;
@@ -78,16 +76,24 @@ export function jobSet(p: GoParams): keyof typeof COPY.jobs {
 
 export function jobsFor(p: GoParams): GoJob[] {
   const set = jobSet(p);
-  return COPY.jobs[set].map((label, i) => ({ label, glyph: SHARED_JOBS.has(label) ? "else" : `${set}-${i}` }));
+  return COPY.jobs[set].map((label) => ({ label, glyph: JOB_GLYPH[label] ?? "" }));
 }
 
-/** change 45: the proof row — every figure from config data. */
+/** change 45.1: this door's schedule — the shared starts plus the preset's
+    own hours. */
+export function scheduleFor(p: GoParams) {
+  return { ...GO_SCHEDULE, ...p.preset.hours };
+}
+
+/** change 45: the proof row — every figure from config data. change 45.1:
+    demo mode only; a live door has no data of its own to prove with. */
 export function proofFor(p: GoParams) {
+  if (!p.demo) return null;
   const reply = typicalReply(p.preset.thread);
   return {
     radius: fillN(COPY.go.proofRadius, p.preset.radius),
     hoursLabel: COPY.go.proofHours,
-    hours: hoursLine(GO_SCHEDULE),
+    hours: hoursLine(scheduleFor(p)),
     reply: reply == null ? null : fillN(COPY.go.proofReply, reply),
     replyMinutes: reply,
   };

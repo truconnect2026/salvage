@@ -3,9 +3,9 @@ import { headers } from "next/headers";
 
 import FitName from "@/app/go/FitName";
 import GoCard, { type GoCopy } from "@/app/go/GoCard";
-import { COPY, GO_SCHEDULE } from "@/lib/client.config";
+import { COPY } from "@/lib/client.config";
 import { isInApp, isIOS, prettyPhone, telNumber } from "@/lib/go";
-import { jobsFor, ogQuery, proofFor, resolveGoParams, sampleFor, tradeLabel } from "@/lib/go-params";
+import { jobsFor, ogQuery, proofFor, resolveGoParams, sampleFor, scheduleFor, tradeLabel } from "@/lib/go-params";
 
 /*
  * change 42: /go — the page a business's customer lands on from a
@@ -71,6 +71,12 @@ export default async function GoPage({ searchParams }: { searchParams: SP }) {
   };
 
   return (
+    <>
+    {/* change 45.1: with no script the demo banner can never dock — the
+        docked card stands and the banner never shows. */}
+    <noscript>
+      <style>{"[data-go-banner]{display:none!important}[data-go-sample]{visibility:visible!important}"}</style>
+    </noscript>
     <GoCard
       biz={p.biz}
       nameSlot={<FitName biz={p.biz} />}
@@ -90,11 +96,12 @@ export default async function GoPage({ searchParams }: { searchParams: SP }) {
       ios={isIOS(ua)}
       inApp={isInApp(ua)}
       installHint={isIOSSafari(ua)}
-      schedule={GO_SCHEDULE}
+      schedule={scheduleFor(p)}
       serverNow={serverNow}
-      proof={{ radius: proof.radius, hoursLabel: proof.hoursLabel, hours: proof.hours, reply: proof.reply }}
+      proof={proof && { radius: proof.radius, hoursLabel: proof.hoursLabel, hours: proof.hours, reply: proof.reply }}
       sample={sampleFor(p)}
       copy={copy}
     />
+    </>
   );
 }

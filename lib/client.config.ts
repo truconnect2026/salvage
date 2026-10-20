@@ -19,6 +19,9 @@ export type Preset = {
   /* change 45: the /go proof row's service radius, miles. Data — 25 is
      Andy's approved default (v2 GO). */
   radius: number;
+  /* change 45.1: the front door's hours are per preset. Weekdays 0 = Sunday
+     (never open), whole hours, America/New_York (GO_SCHEDULE.tz). */
+  hours: { days: number[]; open: number; close: number };
   sinceCalls: number; sinceRecovered: number;
   caught: CaughtEntry[];
   thread: Bubble[];
@@ -285,15 +288,13 @@ export const COPY = {
   },
 };
 
-/* change 45: the front door's hours and bookable starts are DATA. The
-   server reads them here and hands them to the client island as props,
-   so lib/go.ts never imports this file. Mon-Sat 07:00-18:00 ET; Sunday
-   is never open. Four starts a day, each at least leadMinutes out. */
+/* change 45: the front door's bookable starts are DATA. The server reads
+   them here and hands them to the client island as props, so lib/go.ts
+   never imports this file. change 45.1: the HOURS moved onto each preset
+   (dental opens at 8); this holds what every door shares. Four starts a
+   day, each at least leadMinutes out. */
 export const GO_SCHEDULE = {
   tz: "America/New_York",
-  days: [1, 2, 3, 4, 5, 6],
-  open: 7,
-  close: 18,
   starts: [
     [8, 0],
     [10, 0],
@@ -305,6 +306,45 @@ export const GO_SCHEDULE = {
   openDays: 3,
 };
 
+/* change 45.1: each job's hand-drawn glyph (app/go/glyphs.tsx), keyed by
+   the approved job STRING — reordering COPY.jobs can never mismatch a
+   glyph, and renaming a job leaves it without one, which gate 223 holds
+   red until this map follows. */
+export const JOB_GLYPH: Record<string, string> = {
+  "Leak or burst pipe": "pipe-burst",
+  "Water heater": "water-heater",
+  "Drain clog": "drain",
+  "Toilet or fixture": "toilet",
+  "No heat or no AC": "thermostat",
+  "Strange noise or smell": "noise",
+  "Tune-up": "wrench",
+  "New system quote": "condenser",
+  "Power out in part of the house": "power-out",
+  "Breaker keeps tripping": "breaker",
+  "Outlet or switch": "outlet",
+  "Panel upgrade": "panel",
+  "Active leak": "roof-leak",
+  "Storm damage": "storm",
+  "Inspection": "inspect",
+  "New roof quote": "roof-new",
+  "Door won't open": "garage-stuck",
+  "Broken spring": "spring",
+  "Opener": "opener",
+  "New door quote": "garage-new",
+  "Filler": "syringe",
+  "Color": "dye",
+  "Facial": "face",
+  "Lash fill": "lash",
+  "Toothache or chip": "tooth-chip",
+  "Cleaning": "toothbrush",
+  "Filling": "filling",
+  "Crown": "crown",
+  "New appointment": "calendar-plus",
+  "Quote": "document",
+  "Question": "question",
+  "Something else": "else",
+};
+
 export const PRESETS: Preset[] = [
   {
     id: "salon", label: "Salon and Spa", bizName: "Harbor Row Aesthetics",
@@ -312,6 +352,7 @@ export const PRESETS: Preset[] = [
     accent: "#E8A0B4", accentSoft: "#4A2838", accentInk: "#1A0C12",
     ticket: 340, missedPerMonth: 12, callsCaught: 4, recovered: 1360, lost: 4080,
     radius: 25,
+    hours: { days: [1, 2, 3, 4, 5, 6], open: 7, close: 18 },
     sinceCalls: 31, sinceRecovered: 9240,
     // Entry [0] is this thread's own booking. Sum of all 4 amounts === recovered.
     caught: [
@@ -333,6 +374,7 @@ export const PRESETS: Preset[] = [
     accent: "#F0A044", accentSoft: "#4A3418", accentInk: "#1A1206",
     ticket: 850, missedPerMonth: 15, callsCaught: 5, recovered: 4250, lost: 12750,
     radius: 25,
+    hours: { days: [1, 2, 3, 4, 5, 6], open: 7, close: 18 },
     sinceCalls: 24, sinceRecovered: 18700,
     caught: [
       { name: "Mark T.", number: "(804) 555-0197", detail: "Tue 8:00 · water heater", amount: 850, date: "Mar 13" },
@@ -354,6 +396,7 @@ export const PRESETS: Preset[] = [
     accent: "#7CC4E8", accentSoft: "#1C3E5C", accentInk: "#08161F",
     ticket: 600, missedPerMonth: 9, callsCaught: 3, recovered: 1800, lost: 5400,
     radius: 25,
+    hours: { days: [1, 2, 3, 4, 5, 6], open: 8, close: 18 },
     sinceCalls: 19, sinceRecovered: 9800,
     caught: [
       // change 27 (C1, APPROVED): the three Nakamura rows shortened to the
@@ -379,6 +422,7 @@ export const PRESETS: Preset[] = [
     tagline: "Any business that takes calls.",
     ticket: 250, missedPerMonth: 10, callsCaught: 3, recovered: 750, lost: 2500,
     radius: 25,
+    hours: { days: [1, 2, 3, 4, 5, 6], open: 7, close: 18 },
     sinceCalls: 22, sinceRecovered: 5500,
     caught: [
       { name: "Jordan M.", number: "(804) 555-0151", detail: "Fri 3:30 · appointment", amount: 250, date: "Sep 2" },
