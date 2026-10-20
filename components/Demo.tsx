@@ -54,8 +54,10 @@ import {
   clamp01,
   easeOut,
   leakAt,
+  missAt,
   notifyPresence,
   panelRecoveredAt,
+  secondCallAt,
   stakeAt,
   storyAt,
 } from "@/lib/timeline";
@@ -157,6 +159,12 @@ type Nodes = {
   ownerKnob: HTMLElement | null;
   ownerTrack: HTMLElement | null;
   ownerSlideLabel: HTMLElement | null;
+  /* change 43a.1: the second call's face — its caller, its disabled
+     slider's label — and the controls it disables. */
+  ownerCaller1: HTMLElement | null;
+  ownerCaller2: HTMLElement | null;
+  ownerOnAJob: HTMLElement | null;
+  ownerDecline: HTMLElement | null;
   ownerMax: number;
   ownerNotes: { el: HTMLElement; card: HTMLElement; kind: NoteKind; h: number }[];
   stakeValues: HTMLElement[];
@@ -166,7 +174,7 @@ type Nodes = {
 };
 
 type NoteKind = "missed" | "text" | "booked";
-type CallHow = "" | "swipe" | "key" | "decline" | "timeout";
+type CallHow = "" | "swipe" | "key" | "tap" | "decline" | "timeout";
 
 /* ---------------------------------------------------------------------------
  * Sound (change 15, B). Web Audio synthesis only — no samples. Every event is
@@ -320,6 +328,11 @@ type Ctx = {
   /* Haptic crossings, like audio.lastT: the previous real and story times. */
   hapticReal: number;
   hapticT: number;
+  /* change 43a.1: which caller Salvage caught (React state, latched by the
+     engine once the answered call's in-call screen ends). */
+  credit: 0 | 1;
+  creditLatched: boolean;
+  setCredit: (c: 0 | 1) => void;
   /* change 30 (G1): the slab receipt mounts on the booking beat; the
      desktop clock crossfades out under it. */
   receiptLatched: boolean;
@@ -357,6 +370,20 @@ function playFlapTick(actx: AudioContext) {
    unless the owner acts; a ring is never born after the call ends), the
    chime and the landing tone ride the STORY clock — the chime is the text
    going out, so an answered call has none. */
+/* change 43a.1: every ring the owner's phone sounds this run, on the REAL
+   clock — the first call's six (none born after it ends) and, answered,
+   the second call's six, which always ring out. */
+function ringBirths(ctx: Ctx): number[] {
+  const c = ctx.call;
+  const firstEnd = c.path === "ringing" ? Infinity : c.at;
+  const out = RING_BEATS.filter((b) => b < firstEnd);
+  if (c.path === "answered") {
+    const s2 = secondCallAt(c.at);
+    for (const b of RING_BEATS) out.push(s2 + b);
+  }
+  return out;
+}
+
 function scheduleAudio(ctx: Ctx, prevReal: number, real: number, prevT: number, t: number) {
   const a = ctx.audio;
   if (!a.enabled || !a.actx || a.actx.state !== "running") return;
@@ -379,10 +406,9 @@ function scheduleAudio(ctx: Ctx, prevReal: number, real: number, prevT: number, 
   const crossed = (beat: number) => prevT < beat && t >= beat && t - beat < 0.25;
   const at = (beat: number) => actx.currentTime + Math.max(0, beat - t);
   const crossedReal = (beat: number) => prevReal < beat && real >= beat && real - beat < 0.25;
-  const endAt = ctx.call.path === "ringing" ? Infinity : ctx.call.at;
-  for (const b of RING_BEATS)
-    if (b < endAt && crossedReal(b)) playRing(actx, actx.currentTime + Math.max(0, b - real));
-  if (ctx.call.path === "missed" && crossed(CHIME_AT)) playChime(actx, at(CHIME_AT));
+  for (const b of ringBirths(ctx)) if (crossedReal(b)) playRing(actx, actx.currentTime + Math.max(0, b - real));
+  /* The chime is the text going out — after a miss, first or second. */
+  if (ctx.call.path !== "ringing" && crossed(CHIME_AT)) playChime(actx, at(CHIME_AT));
   if (crossed(LAND_AT)) playLand(actx, at(LAND_AT));
 }
 
@@ -401,9 +427,10 @@ function buzz(pattern: number | number[]) {
   } catch {}
 }
 function scheduleHaptics(ctx: Ctx, prevReal: number, real: number, prevT: number, t: number) {
-  const endAt = ctx.call.path === "ringing" ? Infinity : ctx.call.at;
-  for (const b of RING_BEATS)
-    if (b < endAt && prevReal < b && real >= b && real - b < 0.25) buzz(BUZZ_RING);
+  const crossedReal = (b: number) => prevReal < b && real >= b && real - b < 0.25;
+  for (const b of ringBirths(ctx)) if (crossedReal(b)) buzz(BUZZ_RING);
+  /* The second call ringing out is a miss too. */
+  if (ctx.call.path === "answered" && crossedReal(missAt("answered", ctx.call.at))) buzz(BUZZ_MISSED);
   if (prevT < RECEIPT_AT && t >= RECEIPT_AT && t - RECEIPT_AT < 0.25) buzz(BUZZ_BOOKED);
 }
 
@@ -484,6 +511,10 @@ function collect(root: HTMLElement): Nodes {
     ownerKnob: q("[data-owner-knob]"),
     ownerTrack: q("[data-owner-track]"),
     ownerSlideLabel: q("[data-owner-slide-label]"),
+    ownerCaller1: q("[data-owner-caller]"),
+    ownerCaller2: q("[data-owner-caller-2]"),
+    ownerOnAJob: q("[data-owner-onajob]"),
+    ownerDecline: q("[data-owner-decline]"),
     ownerMax: measureTravel(q("[data-owner-track]"), q("[data-owner-knob]")),
     ownerNotes: Array.from(root.querySelectorAll<HTMLElement>("[data-owner-note]")).map((el) => {
       const prev = el.style.height;
@@ -562,19 +593,54 @@ function paintFade(ctx: Ctx, o: number) {
    misses and never texts: only the booking lands. */
 const NOTE_AT: Record<NoteKind, number> = { missed: CALL_ENDED_AT, text: BANNER_AT, booked: RECEIPT_AT };
 const BEAT_AT = [CALL_ENDED_AT, BANNER_AT, RECEIPT_AT];
-const beatLands = (path: CallPath, i: number) => path === "missed" || (path === "answered" && i === 2);
+/* change 43a.1: every path ends on a miss now (the answered path's second
+   call rings out), so once the first call has ended all three beats land
+   — the story clock holds them back until that miss. */
+const beatLands = (path: CallPath, i: number) => path !== "ringing" && i >= 0;
+
+/* Set a style only when it changes: these run every frame. */
+const setStyle = (el: HTMLElement | null, prop: "display" | "opacity", v: string) => {
+  if (el && el.style[prop] !== v) el.style[prop] = v;
+};
 
 function paintOwner(ctx: Ctx, t: number, real: number) {
   const n = ctx.nodes;
   const c = ctx.call;
   const ringing = c.path === "ringing";
 
+  /* change 43a.1: answered, a SECOND call comes up SECOND_GAP after the
+     in-call screen and rings out — the owner is out on the first job. */
+  const s2 = c.path === "answered" ? secondCallAt(c.at) : Infinity;
+  const m2 = c.path === "answered" ? missAt("answered", c.at) : Infinity;
+  const secondUp = real >= s2;
+
   /* Incoming is the top layer: up while it rings, out over 250ms when the
-     call ends — revealing the in-call layer (answered) or the lock screen. */
+     call ends — revealing the in-call layer (answered) or the lock screen;
+     answered, back in over 250ms for the second call and out when it
+     rings out. */
   if (n.ownerIncoming) {
-    const o = ringing ? 1 : 1 - clamp01((real - c.at) / 0.25);
+    const o = ringing
+      ? 1
+      : !secondUp
+        ? 1 - clamp01((real - c.at) / 0.25)
+        : real < m2
+          ? clamp01((real - s2) / 0.25)
+          : 1 - clamp01((real - m2) / 0.25);
     n.ownerIncoming.style.opacity = String(o);
     n.ownerIncoming.style.visibility = o > 0 ? "visible" : "hidden";
+  }
+  /* The second call's face: its caller, and a slider that cannot be used
+     ("You're on a job."); Decline goes inert with it. */
+  setStyle(n.ownerCaller1, "display", secondUp ? "none" : "");
+  setStyle(n.ownerCaller2, "display", secondUp ? "" : "none");
+  setStyle(n.ownerSlideLabel, "display", secondUp ? "none" : "");
+  setStyle(n.ownerOnAJob, "display", secondUp ? "" : "none");
+  setStyle(n.ownerKnob, "opacity", secondUp ? "0.35" : "1");
+  setStyle(n.ownerDecline, "opacity", secondUp ? "0.4" : "1");
+  for (const el of [n.ownerKnob, n.ownerDecline]) {
+    if (!el) continue;
+    if (secondUp && el.getAttribute("aria-disabled") !== "true") el.setAttribute("aria-disabled", "true");
+    if (!secondUp && el.hasAttribute("aria-disabled")) el.removeAttribute("aria-disabled");
   }
   if (n.ownerIncall) {
     const e = real - c.at;
@@ -611,7 +677,7 @@ function paintOwner(ctx: Ctx, t: number, real: number) {
      while the card drops in from above. */
   n.ownerNotes.forEach((note) => {
     const e = t - NOTE_AT[note.kind];
-    const lands = !ringing && (c.path === "missed" || note.kind === "booked");
+    const lands = !ringing;
     const shown = lands && e >= 0;
     const p = shown ? easeOut(clamp01(e / 0.32)) : 0;
     if (shown && (p >= 1 || note.h <= 0)) {
@@ -633,14 +699,18 @@ function paintOwner(ctx: Ctx, t: number, real: number) {
   /* The stake: counts up in real time over the six rings, frozen at the
      stored figure on the miss (never above it), frozen where the answer
      caught it otherwise. */
-  const stake = usd(stakeAt(real, ctx.preset.lost, c.path, c.at));
+  /* change 43a.1: ONE call's worth — the stored ticket ("Per job"). */
+  const stake = usd(stakeAt(real, ctx.preset.ticket, c.path, c.at));
   n.stakeValues.forEach((el) => {
     if (el.textContent !== stake) el.textContent = stake;
   });
-  /* Answered, nothing was lost — and the count stopped mid-climb at a
-     figure nobody stored. The whole line leaves over 300ms: a computed
-     figure never rests on screen, and lost money is never shown gray. */
-  const stakeOn = String(c.path === "answered" ? 1 - clamp01((real - c.at) / 0.3) : 1);
+  /* Answered, nothing was lost on THAT call — and its count stopped
+     mid-climb at a figure nobody stored. The whole line leaves over 300ms
+     (a computed figure never rests on screen; lost money is never gray),
+     and comes back with the second call, counting from zero. */
+  const stakeOn = String(
+    c.path !== "answered" ? 1 : !secondUp ? 1 - clamp01((real - c.at) / 0.3) : clamp01((real - s2) / 0.3),
+  );
   n.stakeBodies.forEach((el) => {
     if (el.style.opacity !== stakeOn) el.style.opacity = stakeOn;
   });
@@ -665,13 +735,20 @@ function paintOwner(ctx: Ctx, t: number, real: number) {
    in 4ms substeps off the rAF's own frame delta. Home is 0 while it rings;
    an answered knob runs on to the end of the track. The track's ends are
    hard stops — the knob never overshoots out of it. */
-function stepSlider(ctx: Ctx, dt: number) {
+function stepSlider(ctx: Ctx, dt: number, real: number) {
   const sl = ctx.slider;
   if (sl.drag) {
     sl.v = 0;
     return;
   }
   const max = ctx.nodes.ownerMax;
+  /* change 43a.1: the second call's knob sits home, disabled — it snaps
+     there while the screen is down, so nothing is seen to travel. */
+  if (ctx.call.path === "answered" && real >= secondCallAt(ctx.call.at) - 0.5) {
+    sl.x = 0;
+    sl.v = 0;
+    return;
+  }
   const target = ctx.call.path === "answered" ? max : 0;
   if (sl.x === target && sl.v === 0) return;
   let rem = dt;
@@ -706,6 +783,9 @@ function resetCall(ctx: Ctx) {
   ctx.lastNow = null;
   ctx.hapticReal = -1;
   ctx.hapticT = -1;
+  ctx.credit = 0;
+  ctx.creditLatched = false;
+  ctx.setCredit(0);
 }
 
 /* A call left ringing where nobody can see it — section 1 scrolled away,
@@ -719,6 +799,51 @@ function parkIfRinging(ctx: Ctx) {
   }
   park(ctx);
   if (ctx.mathRoll.started && !ctx.mathRoll.done) schedule(ctx);
+}
+
+/* change 43a.1: reduced motion — "the state changes, nothing travels"
+   (DESIGN.md §2). The owner's phone stands still on the incoming call;
+   Answer (a tap) and Decline cut straight to that path's SETTLED frame —
+   the very frame the moving paths end on, painted once, no rAF. */
+function paintReducedIncoming(ctx: Ctx) {
+  resetCall(ctx);
+  paintOwner(ctx, 0, 0);
+  const ticket = usd(ctx.preset.ticket);
+  ctx.nodes.stakeValues.forEach((el) => {
+    el.textContent = ticket;
+  });
+  if (ctx.nodes.ownerSlideLabel) ctx.nodes.ownerSlideLabel.style.opacity = "1";
+  if (ctx.nodes.controls) {
+    ctx.nodes.controls.style.visibility = "hidden";
+    ctx.nodes.controls.style.opacity = "0";
+  }
+  if (ctx.nodes.sceneClock) ctx.nodes.sceneClock.style.opacity = "1";
+  ctx.receiptLatched = false;
+  ctx.setReceiptShown(false);
+  ctx.root.dataset.callPath = "ringing";
+  ctx.root.dataset.callHow = "";
+  ctx.root.dataset.callSecond = "";
+}
+function paintReducedSettled(ctx: Ctx) {
+  const c = ctx.call;
+  const real = missAt(c.path, c.at) + (LOOP_UNTIL - CALL_ENDED_AT);
+  paintScene(ctx, storyAt(real, c.path, c.at), real);
+  if (ctx.nodes.sceneClock) ctx.nodes.sceneClock.style.opacity = "0";
+  ctx.root.dataset.callPath = c.path;
+  ctx.root.dataset.callHow = c.how;
+  ctx.root.dataset.callSecond = c.path === "answered" ? "missed" : "";
+}
+function reducedChoose(ctx: Ctx, path: "missed" | "answered") {
+  if (!ctx.reduced || ctx.call.path !== "ringing") return;
+  ctx.call = { path, at: 0, how: path === "missed" ? "decline" : "tap" };
+  if (path === "answered") {
+    ctx.credit = 1;
+    ctx.creditLatched = true;
+    ctx.setCredit(1);
+  }
+  ctx.receiptLatched = true;
+  ctx.setReceiptShown(true);
+  paintReducedSettled(ctx);
 }
 
 /* The owner acts (or the sixth ring runs out). Only a RINGING call on a
@@ -912,9 +1037,7 @@ function paintScene(ctx: Ctx, t: number, real: number = t) {
      never born after the call ends (the ones in flight fade out). */
   if (n.sonarRings.length === 2 && n.sonarH > 0) {
     const live: ({ r: number; o: number } | null)[] = [null, null];
-    const endAt = ctx.call.path === "ringing" ? Infinity : ctx.call.at;
-    RING_BEATS.forEach((beat, bi) => {
-      if (beat >= endAt) return;
+    ringBirths(ctx).forEach((beat, bi) => {
       const e = real - beat;
       if (e >= 0 && e < RING_DUR) {
         const p = easeOut(e / RING_DUR);
@@ -1118,14 +1241,22 @@ function tick(ctx: Ctx, now: number) {
 
   /* Up to 250ms of wall time per frame (4ms substeps keep it stable): a
      slow frame must not slow the spring, or it drifts off k 420 / c 34. */
-  stepSlider(ctx, ctx.lastNow == null ? 0 : Math.min(0.25, (now - ctx.lastNow) / 1000));
+  stepSlider(ctx, ctx.lastNow == null ? 0 : Math.min(0.25, (now - ctx.lastNow) / 1000), real);
   ctx.lastNow = now;
   ctx.lastReal = real;
 
   paintScene(ctx, t, real);
   paintFade(ctx, 1);
-  paintNumbers(ctx, leakAt(tt, p.lost), panelRecoveredAt(tt, p.recovered, p.caught[0].amount));
+  paintNumbers(ctx, leakAt(tt, p.lost), panelRecoveredAt(tt, p.recovered, p.caught[ctx.credit].amount));
   paintFlaps(ctx, tt, (q) => leakAt(q, p.lost));
+  /* change 43a.1: the answered call's in-call screen has ended (both
+     incoming screens are down) — Salvage's credit moves to the second
+     caller, before anything of theirs can show. */
+  if (!ctx.creditLatched && ctx.call.path === "answered" && real >= ctx.call.at + ANSWER_HOLD) {
+    ctx.creditLatched = true;
+    ctx.credit = 1;
+    ctx.setCredit(1);
+  }
   /* change 30 (G6): one 12ms 1200Hz tick per digit-flap step, sound on,
      rate-limited across all flaps. */
   const flapNow = leakAt(tt, p.lost);
@@ -1159,6 +1290,14 @@ function tick(ctx: Ctx, now: number) {
   ctx.root.dataset.tReal = real.toFixed(3);
   ctx.root.dataset.callPath = ctx.call.path;
   ctx.root.dataset.callHow = ctx.call.how;
+  ctx.root.dataset.callSecond =
+    ctx.call.path !== "answered"
+      ? ""
+      : real < secondCallAt(ctx.call.at)
+        ? "waiting"
+        : real < missAt("answered", ctx.call.at)
+          ? "ringing"
+          : "missed";
 
   /* change 26 (G5): announce the settled figures ONCE, politely. */
   if (!ctx.announced && tt >= 5.5) {
@@ -1423,6 +1562,8 @@ export default function Demo({
   /* change 30 (G1): the receipt mounts on the booking beat; SSR (and
      reduced motion) render it settled — park hides it for a motion run. */
   const [receiptShown, setReceiptShown] = useState(false);
+  /* change 43a.1: which caller Salvage caught this run (0 first, 1 second). */
+  const [credit, setCredit] = useState<0 | 1>(0);
   /* Sound (change 15, B2): off until the rail toggle's tap. Restored from
      sessionStorage in the mount effect — never under reduced motion. */
   const [soundOn, setSoundOn] = useState(false);
@@ -1517,6 +1658,7 @@ export default function Demo({
 
     if (ctx.reduced) {
       ctx.shown = settledTotals(preset);
+      paintReducedIncoming(ctx);
       return;
     }
     if (ctx.transition?.swapped) {
@@ -1569,6 +1711,17 @@ export default function Demo({
     ctx.nodes = collect(ctx.root);
   }, [receiptShown]);
 
+  /* change 43a.1: the credit swap re-renders the notes, the ledger's row
+     [0] and the owner card with the second caller — re-collect (their
+     natural heights changed), and under reduced motion repaint the settled
+     frame on the new heights. */
+  useLayoutEffect(() => {
+    const ctx = ctxRef.current;
+    if (!ctx) return;
+    ctx.nodes = collect(ctx.root);
+    if (ctx.reduced && ctx.call.path !== "ringing") paintReducedSettled(ctx);
+  }, [credit]);
+
   /* Mount. Reduced motion means zero timers: the SSR settled state stands.
      Otherwise the clock PARKS at t=0 (change 12) — the section observer
      below starts it when the call section is >= 60% visible. */
@@ -1601,6 +1754,9 @@ export default function Demo({
       lastNow: null,
       hapticReal: -1,
       hapticT: -1,
+      credit: 0,
+      creditLatched: false,
+      setCredit,
       receiptLatched: false,
       setReceiptShown,
       mathRoll: { started: false, at: null, done: false },
@@ -1641,13 +1797,10 @@ export default function Demo({
 
     if (ctx.reduced) {
       root.dataset.t = "settled";
-      /* change 33 (B4): reduced motion has no beats — the receipt is simply
-         already there, at settle. change 43a: so are the rail's money and
-         its tick (they ship at opacity 0: the money is a beat). A state,
-         set once; nothing travels. */
-      setReceiptShown(true);
-      if (ctx.nodes.beatMoney) ctx.nodes.beatMoney.style.opacity = "1";
-      if (ctx.nodes.railTick) ctx.nodes.railTick.style.opacity = "1";
+      /* change 43a.1: reduced motion stands still on the incoming call —
+         Answer and Decline cut to their settled frames (reducedChoose). The
+         rest of the page is the SSR settled state. */
+      paintReducedIncoming(ctx);
       return;
     }
 
@@ -2150,7 +2303,11 @@ export default function Demo({
 
   const onReplay = () => {
     const ctx = ctxRef.current;
-    if (!ctx || ctx.reduced) return;
+    if (!ctx) return;
+    if (ctx.reduced) {
+      paintReducedIncoming(ctx);
+      return;
+    }
     /* A click landing inside the 500ms swap is discarded: nulling the
        transition before its half-point would cancel the un-committed
        setPresetId (change 10 review lens 2, finding 2). */
@@ -2269,6 +2426,7 @@ export default function Demo({
      scroll. */
   const onLoop = () => {
     const ctx = ctxRef.current;
+    if (ctx?.reduced) paintReducedIncoming(ctx);
     if (ctx && !ctx.reduced && !ctx.transition) {
       ctx.armed = false;
       ctx.start = null;
@@ -2289,7 +2447,13 @@ export default function Demo({
   const ownerHandlers: OwnerHandlers = {
     onDecline: () => {
       const ctx = ctxRef.current;
-      if (ctx) endCall(ctx, "missed", "decline");
+      if (ctx?.reduced) reducedChoose(ctx, "missed");
+      else if (ctx) endCall(ctx, "missed", "decline");
+    },
+    onSlideTap: () => {
+      /* Reduced motion only: a tap on the track answers (nothing slides). */
+      const ctx = ctxRef.current;
+      if (ctx?.reduced) reducedChoose(ctx, "answered");
     },
     onSlideDown: (e) => {
       const ctx = ctxRef.current;
@@ -2310,7 +2474,8 @@ export default function Demo({
       if (e.key !== "Enter" && e.key !== " ") return;
       e.preventDefault();
       const ctx = ctxRef.current;
-      if (ctx) endCall(ctx, "answered", "key");
+      if (ctx?.reduced) reducedChoose(ctx, "answered");
+      else if (ctx) endCall(ctx, "answered", "key");
     },
   };
 
@@ -2442,7 +2607,7 @@ export default function Demo({
                 data-figure="hero"
                 className="pointer-events-none absolute inset-y-0 left-0 z-10 hidden items-center text-[120px] font-medium leading-none text-gold max-[1099.98px]:text-transparent min-[1100px]:flex"
               >
-                +${preset.ticket}
+                +${preset.caught[credit].amount}
               </p>
             )}
             <div data-scene-clock>
@@ -2492,9 +2657,9 @@ export default function Demo({
                 seeds the settled (missed) figure. */}
             <p data-stake-line className="mt-8">
               <span data-stake-body className="flex items-baseline gap-3">
-                <span className="text-[17px] font-medium text-muted">{COPY.yours.rows.lost}</span>
+                <span className="text-[17px] font-medium text-muted">{COPY.yours.rows.ticket}</span>
                 <span data-stake-value data-figure="data" className="text-[28px] leading-none text-ember">
-                  {usd(preset.lost)}
+                  {usd(preset.ticket)}
                 </span>
               </span>
             </p>
@@ -2510,14 +2675,14 @@ export default function Demo({
             <div data-stake-line data-chrome="caption" data-client-world className="relative mb-4 h-7 min-[1100px]:hidden">
               {/* Label 17 / data 20 (DESIGN.md), baselines shared. */}
               <span data-stake-body className="flex h-7 items-baseline gap-2">
-                <span className="text-[17px] font-medium leading-7 text-muted">{COPY.yours.rows.lost}</span>
+                <span className="text-[17px] font-medium leading-7 text-muted">{COPY.yours.rows.ticket}</span>
                 <span data-stake-value data-figure="data" className="text-[20px] leading-7 text-ember">
-                  {usd(preset.lost)}
+                  {usd(preset.ticket)}
                 </span>
               </span>
             </div>
             {/* change 43a: section 1's device is the OWNER's phone. */}
-            <Phone preset={preset} bizName={bizName} variant="owner" sonar ownerHandlers={ownerHandlers} />
+            <Phone preset={preset} bizName={bizName} variant="owner" sonar ownerHandlers={ownerHandlers} credit={credit} />
             {/* change 36 (C1) -> change 43a: the beat strip is a three-segment
                 progress rail. Each segment fills in accent on the beat its
                 word names; a 2px gold tick and "+${ticket}" land on the
@@ -2560,7 +2725,7 @@ export default function Demo({
                           className="ml-3 text-[20px] leading-4 text-gold"
                           style={{ opacity: 0 }}
                         >
-                          +${preset.ticket}
+                          +${preset.caught[credit].amount}
                         </span>
                       )}
                     </span>
@@ -2662,7 +2827,7 @@ export default function Demo({
                 {/* The owner card: DOCKED statically in flow, 12px above the
                     panel at every width. */}
                 <div data-notify-ledger data-ink className="z-30 mb-2 w-full">
-                  <NotifyCard bizName={bizName} entry={preset.caught[0]} />
+                  <NotifyCard bizName={bizName} entry={preset.caught[credit]} />
                 </div>
                 {/* change 27 (B2): >=1100 the ledger is an app on a TABLET —
                     a 10px aluminum frame at a 28px radius, specular light
@@ -2682,7 +2847,7 @@ export default function Demo({
                       }}
                     />
                     <div className="relative min-[1100px]:rounded-[19px] min-[1100px]:bg-abyss min-[1100px]:px-6 min-[1100px]:py-5">
-                      <Ledger preset={preset} bizName={bizName} dates={dates} />
+                      <Ledger preset={preset} bizName={bizName} dates={dates} credit={credit} />
                     </div>
                   </div>
                 </div>

@@ -120,6 +120,9 @@ export const COPY = {
     // v2 GO (APPROVED, verbatim): the owner's incoming-call controls.
     decline: "Decline",
     slideToAnswer: "slide to answer",
+    // change 43a.1 (APPROVED, verbatim): the second call's disabled slider —
+    // the owner already took the first call and is out on it.
+    onAJob: "You're on a job.",
     // change 17 (A1, APPROVED): the six-button iOS in-call grid, in iOS's
     // own casing. Non-interactive scenery.
     grid: ["mute", "keypad", "speaker", "add call", "FaceTime", "contacts"],

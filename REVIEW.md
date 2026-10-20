@@ -408,3 +408,23 @@ mark, the answer handset), red #FF3B30 (Decline, End).
 | MA | Phone-side: the stack oldest-on-top, the incoming line names the preset id, Decline hidden, the track 90px up, the static thread one bubble short, lower-case initials, a sunk gray bubble, the lock clock unmarked, the shortcuts in the stack, a 17px note body, Booked hidden under reduced motion, a gold knob | 1, 8–12, 17, 38, 49, 53, 58, 69, 80, 91, 100, 101, 105, 131, 135, 195, 200, 227, 228 (+ 6, 18, 54, 55, 129 collateral) |
 | MB | engine-side: the incoming call never leaves on a miss, Booked at 13.5, the rings on the story clock, a 32px stake line, a scaled stage, a snap that keeps the name, an un-skinned Text sent note, an uppercase stake label | 12, 50, 51, 53, 56, 59, 89, 111, 205, 206, 228 (+ 114, 174 collateral) |
 | M88 | the phone rings three times | 88 ("5 beat start(s) — 3 ring"), 89, 228 (the ring-out's haptics) |
+
+## Change 43a.1 — the fix pass on Andy's veto
+
+Andy's three calls on change 43a's open findings, each gated and proven red
+on a mutated build (Chromium + WebKit). New string: `COPY.call.onAJob`,
+"You're on a job." (approved).
+
+| # | Call | What changed | Proof |
+|---|------|--------------|-------|
+| 1 | Reduced motion (43a lens 1 #5) | Reduced motion stands STILL on the incoming call: the caller, Decline, and a tappable Answer labelled "slide to answer"; no note landed, the stake at the ticket. A tap on Answer or Decline paints that path's settled frame — the same frame the moving path ends on — once, with no animation frame and the clock never started. | New gate 231 (both choices, rAF counted). Gate 17 amended (the still call, the ledger settled); gate 100 now reaches both settled stacks by a tap. Red on a tap that does nothing (P3: "Answer -> ringing/-, incoming true") and on the old settled lock screen (P5: 17, 100, 231). |
+| 2 | The answered call's credit (43a lens 3 #2) | Answered, the in-call screen holds 1.8s; 1.5s later a SECOND call rings from `caught[1]` — the slider disabled and reading "You're on a job.", Decline inert — and rings out: Missed call, Text sent, Booked, all for the second caller. Salvage's credit (the lock-screen notes, the ledger's stamped row [0], the owner card, the gold amount) moves to the second caller once both incoming screens are down; the answered first caller is dropped from Salvage's list. The stored monthly Recovered figure is shown as stored — subtracting the first caller would be derived money math. | New gate 230: answered -> exactly one SALVAGED stamp, on the second caller's row; the first caller is rendered nowhere in sections 1-2. Gate 228 amended (every path lands all three beats). Red on a credit that never moves (P1) and on the answered path landing Booked alone (P4). |
+| 3 | The stake (43a lens 3 #8) | The stake is ONE call: "Per job" (`COPY.yours.rows.ticket`), counting up in ember to `preset.ticket` over the rings and frozen there at the miss — the second call's too. The monthly lost figure stays in section 2. | Gate 227 amended. Red on the stake counting to the month again (P2: "$1,143 -> $2,550"). |
+
+Decisions inside the calls. The gold "+$" on the rail and the desktop receipt
+show the credited booking's stored amount (`caught[credit].amount`): it is
+`preset.ticket` on the default path and the second caller's own booking on
+the answered one. Reduced motion keeps change 12's rule that Replay is hidden
+(pure CSS); the section-4 loop button resets the still call. The section-2
+desktop phone and the section-3 phones still show the preset's stored example
+thread, which names no caller.

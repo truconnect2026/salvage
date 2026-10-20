@@ -77,13 +77,20 @@ export default function Ledger({
   bizName,
   compact = false,
   dates,
+  credit = 0,
 }: {
   preset: Preset;
   bizName?: string;
   compact?: boolean;
   dates?: LedgerDates;
+  /* change 43a.1: which caller Salvage caught this run. 1 means the owner
+     ANSWERED the first caller and the second rang out — row [0] (the
+     stamped insert) is the second caller, and the first caller is not in
+     Salvage's list at all: an answered call earns no credit. The stored
+     Recovered figure is shown as stored (no derived math). */
+  credit?: 0 | 1;
 }) {
-  const [row0, ...rest] = preset.caught;
+  const [row0, ...rest] = credit === 1 ? preset.caught.slice(1) : preset.caught;
   const headerName = bizName ?? preset.bizName;
   const L = COPY.ledger;
 

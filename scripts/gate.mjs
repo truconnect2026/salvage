@@ -488,7 +488,9 @@ const sampleFn = (EFF) => {
     .filter((n) => vis(n) > 0.5 && n.getBoundingClientRect().height > 1)
     /* VISUAL order, top to bottom — newest must be on top on screen. */
     .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
+  const incoming = document.querySelector("[data-owner-incoming]");
   return {
+    incomingUp: incoming ? vis(incoming) > 0.5 : false,
     notes: notes.length,
     noteKinds: notes.map((n) => n.getAttribute("data-owner-note")),
     panelRecovered: panelRecovered ? panelRecovered.textContent.trim() : null,
@@ -737,8 +739,9 @@ if (!chromium) {
 
     check(
       17,
-      "reduced motion settles immediately (amended change 43a: the owner's lock screen holds all three notes)",
-      r.notes === 3 &&
+      "reduced motion settles immediately (amended change 43a.1: the owner's phone stands STILL on the incoming call, no note landed; the ledger is settled)",
+      r.incomingUp === true &&
+        r.notes === 0 &&
         r.ledger === usd(expected.recovered) &&
         r.leak === usd(expected.lost) &&
         r.panelRecovered === usd(expected.recovered) &&
@@ -746,7 +749,7 @@ if (!chromium) {
         r.caughtVisible === 3 &&
         r.replay === false &&
         r.share === true,
-      `owner notes ${r.notes}/3 ${JSON.stringify(r.noteKinds)}, ledger ${JSON.stringify(r.ledger)}, ` +
+      `still incoming call ${r.incomingUp} (need true), notes landed ${r.notes} (need 0), ledger ${JSON.stringify(r.ledger)}, ` +
         `leak ${JSON.stringify(r.leak)}, panel recovered ${JSON.stringify(r.panelRecovered)}, ` +
         `caught rows visible ${r.caughtVisible}/3 (change 28: desktop shows 3), replay visible ${r.replay} (need false), ` +
         `share visible ${r.share} (need true)`,
@@ -3514,7 +3517,10 @@ if (!chromium) {
      shortcuts, every preset. --- */
   await block("reserve-16", async () => {
     const rows = [];
-    for (const p of presets) {
+    /* Amended (change 43a.1): reduced motion stands still on the incoming
+       call — each settled stack is reached by a tap: Decline (the first
+       caller) and Answer (the second caller's longer booking line). */
+    for (const p of presets) for (const choice of ["[data-owner-decline]", "[data-owner-track]"]) {
       const ctx = await browser.newContext({
         viewport: { width: 390, height: 700 },
         reducedMotion: "reduce",
@@ -3522,6 +3528,9 @@ if (!chromium) {
       const page = await ctx.newPage();
       await page.goto(`${base}/?biz=${p.id}`, { waitUntil: "domcontentloaded" });
       await page.evaluate(() => document.fonts.ready);
+      await page.waitForTimeout(600);
+      await page.click(choice);
+      await page.waitForTimeout(400);
       const g = await page.evaluate(() => {
         const sec1 = document.querySelector('[data-section="call"]');
         const screen = sec1?.querySelector("[data-phone-screen]");
@@ -3534,16 +3543,17 @@ if (!chromium) {
         const clipped = notes.filter((b) => !inside(b.getBoundingClientRect())).length;
         const last = notes[notes.length - 1].getBoundingClientRect();
         const k = sr.width / 360;
-        return { total: notes.length, clipped, clearDesign: +((floor - last.bottom) / k).toFixed(1) };
+        const landed = [...sec1.querySelectorAll("[data-owner-note]")].filter((n) => n.getBoundingClientRect().height > 1).length;
+        return { total: notes.length, landed, clipped, clearDesign: +((floor - last.bottom) / k).toFixed(1) };
       });
-      rows.push({ id: p.id, g });
+      rows.push({ id: `${p.id}/${choice.includes("decline") ? "decline" : "answer"}`, g });
       await ctx.close();
     }
     check(
       100,
-      "lock-screen reserve at 390x700 fits the settled stack: 3 notes, 0 clipped, all above the hardware shortcuts, all presets (amended, change 43a)",
-      rows.length === presets.length &&
-        rows.every((r) => r.g != null && r.g.total === 3 && r.g.clipped === 0),
+      "lock-screen reserve at 390x700 fits the settled stack: 3 notes landed, 0 clipped, all above the hardware shortcuts, all presets, both settled paths (amended, change 43a / 43a.1)",
+      rows.length === presets.length * 2 &&
+        rows.every((r) => r.g != null && r.g.total === 3 && r.g.landed === 3 && r.g.clipped === 0),
       rows
         .map((r) => `${r.id}: ${r.g ? `${r.g.clipped}/${r.g.total} clipped, ${r.g.clearDesign}px design clear above the shortcuts` : "nodes missing"}`)
         .join(" | "),
@@ -8322,10 +8332,10 @@ if (!chromium) {
   }
 }
 
-/* ---------- 226-229 (change 43a): the owner's phone, in its own module */
+/* ---------- 226-231 (change 43a / 43a.1): the owner's phone, in its own module */
 
 {
-  const OWNER_GATES = [226, 227, 228, 229];
+  const OWNER_GATES = [226, 227, 228, 229, 230, 231];
   try {
     if (!chromium) throw new Error(`playwright unavailable: ${browserError}`);
     const { runOwnerGates } = await import("./gate-owner.mjs");

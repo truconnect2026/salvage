@@ -103,15 +103,16 @@ export const RING_BURST_DUR = 0.8;
    the call ended.
      ringing      story = min(real, MISS - ε)
      missed at m  story = MISS + (real - m)      timeout: m = RING_TIMEOUT
-     answered at a: the call holds ANSWER_HOLD, then
-                  story = ANSWER_STORY_AT + (real - a - ANSWER_HOLD)
+     answered at a: the call holds ANSWER_HOLD; SECOND_GAP later a SECOND
+                  call rings (preset.caught[1]) that the owner cannot take —
+                  they are on a job. It rings out: m = second + RING_TIMEOUT,
+                  and the story resumes from that miss (change 43a.1).
    The story only ever moves forward. */
 export const RING_TIMEOUT = 7.2; // the sixth ring ends at 7.0; the miss lands 0.2 later
 export const ANSWER_HOLD = 1.8; // an answered call is this long, then it ends
-/* Answered: the story resumes just before the booking beat — the booked
-   beat lands early (RECEIPT_AT - 0.4 later), the missed and text beats
-   never happen. */
-export const ANSWER_STORY_AT = 9.2;
+/* change 43a.1: the second call rings this long after the in-call screen
+   ends. */
+export const SECOND_GAP = 1.5;
 /* The owner's slide-to-answer: answered on release at >= this share of
    the travel; anything short springs home on the DESIGN.md spring. */
 export const SLIDE_ANSWER_AT = 0.8;
@@ -120,22 +121,34 @@ export const SLIDE_C = 34;
 
 export type CallPath = "ringing" | "missed" | "answered";
 
-/** The story clock (see above). `at` is the real time of the miss or the
-    answer; it is unused while ringing. */
+/** When the second call starts ringing, for a first call answered at `at`. */
+export const secondCallAt = (at: number) => at + ANSWER_HOLD + SECOND_GAP;
+
+/** The real time of the miss the story resumes from: the declined or
+    rung-out first call, or — answered — the second call ringing out. */
+export const missAt = (path: CallPath, at: number) => (path === "answered" ? secondCallAt(at) + RING_TIMEOUT : at);
+
+/** The story clock (see above). `at` is the real time the first call ended
+    (missed or answered); it is unused while ringing. */
 export function storyAt(real: number, path: CallPath, at: number): number {
   const hold = CALL_ENDED_AT - 0.001;
   if (path === "ringing") return Math.min(real, hold);
-  if (path === "missed") return CALL_ENDED_AT + (real - at);
-  return real < at + ANSWER_HOLD ? hold : ANSWER_STORY_AT + (real - at - ANSWER_HOLD);
+  const m = missAt(path, at);
+  return real < m ? hold : CALL_ENDED_AT + (real - m);
 }
 
-/** The stake: what this call is worth losing, counting up over the six
-    rings in REAL time and frozen at the stored `lost` at the miss — never
-    above it. Answered, it freezes where the answer caught it. */
-export function stakeAt(real: number, lost: number, path: CallPath, at: number): number {
-  if (path === "missed") return lost;
-  const upTo = path === "answered" ? at : real;
-  return Math.round(clamp01(upTo / RING_TIMEOUT) * lost);
+/** The stake: what ONE call is worth (change 43a.1: the stored ticket, not
+    the month), counting up over its six rings in REAL time and frozen at
+    exactly `ticket` at its miss — never above it. Answered, the first
+    call's count stops where the answer caught it (the line leaves — the
+    engine never rests that figure); the second call counts up again from
+    zero and freezes at `ticket` when it rings out. */
+export function stakeAt(real: number, ticket: number, path: CallPath, at: number): number {
+  if (path === "missed") return ticket;
+  if (path === "ringing") return Math.round(clamp01(real / RING_TIMEOUT) * ticket);
+  const s2 = secondCallAt(at);
+  if (real < s2) return Math.round(clamp01(at / RING_TIMEOUT) * ticket);
+  return Math.round(clamp01((real - s2) / RING_TIMEOUT) * ticket);
 }
 
 /* change 18 (D1): the sonar rings ride the SAME ring beats as the sound —

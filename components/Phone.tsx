@@ -424,6 +424,8 @@ export type OwnerHandlers = {
   onSlideMove: (e: PointerEvent<HTMLElement>) => void;
   onSlideUp: (e: PointerEvent<HTMLElement>) => void;
   onSlideKey: (e: KeyboardEvent<HTMLElement>) => void;
+  /* change 43a.1: reduced motion answers on a TAP of the track. */
+  onSlideTap: () => void;
 };
 
 /* The iPhone Phone app mark: green squircle, white handset. */
@@ -467,8 +469,23 @@ function OwnerNote({ kind, children, icon }: { kind: "booked" | "text" | "missed
   );
 }
 
-function OwnerScreen({ preset, bizName, handlers }: { preset: Preset; bizName: string; handlers?: OwnerHandlers }) {
-  const entry = preset.caught[0];
+function OwnerScreen({
+  preset,
+  bizName,
+  handlers,
+  credit = 0,
+}: {
+  preset: Preset;
+  bizName: string;
+  handlers?: OwnerHandlers;
+  /* change 43a.1: which caller Salvage caught — 0, the first caller (the
+     call rang out or was declined), or 1, the SECOND caller (the owner
+     answered the first and was out on it when the second rang out). The
+     engine flips it once both incoming screens are down. */
+  credit?: 0 | 1;
+}) {
+  const entry = preset.caught[credit];
+  const second = preset.caught[1];
   const autoText = preset.thread[0].text.replace(preset.bizName, bizName);
   return (
     <>
@@ -495,7 +512,7 @@ function OwnerScreen({ preset, bizName, handlers }: { preset: Preset; bizName: s
           </OwnerNote>
           <OwnerNote kind="missed" icon={<PhoneAppGlyph />}>
             <p className="text-[15px] font-semibold leading-snug text-white">{COPY.beats.missed}</p>
-            <p className="text-[15px] leading-snug text-white/85">{preset.customerName}</p>
+            <p className="text-[15px] leading-snug text-white/85">{credit === 1 ? second.name : preset.customerName}</p>
           </OwnerNote>
         </div>
         {/* The lock screen's two hardware shortcuts — flashlight left,
@@ -546,6 +563,11 @@ function OwnerScreen({ preset, bizName, handlers }: { preset: Preset; bizName: s
         <p data-owner-caller className="mt-2 text-[34px] font-medium leading-tight text-white">
           {preset.customerName}
         </p>
+        {/* change 43a.1: the SECOND caller — the engine swaps the two names
+            (display) when the second call comes up. */}
+        <p data-owner-caller-2 className="mt-2 text-[34px] font-medium leading-tight text-white" style={{ display: "none" }}>
+          {second.name}
+        </p>
         <div className="absolute inset-x-0 bottom-[156px] flex flex-col items-center gap-2">
           <button
             type="button"
@@ -570,10 +592,20 @@ function OwnerScreen({ preset, bizName, handlers }: { preset: Preset; bizName: s
           onPointerMove={handlers?.onSlideMove}
           onPointerUp={handlers?.onSlideUp}
           onPointerCancel={handlers?.onSlideUp}
+          onClick={handlers?.onSlideTap}
           className="absolute bottom-[56px] left-[30px] right-[30px] h-[72px] cursor-grab touch-none select-none rounded-[36px] bg-white/15"
         >
           <span data-owner-slide-label aria-hidden="true" className="absolute inset-0 flex items-center justify-center pl-12 text-[18px] text-white/85">
             {COPY.call.slideToAnswer}
+          </span>
+          {/* change 43a.1: the second call's slider is disabled — the owner
+              is out on the first call's job. Shown by the engine. */}
+          <span
+            data-owner-onajob
+            className="absolute inset-0 flex items-center justify-center pl-12 text-[18px] text-white/85"
+            style={{ display: "none" }}
+          >
+            {COPY.call.onAJob}
           </span>
           <div
             data-owner-knob
@@ -609,6 +641,7 @@ export default function Phone({
   showBanner = true,
   showConfirm = true,
   ownerHandlers,
+  credit = 0,
 }: {
   preset: Preset;
   /* The effective business name (custom or preset default). Falls back to the
@@ -655,6 +688,8 @@ export default function Phone({
   showConfirm?: boolean;
   /* change 43a: the owner variant's live controls. */
   ownerHandlers?: OwnerHandlers;
+  /* change 43a.1: which caller the owner variant credits (see OwnerScreen). */
+  credit?: 0 | 1;
 }) {
   const thread = preset.thread;
   const typing = new Set(typingBefore);
@@ -686,7 +721,7 @@ export default function Phone({
         <span className="text-[15px] font-semibold tabular-nums text-white">{COPY.chrome.phone.statusTime}</span>
         <StatusGlyphs />
       </div>
-      <OwnerScreen preset={preset} bizName={effectiveBizName} handlers={ownerHandlers} />
+      <OwnerScreen preset={preset} bizName={effectiveBizName} handlers={ownerHandlers} credit={credit} />
       <div className="absolute bottom-2 left-1/2 z-50 h-1.25 w-35 -translate-x-1/2 rounded-full bg-muted/30" />
       {/* The glass's one specular streak — same as every device. */}
       <div

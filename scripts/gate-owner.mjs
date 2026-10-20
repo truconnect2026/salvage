@@ -1,5 +1,5 @@
 /*
- * change 43a: the owner's phone, gates 226-229.  Run by scripts/gate.mjs
+ * change 43a: the owner's phone, gates 226-229; change 43a.1: 230-231.  Run by scripts/gate.mjs
  * after its own browser block, or alone:
  *
  *   NODE_PATH=<playwright>/node_modules node scripts/gate-owner.mjs <baseUrl>
@@ -63,10 +63,27 @@ function expectations(src) {
     if (!m) throw new Error(`gate-owner setup: could not read ${label} for preset "${id}"`);
     return m[1];
   };
+  const need = (re, label) => {
+    const m = src.match(re);
+    if (!m) throw new Error(`gate-owner setup: could not read ${label} from lib/client.config.ts`);
+    return m[1];
+  };
+  const caught = [...block.matchAll(/\{\s*name:\s*"([^"]+)",\s*number:\s*"[^"]+",\s*detail:\s*"([^"]+)",\s*amount:\s*(\d+)/g)].map((m) => ({
+    name: m[1],
+    detail: m[2],
+    amount: Number(m[3]),
+  }));
+  if (caught.length < 2) throw new Error(`gate-owner setup: preset "${id}" needs two caught entries`);
   return {
     id,
     lost: Number(pick(/lost:\s*(\d+)/, "lost")),
+    ticket: Number(pick(/ticket:\s*(\d+)/, "ticket")),
     customerName: pick(/customerName:\s*"([^"]+)"/, "customerName"),
+    caught,
+    perJob: need(/rows:\s*\{\s*ticket:\s*"([^"]+)"/, "COPY.yours.rows.ticket"),
+    onAJob: need(/onAJob:\s*"([^"]+)"/, "COPY.call.onAJob"),
+    slideToAnswer: need(/slideToAnswer:\s*"([^"]+)"/, "COPY.call.slideToAnswer"),
+    stampLabel: need(/stamp:\s*"([^"]+)"/, "COPY.ledger.stamp"),
   };
 }
 
@@ -297,7 +314,9 @@ export async function runOwnerGates({ base, pw, check }) {
      strictly rising, strictly between $0 and the stored lost figure), and at
      the miss it shows the stored figure EXACTLY and stays there — on the
      ring-out and on Decline alike — in ember. ---- */
-  await gate(227, `43b: the stake counts up over the rings and freezes at preset.lost (${usd(X.lost)}) +/-0 at the miss, in ember — one stake per viewport, still there at settle; answered, the line leaves`, async (browser, vp, eng) => {
+  /* Amended (change 43a.1): the stake is ONE call — "Per job", the stored
+     ticket — not the month (the monthly lost figure lives in section 2). */
+  await gate(227, `43b: the stake ("${X.perJob}") counts up over the rings and freezes at preset.ticket (${usd(X.ticket)}) +/-0 at the miss, in ember — one stake per viewport, still there at settle; answered, the line leaves and the second call's stake freezes at the ticket too`, async (browser, vp, eng) => {
     /* EXACTLY one stake renders per viewport (mobile slot or desktop
        column), and its line is opaque. */
     const stake = (page) =>
@@ -307,7 +326,8 @@ export async function runOwnerGates({ base, pw, check }) {
         if (!el) return null;
         let o = 1;
         for (let n = el; n && n.nodeType === 1; n = n.parentElement) o *= parseFloat(getComputedStyle(n).opacity || "1");
-        return { text: el.textContent.trim(), color: getComputedStyle(el).color, count: shown.length, opacity: +o.toFixed(2) };
+        const label = el.parentElement?.firstElementChild?.textContent.trim() ?? null;
+        return { text: el.textContent.trim(), color: getComputedStyle(el).color, count: shown.length, opacity: +o.toFixed(2), label };
       });
     const num = (s) => Number(String(s?.text ?? "").replace(/[^0-9]/g, ""));
     /* Ring-out. */
@@ -344,12 +364,18 @@ export async function runOwnerGates({ base, pw, check }) {
     await w.page.waitForTimeout(700);
     const wAt = await stake(w.page);
     const wPath = await call(w.page);
+    /* ... and the second call, which the owner cannot take, rings out: its
+       stake freezes at the ticket. */
+    await w.page.waitForFunction(() => document.querySelector("[data-demo]")?.dataset.callSecond === "missed", null, { timeout: 25000 });
+    await w.page.waitForTimeout(350);
+    const w2 = await stake(w.page);
     await w.ctx.close();
-    const want = usd(X.lost);
+    const want = usd(X.ticket);
     const ok =
       num(s1) > 0 &&
       num(s2) > num(s1) &&
-      num(s2) < X.lost &&
+      num(s2) < X.ticket &&
+      s1?.label === X.perJob &&
       atMiss?.text === want &&
       later?.text === want &&
       missReal >= RING_OUT - 0.05 &&
@@ -362,24 +388,27 @@ export async function runOwnerGates({ base, pw, check }) {
       [s1, s2, atMiss, later, settled, dAt, dLater].every((x) => x?.count === 1 && x.opacity === 1) &&
       settled?.text === want &&
       wPath.path === "answered" &&
-      wAt?.opacity === 0;
+      wAt?.opacity === 0 &&
+      w2?.text === want &&
+      w2.opacity === 1 &&
+      w2.color === EMBER;
     return {
       ok,
       detail:
         `ringing ${s1?.text} -> ${s2?.text}; miss at real ${missReal.toFixed(2)} (need >= ${RING_OUT}) shows ${atMiss?.text}, +1.5s ${later?.text} (need ${want}) ${atMiss?.color}; ` +
         `decline -> ${dPath.path}/${dPath.how} ${dAt?.text}, +1.5s ${dLater?.text} ${dLater?.color}; ` +
         `settled ${settled?.text}; visible stakes ${[s1, s2, atMiss, later, settled].map((x) => x?.count).join("/")} (need 1 each); ` +
-        `answered -> ${wPath.path}, stake line opacity ${wAt?.opacity} at +0.7s (need 0)`,
+        `answered -> ${wPath.path}, stake line opacity ${wAt?.opacity} at +0.7s (need 0); second call rang out -> ${w2?.text} (need ${want}) opacity ${w2?.opacity}; label ${JSON.stringify(s1?.label)} (need ${JSON.stringify(X.perJob)})`,
     };
   });
 
   /* ---- 228: three paths, one ending. Swipe, Decline and the ring-out all
-     land the Booked note, fill the rail's third segment and land the money;
-     the missed paths also land Missed call + Text sent, the answered path
-     never does; and once the story settles the engine STOPS — no rAF, no
-     clock writes, for a full second. Plus the reduced-motion floor: the
-     settled lock screen, no incoming call, the stored stake. ---- */
-  await gate(228, "43c: swipe, decline and ring-out all reach Booked, and the phase engine stops after; reduced motion is the settled lock screen", async (browser, vp, eng) => {
+     land Missed call, Text sent and Booked (amended, change 43a.1: an
+     answered call is followed by a second call that rings out), fill the
+     rail and land the money; and once the story settles the engine STOPS
+     — no rAF, no clock writes, for a full second. (Reduced motion moved to
+     gate 231.) ---- */
+  await gate(228, "43c: swipe, decline and ring-out all reach Booked — the answered path through a second call that rings out — and the phase engine stops after", async (browser, vp, eng) => {
     const SPY = () => {
       window.__raf = 0;
       const orig = window.requestAnimationFrame.bind(window);
@@ -431,7 +460,7 @@ export async function runOwnerGates({ base, pw, check }) {
     const bits = [];
     let ok = true;
     for (const r of runs) {
-      const missedPath = r.kind !== "swipe";
+      const missedPath = true;
       const good =
         r.c.path === want[r.kind][0] &&
         r.c.how === want[r.kind][1] &&
@@ -461,24 +490,193 @@ export async function runOwnerGates({ base, pw, check }) {
       ok &&= ringOut && declined;
       bits.push(`haptics: ring-out ${ringOut ? "6 rings + miss + booked" : "WRONG " + J(out.buzz)}, decline ${declined ? "miss + booked" : "WRONG " + J(dec.buzz)}`);
     }
-    /* Reduced motion. */
-    const rm = await open(browser, vp, eng, { reducedMotion: "reduce" });
-    await rm.page.waitForTimeout(1200);
-    const r = await rm.page.evaluate(() => {
-      const vis = (el) => !!el && el.getBoundingClientRect().height > 1 && getComputedStyle(el).visibility !== "hidden";
-      const stake = [...document.querySelectorAll("[data-stake-value]")].find((e) => e.getClientRects().length > 0);
+    return { ok, detail: bits.join("; ") };
+  });
+
+  /* What a settled frame credits: the lock-screen notes, every SALVAGED
+     stamp, the ledger's rows, the owner card, and every RENDERED text in
+     sections 1-2 that names a given caller. */
+  const credits = (page, firstName) =>
+    page.evaluate(
+      ({ firstName, stampLabel }) => {
+        const shown = (el) => {
+          if (!el || el.getClientRects().length === 0) return false;
+          let o = 1;
+          for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
+            const cs = getComputedStyle(n);
+            if (cs.display === "none" || cs.visibility === "hidden") return false;
+            o *= parseFloat(cs.opacity || "1");
+          }
+          return o > 0.05 && el.getBoundingClientRect().height > 1;
+        };
+        const note = (k) => {
+          const el = document.querySelector(`[data-owner-note="${k}"]`);
+          return el && el.getBoundingClientRect().height > 1 && getComputedStyle(el).visibility !== "hidden" ? el.textContent.replace(/\s+/g, " ").trim() : null;
+        };
+        const stampEls = [...document.querySelectorAll("*")].filter((el) => el.childElementCount === 0 && el.textContent.trim() === stampLabel);
+        const stamps = stampEls.map((s) => ({ row: s.closest("[data-caught-row]")?.querySelector("[data-caught-name]")?.textContent.trim() ?? null, shown: shown(s) }));
+        const rows = [...document.querySelectorAll("[data-caught-name]")].filter(shown).map((e) => e.textContent.trim());
+        const card = document.querySelector("[data-notify-ledger]")?.textContent.replace(/\s+/g, " ").trim() ?? "";
+        /* The first caller, anywhere rendered in sections 1-2. */
+        const firstHits = [];
+        for (const sec of document.querySelectorAll('[data-section="call"], [data-section="save"]')) {
+          const walker = document.createTreeWalker(sec, NodeFilter.SHOW_TEXT);
+          for (let tn = walker.nextNode(); tn; tn = walker.nextNode()) {
+            if (tn.textContent.includes(firstName) && shown(tn.parentElement)) firstHits.push(tn.parentElement.tagName + ":" + tn.textContent.trim().slice(0, 40));
+          }
+        }
+        return { missed: note("missed"), text: note("text"), booked: note("booked"), stamps, rows, card, firstHits };
+      },
+      { firstName, stampLabel: X.stampLabel },
+    );
+
+  /* ---- 230 (change 43a.1): the answered path credits the SECOND caller,
+     once. Answer the first call: SECOND_GAP after its in-call screen a
+     second call rings from caught[1] — its slider disabled ("You're on a
+     job."), Decline inert, a drag goes nowhere — and rings out: Missed
+     call, Text sent, Booked, all for the second caller. Exactly ONE
+     SALVAGED stamp on the page, on the second caller's row; the first
+     (answered) caller is credited nowhere — not in the notes, the ledger,
+     the owner card or any rendered text of sections 1-2. ---- */
+  const c0 = X.caught[0];
+  const c1 = X.caught[1];
+  await gate(230, `43a.1: answered -> a second call from ${c1.name} rings out; exactly one ${X.stampLabel} credit, to ${c1.name}; the answered ${c0.name} is credited nowhere`, async (browser, vp, eng) => {
+    const { ctx, page } = await open(browser, vp, eng);
+    await waitReal(page, 1.0);
+    await drag(page, 0.95);
+    await page.waitForFunction(() => document.querySelector("[data-demo]")?.dataset.callSecond === "ringing", null, { timeout: 15000 });
+    await page.waitForTimeout(400);
+    const face = await page.evaluate(() => {
+      const vis = (el) => !!el && getComputedStyle(el).display !== "none" && el.getClientRects().length > 0;
+      const q = (s) => document.querySelector(s);
       return {
-        t: document.querySelector("[data-demo]").dataset.t,
-        incoming: getComputedStyle(document.querySelector("[data-owner-incoming]")).visibility,
-        notes: ["booked", "text", "missed"].map((k) => vis(document.querySelector(`[data-owner-note="${k}"]`))),
-        stake: stake?.textContent.trim(),
+        caller1: vis(q("[data-owner-caller]")),
+        caller2: vis(q("[data-owner-caller-2]")) ? q("[data-owner-caller-2]").textContent.trim() : null,
+        slideLabel: vis(q("[data-owner-slide-label]")),
+        onAJob: vis(q("[data-owner-onajob]")) ? q("[data-owner-onajob]").textContent.trim() : null,
+        knobDisabled: q("[data-owner-knob]").getAttribute("aria-disabled"),
+        declineDisabled: q("[data-owner-decline]").getAttribute("aria-disabled"),
       };
     });
-    await rm.ctx.close();
-    const rmOk = r.t === "settled" && r.incoming === "hidden" && r.notes.every(Boolean) && r.stake === usd(X.lost);
-    ok &&= rmOk;
-    bits.push(`reduced: t ${r.t}, incoming ${r.incoming}, notes ${r.notes.join("/")}, stake ${r.stake}`);
-    return { ok, detail: bits.join("; ") };
+    /* The disabled controls do nothing: a full drag, then Decline. */
+    await drag(page, 0.95);
+    await page.click("[data-owner-decline]", { force: true });
+    await page.waitForTimeout(300);
+    const still = await page.evaluate(() => ({ ...document.querySelector("[data-demo]").dataset }));
+    await waitStory(page, SETTLED);
+    await page.waitForTimeout(300);
+    const cr = await credits(page, c0.name);
+    await ctx.close();
+    const amount = `$${c1.amount}`;
+    const ok =
+      face.caller1 === false &&
+      face.caller2 === c1.name &&
+      face.slideLabel === false &&
+      face.onAJob === X.onAJob &&
+      face.knobDisabled === "true" &&
+      face.declineDisabled === "true" &&
+      still.callPath === "answered" &&
+      still.callSecond === "ringing" &&
+      cr.missed?.includes(c1.name) &&
+      cr.booked?.includes(c1.name) &&
+      cr.booked?.includes(amount) &&
+      cr.stamps.length === 1 &&
+      cr.stamps[0].row === c1.name &&
+      cr.rows[0] === c1.name &&
+      !cr.rows.includes(c0.name) &&
+      cr.card.includes(c1.name) &&
+      !cr.card.includes(c0.name) &&
+      cr.firstHits.length === 0;
+    return {
+      ok,
+      detail:
+        `second call: caller ${JSON.stringify(face.caller2)} (first hidden ${!face.caller1}), slider label ${JSON.stringify(face.onAJob)}, knob/decline aria-disabled ${face.knobDisabled}/${face.declineDisabled}; ` +
+        `drag + Decline during it -> ${still.callPath}/${still.callSecond} (need answered/ringing); ` +
+        `settled: missed ${JSON.stringify(cr.missed?.slice(-24))}, booked ${JSON.stringify(cr.booked?.slice(0, 60))}; ` +
+        `stamps ${JSON.stringify(cr.stamps)} (need exactly 1, on ${c1.name}); rows ${JSON.stringify(cr.rows)}; ` +
+        `card names ${c1.name} ${cr.card.includes(c1.name)}, ${c0.name} ${cr.card.includes(c0.name)}; ${c0.name} rendered in s1-s2 ${JSON.stringify(cr.firstHits)} (need none)`,
+    };
+  });
+
+  /* ---- 231 (change 43a.1): reduced motion — the state changes, nothing
+     travels. The owner's phone stands STILL on the incoming call (the
+     caller, Decline, a tappable Answer labelled "slide to answer", the
+     stake at the ticket, no note landed). A tap on Answer and a tap on
+     Decline each cut to the SAME settled frame the moving path ends on —
+     the answered one crediting the second caller — with no animation
+     frame requested and the clock never started. ---- */
+  await gate(231, `43a.1: reduced motion — a still incoming call; Answer and Decline cut to the moving paths' settled frames with no rAF`, async (browser, vp, eng) => {
+    const SPY = () => {
+      window.__raf = 0;
+      const orig = window.requestAnimationFrame.bind(window);
+      window.requestAnimationFrame = (cb) => {
+        window.__raf++;
+        return orig(cb);
+      };
+    };
+    const frame = (page) =>
+      page.evaluate(() => {
+        const d = document.querySelector("[data-demo]").dataset;
+        const inc = document.querySelector("[data-owner-incoming]");
+        const stake = [...document.querySelectorAll("[data-stake-value]")].find((e) => e.getClientRects().length > 0);
+        const track = document.querySelector("[data-owner-track]");
+        return {
+          t: d.t,
+          path: d.callPath,
+          second: d.callSecond,
+          incoming: getComputedStyle(inc).visibility === "visible" && getComputedStyle(inc).opacity === "1",
+          caller: document.querySelector("[data-owner-caller]").textContent.trim(),
+          answerLabel: track.querySelector("[data-owner-slide-label]").textContent.trim(),
+          decline: getComputedStyle(document.querySelector("[data-owner-decline]")).display !== "none",
+          landed: [...document.querySelectorAll("[data-owner-note]")].filter((n) => n.getBoundingClientRect().height > 1 && getComputedStyle(n).visibility !== "hidden").length,
+          rail: [...document.querySelectorAll("[data-rail-fill]")].map((e) => e.style.transform),
+          money: getComputedStyle(document.querySelector("[data-beat-money]")).opacity,
+          stake: stake?.textContent.trim(),
+          raf: window.__raf,
+        };
+      });
+    const runChoice = async (choice) => {
+      const { ctx, page } = await open(browser, vp, eng, { reducedMotion: "reduce" }, SPY);
+      await page.waitForTimeout(1200);
+      const pre = await frame(page);
+      if (choice === "answer") await page.click("[data-owner-track]");
+      else await page.click("[data-owner-decline]");
+      await page.waitForTimeout(1000);
+      const post = await frame(page);
+      const cr = await credits(page, c0.name);
+      await ctx.close();
+      return { pre, post, cr };
+    };
+    const a = await runChoice("answer");
+    const d = await runChoice("decline");
+    const full = (r) => r.rail.every((x) => x === "scaleX(1)") && r.money === "1";
+    const preOk = (p) => p.t === "settled" && p.path === "ringing" && p.incoming && p.caller === X.customerName && p.answerLabel === X.slideToAnswer && p.decline && p.landed === 0 && p.stake === usd(X.ticket);
+    const ok =
+      preOk(a.pre) &&
+      preOk(d.pre) &&
+      a.post.t === "settled" &&
+      a.post.path === "answered" &&
+      a.post.second === "missed" &&
+      !a.post.incoming &&
+      a.post.landed === 3 &&
+      full(a.post) &&
+      a.post.raf === a.pre.raf &&
+      a.cr.booked?.includes(c1.name) &&
+      a.cr.stamps.length === 1 &&
+      a.cr.stamps[0].row === c1.name &&
+      a.cr.firstHits.length === 0 &&
+      d.post.t === "settled" &&
+      d.post.path === "missed" &&
+      !d.post.incoming &&
+      d.post.landed === 3 &&
+      full(d.post) &&
+      d.post.raf === d.pre.raf &&
+      d.cr.booked?.includes(c0.name) &&
+      d.cr.stamps.length === 1 &&
+      d.cr.stamps[0].row === c0.name;
+    const pre = (p) => `t ${p.t}, ${p.path}, still incoming ${p.incoming} (${p.caller}), Answer ${JSON.stringify(p.answerLabel)}, Decline ${p.decline}, landed ${p.landed}, stake ${p.stake}`;
+    const post = (p, cr) => `${p.path}/${p.second || "-"}, t ${p.t}, incoming ${p.incoming}, landed ${p.landed}, rail+money ${full(p)}, rAF after tap ${p.raf}, booked ${JSON.stringify(cr.booked?.slice(0, 40))}, stamp on ${cr.stamps.map((s) => s.row).join("/")}`;
+    return { ok, detail: `before: ${pre(a.pre)}; Answer -> ${post(a.post, a.cr)} (rAF before ${a.pre.raf}); Decline -> ${post(d.post, d.cr)}` };
   });
 
   /* ---- 229: the story cannot be stranded. (a) Turning sound on after an
