@@ -10,7 +10,7 @@
  *   demo=1  demo mode — also on whenever biz is empty
  *   ref, lead  pass-through only: kept to a URL-safe alphabet, never shown
  */
-import { COPY, GO_SCHEDULE, JOB_GLYPH, PRESETS, resolveName, type Preset } from "@/lib/client.config";
+import { GO_COPY, GO_SCHEDULE, JOB_GLYPH, PRESETS, resolveName, type Preset } from "@/lib/client.config";
 import { fillN, hoursLine, typicalReply } from "@/lib/go";
 
 export type GoPresetId = "salon" | "home" | "dental" | "other";
@@ -58,7 +58,7 @@ export function resolveGoParams(sp: SP): GoParams {
     salon and dental, nothing for "other" — "Something else" names a tab,
     not a business. */
 export function tradeLabel(p: GoParams): string {
-  if (p.trade) return COPY.tradeLabels[p.trade];
+  if (p.trade) return GO_COPY.tradeLabels[p.trade];
   if (p.presetId === "other") return "";
   return p.preset.label;
 }
@@ -68,7 +68,7 @@ export function tradeLabel(p: GoParams): string {
     every glyph on its job. An unmapped job gets no glyph (gate 223 red). */
 export type GoJob = { label: string; glyph: string };
 
-export function jobSet(p: GoParams): keyof typeof COPY.jobs {
+export function jobSet(p: GoParams): keyof typeof GO_COPY.jobs {
   if (p.trade) return p.trade;
   /* home always resolves a trade; the fallback only satisfies the type. */
   return p.presetId === "home" ? "plumbing" : p.presetId;
@@ -76,7 +76,7 @@ export function jobSet(p: GoParams): keyof typeof COPY.jobs {
 
 export function jobsFor(p: GoParams): GoJob[] {
   const set = jobSet(p);
-  return COPY.jobs[set].map((label) => ({ label, glyph: JOB_GLYPH[label] ?? "" }));
+  return GO_COPY.jobs[set].map((label) => ({ label, glyph: JOB_GLYPH[label] ?? "" }));
 }
 
 /** change 45.1: this door's schedule — the shared starts plus the preset's
@@ -91,10 +91,10 @@ export function proofFor(p: GoParams) {
   if (!p.demo) return null;
   const reply = typicalReply(p.preset.thread);
   return {
-    radius: fillN(COPY.go.proofRadius, p.preset.radius),
-    hoursLabel: COPY.go.proofHours,
+    radius: fillN(GO_COPY.go.proofRadius, p.preset.radius),
+    hoursLabel: GO_COPY.go.proofHours,
     hours: hoursLine(scheduleFor(p)),
-    reply: reply == null ? null : fillN(COPY.go.proofReply, reply),
+    reply: reply == null ? null : fillN(GO_COPY.go.proofReply, reply),
     replyMinutes: reply,
   };
 }
@@ -104,7 +104,7 @@ export function proofFor(p: GoParams) {
     top of it. */
 export function sampleFor(p: GoParams): { name: string; job: string } | null {
   if (!p.demo) return null;
-  return { name: p.preset.customerName, job: COPY.jobs[jobSet(p)][0] };
+  return { name: p.preset.customerName, job: GO_COPY.jobs[jobSet(p)][0] };
 }
 
 /** The OG route's query, rebuilt from the RESOLVED values — never the raw

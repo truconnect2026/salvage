@@ -94,6 +94,17 @@ body {
 :root {
   --caret-band: 48px;
 }
+/* change 48: sections 2-4 are not rendered until they near the viewport —
+   the browser skips their style, layout and paint (half of the page's first
+   layout, before anything could paint). Every section is a fixed-height,
+   overflow-hidden box already, so the containment this implies changes
+   nothing that can be seen; the intrinsic size is the section's own. */
+[data-section="save"],
+[data-section="yours"],
+[data-section="math"] {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 100svh;
+}
 [data-section] {
   position: relative;
   height: 100vh;

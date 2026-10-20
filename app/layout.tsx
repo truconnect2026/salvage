@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { Analytics } from "@vercel/analytics/next";
+import IdleAnalytics from "@/components/IdleAnalytics";
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Newsreader } from "next/font/google";
 import { COPY, META, SITE } from "@/lib/client.config";
@@ -40,13 +40,18 @@ function fontPreloads(): string[] {
    static instances. preload: true marks ONLY the two above-the-fold faces
    (caption italic + mono — the folio mark and the t=0 caption are the only
    web-font text in section 1) in the font manifest the layout reads. */
+/* change 48: ONE preload — the display face (Newsreader 500). It is the
+   LCP element's face on /go (the business name) and the only face a first
+   paint waits on there; on / the LCP element is the phone's system-font
+   clock, so every other face is fetched on use and never competes with the
+   first paint for bandwidth. */
 const newsreader = Newsreader({
   variable: "--font-newsreader",
   subsets: ["latin"],
   weight: "500",
   style: "normal",
   display: "swap",
-  preload: false,
+  preload: true,
 });
 
 const newsreaderItalic = Newsreader({
@@ -55,7 +60,7 @@ const newsreaderItalic = Newsreader({
   weight: "400",
   style: "italic",
   display: "swap",
-  preload: true,
+  preload: false,
 });
 
 const plexSans = IBM_Plex_Sans({
@@ -71,7 +76,7 @@ const plexMono = IBM_Plex_Mono({
   subsets: ["latin"],
   weight: "400",
   display: "swap",
-  preload: true,
+  preload: false,
 });
 
 /* change 21 (E): every absolute URL — og:url, og:image — resolves under
@@ -133,7 +138,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             {COPY.rotate.folio}
           </p>
         </div>
-        <Analytics />
+        <IdleAnalytics />
       </body>
     </html>
   );

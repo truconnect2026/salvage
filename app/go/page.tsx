@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 
 import FitName from "@/app/go/FitName";
 import GoCard, { type GoCopy } from "@/app/go/GoCard";
-import { COPY } from "@/lib/client.config";
+import { COPY, GO_COPY } from "@/lib/client.config";
 import { isInApp, isIOS, prettyPhone, telNumber } from "@/lib/go";
 import { jobsFor, ogQuery, proofFor, resolveGoParams, sampleFor, scheduleFor, tradeLabel } from "@/lib/go-params";
 
@@ -27,7 +27,7 @@ type SP = Promise<{ [key: string]: string | string[] | undefined }>;
 export async function generateMetadata({ searchParams }: { searchParams: SP }): Promise<Metadata> {
   const p = resolveGoParams(await searchParams);
   const trade = tradeLabel(p);
-  const description = trade ? `${trade} · ${COPY.go.book}` : COPY.go.book;
+  const description = trade ? `${trade} · ${GO_COPY.go.book}` : GO_COPY.go.book;
   const q = ogQuery(p);
   const image = { url: `/go/og?${q}`, width: 1200, height: 630, alt: p.biz };
   return {
@@ -62,9 +62,9 @@ export default async function GoPage({ searchParams }: { searchParams: SP }) {
 
   /* Demo mode and live mode ring the same lines today: the URL carries no
      business number. Demo mode adds the folio note and the owner's side. */
-  const tel = COPY.goTel;
+  const tel = GO_COPY.goTel;
   const copy: GoCopy = {
-    ...COPY.go,
+    ...GO_COPY.go,
     recoveredLabel: COPY.ledger.recoveredLabel,
     mark: COPY.productName.charAt(0),
     notify: COPY.notify,

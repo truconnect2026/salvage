@@ -428,3 +428,70 @@ the answered one. Reduced motion keeps change 12's rule that Replay is hidden
 (pure CSS); the section-4 loop button resets the still call. The section-2
 desktop phone and the section-3 phones still show the preset's stored example
 thread, which names no caller.
+
+## Change 48 — performance (stopped at the time box, for Andy's veto)
+
+What a phone pays on the first load of `/`, cut without a visible change.
+New gates 232 (first-load JS budgets) and 233 (Lighthouse mobile, median of
+3), in `scripts/gate-perf.mjs`.
+
+| Means | What was done |
+|-------|---------------|
+| Split the engine | Sections 2-4 live in `components/DemoSections.tsx`, their own chunk. The server still renders all four sections inline (byte-identical HTML, the no-JS floor intact); the client hydrates only section 1 and swaps the live sections in on the first scroll or input. The owner's phone moved to `PhoneOwner.tsx` / `PhoneParts.tsx` so the first load carries none of the thread phones. Section 3's own behaviour (trade-glyph draw, keyboard accommodation) moved into its section. |
+| Lazy audio | The four synthesized voices are `lib/audio.ts`, loaded the first time sound is on; the AudioContext is still created inside the tap (iOS). |
+| Fonts | next/font, latin subset, `display: swap`; one preload — Newsreader 500, the display face. |
+| Critical CSS | `experimental.inlineCss` is OFF: inlining put the whole 14 KB sheet into every HTML response and cost 4 points on both routes; the external sheet is cached after the first view. |
+| Analytics after idle | `components/IdleAnalytics.tsx` imports `@vercel/analytics` after load + idle; `lib/track.ts` queues events in the official `window.va` queue until then. |
+| Plex weights | Already minimal before 48 — Plex Sans 400/500 (one variable file), Plex Mono 400; nothing to strip. |
+| Duplicate chunks | Framer is not a dependency; React and react-dom ship once, in the framework chunks. |
+| Engine | Write-on-change painters (no style write without a change); the section-2 row height measured lazily; dead customer-phone painters removed. |
+| Copy | `/go`'s strings moved, verbatim, from `COPY` to a sibling `GO_COPY` export in the same file (a client component that reads `COPY` ships all of it). No string changed. |
+
+Results (this machine, benchmarkIndex 800-1300, Lighthouse CPU x1.7 —
+calibrated; see gate-perf.mjs): `/` first-load JS 149.6 KB gz (158.7 with the engine eager),
+Lighthouse perf median 94 (93/94/95), a11y 100, TBT 83 ms; `/go` 142.1 KB gz,
+perf median 97, a11y 100.
+
+Andy's veto (change 48): `/go`'s JS budget is 145 KB (the App Router's
+framework floor alone is 130.9 KB gz); `/`'s Lighthouse floor is 94; the
+lighter phone mockup folds into 43b; `GO_COPY` approved. Gates 232/233 carry
+those numbers.
+
+Found by the full suite, fixed before commit (both are real-device bugs the
+deferral introduced):
+
+- A name typed into section 3 before the live sections swapped in was lost
+  with the server markup it was typed into. The swap now carries the typed
+  value and the focused control across, read at the swap (a tap's
+  pointerdown lands before its focus), and `focusin` is a trigger too.
+- A section's entry (the section-2 headline wipe, the ink rows) could latch
+  on the server markup and then be replaced by nodes already at its end —
+  the wipe never played. Sections 2-4 now latch their entry only on the live
+  nodes (gate 154 caught it).
+- The owner phone's first touch (the slide-to-answer) also triggered the
+  swap, whose commit could land mid-swipe — WebKit at 1440 caught one
+  in-flight spring frame (gate 226). A touch or focus that starts in
+  section 1 no longer triggers it; the first scroll, wheel or key does.
+- With that, the answered path's credit flip (React state sections 2-4
+  render) could not re-render the server markup: the ledger kept stamping
+  the first caller until a scroll (gates 230/231). The credit flip now
+  brings the live sections in itself — 1.8s after the answer, so never
+  mid-swipe.
+
+Lighthouse calibration, for the record: gate 233 runs x1.7, the multiplier
+the veto's floors were set on. Re-derived strictly per run from the host's
+benchmarkIndex (/ 500; `PERF_CPU=auto`), `/` reads 93 and `/go` 93-96 — the
+host swings 750-1360 between runs, and the scores with it. x1.7 at the
+final run: `/` 93/95/94 (median 94), `/go` 96/96/97.
+
+Gates amended for the deferral: the hydrated-track waits (13 sites), the
+gold census (82) and the type tier (164) give the page its first input or
+go where a visitor would; 53/78 type in section 3 after scrolling there;
+147 holds the one display-face preload.
+
+Proof: the full engine imported eagerly (E1) -> gate 232 red, `/` 158.7 KB.
+Sheets re-shot into `review/change-48/`; pixel diff against the committed
+change-43a.1 sheets: worst 0.493% (06-booked: notes mid-slide, capture timing).
+/go against the committed change-45 sheets: 13 of 19 within 0.5%; the six over
+(01-05, 08; worst 10.9%) carry 45.1's fold banner, which those sheets predate —
+a clean pre-48 /go baseline needs a build of 842aa6f, not done in the time box.

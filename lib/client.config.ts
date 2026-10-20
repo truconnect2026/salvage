@@ -237,10 +237,17 @@ export const COPY = {
       wordmark: "Davy Jones' Locker",
     },
   },
+};
 
+/* change 48: the front door's copy (/go), moved out of COPY verbatim — not
+   a word changed — so the demo's first load never ships it (a client
+   component that reads COPY carries the whole object). Still the same human
+   veto as everything above. */
+export const GO_COPY = {
   // change 42 (APPROVED, verbatim): the /go customer page. Appended LAST in
   // COPY so the gates' first-match config reads (closed:, call:, close:)
-  // keep resolving to the demo's own strings.
+  // keep resolving to the demo's own strings. change 48: and still last in
+  // the file, below COPY, for the same reason.
   go: {
     open: "Open now", closed: "Closed now. You can still book.",
     book: "Book a time", nextLabel: "Next available",
@@ -310,7 +317,7 @@ export const GO_SCHEDULE = {
 };
 
 /* change 45.1: each job's hand-drawn glyph (app/go/glyphs.tsx), keyed by
-   the approved job STRING — reordering COPY.jobs can never mismatch a
+   the approved job STRING — reordering GO_COPY.jobs can never mismatch a
    glyph, and renaming a job leaves it without one, which gate 223 holds
    red until this map follows. */
 export const JOB_GLYPH: Record<string, string> = {

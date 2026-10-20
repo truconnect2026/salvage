@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
      77 -> 72 while observed LCP didn't move). change 25 restores it and
      keeps change 24's other lever (presets as data). */
   experimental: {
-    inlineCss: true,
+    inlineCss: false,
   },
 };
 

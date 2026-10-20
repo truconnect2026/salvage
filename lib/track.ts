@@ -1,6 +1,5 @@
 "use client";
 
-import { track as vaTrack } from "@vercel/analytics";
 
 /**
  * change 21 (D): the one analytics seam. Every event goes through here so
@@ -14,11 +13,24 @@ declare global {
   }
 }
 
+/* change 48: the analytics script loads after idle (IdleAnalytics). Until it
+   does, events wait in the queue the official snippet itself creates — the
+   script drains window.vaq when it lands — instead of being dropped. */
+function ensureQueue() {
+  if (typeof window === "undefined" || window.va) return;
+  window.va = (event, properties) => {
+    (window.vaq ??= []).push([event, properties]);
+  };
+}
+
 export function track(name: string, data?: Record<string, string | number | boolean>) {
   try {
     window.__track?.(name, data);
   } catch {}
+  ensureQueue();
+  /* What @vercel/analytics' track() does for a flat payload — without
+     importing it into the first load (change 48). */
   try {
-    vaTrack(name, data);
+    window.va?.("event", data ? { name, data } : { name });
   } catch {}
 }

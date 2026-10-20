@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { ImageResponse } from "next/og";
 
-import { COPY } from "@/lib/client.config";
+import { GO_COPY } from "@/lib/client.config";
 import { resolveGoParams, tradeLabel } from "@/lib/go-params";
 
 /*
@@ -115,7 +115,7 @@ export async function GET(req: Request) {
               <path d="M3.5 9.5h17M8 3v4M16 3v4" />
               <rect x="13.5" y="13" width="3.5" height="3.5" fill={accentInk} stroke="none" />
             </svg>
-            {COPY.go.book}
+            {GO_COPY.go.book}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 22, color: "#8AA0B4", paddingBottom: 6 }}>
             <div
@@ -134,7 +134,7 @@ export async function GET(req: Request) {
             >
               S
             </div>
-            {COPY.go.poweredBy}
+            {GO_COPY.go.poweredBy}
           </div>
         </div>
       </div>

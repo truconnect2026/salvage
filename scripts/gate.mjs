@@ -428,6 +428,23 @@ retired(36, "change 19 gave every caught row an initialed name ('Danielle R. · 
   );
 }
 
+/* ---------- 232-233 (change 48): performance, in its own module — FIRST of
+   the browser work: Lighthouse needs a quiet host, and the 45 minutes of
+   browser blocks below leave this one hot (gate 233 read 93 there at
+   benchmarkIndex ~800, 94 on an idle host). */
+
+{
+  const PERF_GATES = [232, 233];
+  try {
+    const { runPerfGates } = await import("./gate-perf.mjs");
+    await runPerfGates({ base, check });
+  } catch (err) {
+    for (const n of PERF_GATES) {
+      if (!results.some((r) => r.n === n)) check(n, "perf gate", false, `not reached — ${String(err.message).slice(0, 160)}`);
+    }
+  }
+}
+
 /* ---------- 12-20, 22-24, 26, 28-32: the live DOM ------------------------- */
 
 let chromium = null;
@@ -561,6 +578,33 @@ async function goSection(page, idx) {
     pager.scrollTop = i * pager.clientHeight;
   }, idx);
   await page.waitForTimeout(150);
+  /* change 48: the scroll makes sections 2-4 live; a gate that lands on one
+     reads the live nodes, so it waits for the swap. */
+  if (idx > 0) await sectionsLive(page);
+}
+
+/* change 48: sections 2-4 hydrate on the visitor's first scroll or input.
+   A gate that inspects them without scrolling there gives the page that
+   first input — a Shift press, which nothing on the page binds. */
+async function sectionsLive(page) {
+  const on = await page
+    .waitForFunction(() => document.querySelector("[data-demo]")?.dataset.sections === "on", null, { timeout: 1500 })
+    .then(() => true)
+    .catch(() => false);
+  /* A scroll before hydration reaches no listener; a key press then does. */
+  if (!on) await liveSections(page);
+}
+async function liveSections(page) {
+  /* The press can land before hydration attaches the page's listener (a
+     gate that loads on domcontentloaded) — press again until the swap is in. */
+  for (let i = 0; i < 30; i++) {
+    await page.keyboard.press("Shift");
+    const on = await page
+      .waitForFunction(() => document.querySelector("[data-demo]")?.dataset.sections === "on", null, { timeout: 500 })
+      .then(() => true)
+      .catch(() => false);
+    if (on) return;
+  }
 }
 
 async function snapTrack(page, idx) {
@@ -839,6 +883,9 @@ if (!chromium) {
     const page = await ctx.newPage();
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
+    /* Amended (change 48): the census covers the whole page, so it counts the
+       LIVE sections — all four track panels hydrate on the first input. */
+    await liveSections(page);
     await waitT(page, 6.0 + INTRO);
 
     const tokens = await page.evaluate(() => {
@@ -1776,6 +1823,11 @@ if (!chromium) {
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
     await waitHydrated(page);
+    /* Amended (change 48): the field lives in section 3, which a visitor
+       reaches by scrolling — and the scroll makes sections 2-4 live. The
+       300ms claim is the live field's; a name typed into the server markup
+       before the swap is carried over (slower — it waits on the chunk). */
+    await goSection(page, 2);
 
     await page.fill("[data-name-input]", "Test Salon");
     await page.waitForTimeout(300);
@@ -2483,6 +2535,7 @@ if (!chromium) {
        slow host and recorded zero calls. The other three presets hydrate in
        from the JSON script, so a full panel set IS the hydration signal,
        and it works under reduced motion where data-t never advances. */
+    await liveSections(page);
     await page.waitForFunction(() => document.querySelectorAll("[data-panel]").length === 4);
     await page.waitForTimeout(300);
     const g = await page.evaluate(() => {
@@ -2519,6 +2572,7 @@ if (!chromium) {
     await page.evaluate(() => document.fonts.ready);
     /* change 24: the non-default panels hydrate from the JSON script tag —
        wait for the filled track before counting anything per panel. */
+    await liveSections(page);
     await page.waitForFunction((want) => document.querySelectorAll("[data-panel]").length >= want, presets.length, {
       timeout: 15000,
     });
@@ -4536,6 +4590,7 @@ if (!chromium) {
     await pageM.goto(base, { waitUntil: "domcontentloaded" });
     await pageM.evaluate(() => document.fonts.ready);
     await waitHydrated(pageM);
+    await liveSections(pageM);
     await pageM.waitForFunction(() => document.querySelectorAll("[data-panel]").length === 4, null, { timeout: 10000 }).catch(() => {});
     /* change 24: the hydrated track — four panels once the JSON fills in. */
     const hydratedPanels = await pageM.evaluate(() => document.querySelectorAll("[data-panel]").length);
@@ -5202,18 +5257,31 @@ if (!chromium) {
     /* Amended (change 23, lever 2): AT MOST two preloads, and they are the
        two above-the-fold faces — a Newsreader face (the t=0 caption) and
        the Plex Mono face (the folio mark). Everything else loads on
-       demand. */
+       demand.
+       Amended (change 48, Andy's means): ONE preload — the display face,
+       Newsreader 500 upright. /go's LCP is set in it; every other face is
+       fetched on use and never competes with the first paint. */
+    const displayFace = (() => {
+      const urls = new Set();
+      for (const { css, base: cssBase } of cssSources) {
+        for (const m of css.matchAll(/@font-face\s*\{([^}]+)\}/g)) {
+          const body = m[1];
+          if (!/font-family:\s*'?Newsreader'?\s*;/i.test(body) || !/font-style:\s*normal/i.test(body) || !/font-weight:\s*500/.test(body)) continue;
+          for (const u of body.matchAll(/url\(['"]?([^)'"]+\.woff2)['"]?\)/g)) urls.add(new URL(u[1], "http://x" + cssBase).pathname);
+        }
+      }
+      return [...urls];
+    })();
     check(
       147,
-      'head carries <= 2 as="font" crossorigin preloads: one Newsreader face, one IBM Plex Mono face — the above-the-fold pair',
-      preloads.length > 0 &&
-        preloads.length <= 2 &&
+      'head carries exactly ONE as="font" crossorigin preload — the display face, Newsreader 500 upright (change 48)',
+      preloads.length === 1 &&
         preloads.every((p) => p.crossorigin) &&
-        hit(display).length === 1 &&
-        hit(mono).length === 1 &&
+        hit(displayFace).length === 1 &&
+        hit(mono).length === 0 &&
         strays.length === 0,
-      `${preloads.length} font preload(s) (need <= 2), all crossorigin ${preloads.every((p) => p.crossorigin)}; ` +
-        `Newsreader hits ${hit(display).length} (need 1), mono hits ${hit(mono).length} (need 1); ` +
+      `${preloads.length} font preload(s) (need 1), all crossorigin ${preloads.every((p) => p.crossorigin)}; ` +
+        `Newsreader 500 hits ${hit(displayFace).length} (need 1), mono hits ${hit(mono).length} (need 0); ` +
         `strays ${JSON.stringify(strays.map((p) => p.href.slice(-30)))}`,
     );
 
@@ -5686,8 +5754,21 @@ if (!chromium) {
         mathFS: fs(math),
         tileFS: tiles.map((t) => fs(t)),
         h1Lines: lineCount(h1),
-        mathLines: lineCount(math),
       };
+    });
+    /* change 48: section 4 sits past the browser's render margin at load
+       (content-visibility), so its line boxes are measured where a visitor
+       reads them — with section 4 on screen. */
+    await goSection(page, 3);
+    await page.waitForTimeout(300);
+    g164.mathLines = await page.evaluate(() => {
+      const el = document.querySelector("[data-math]");
+      const clone = el.cloneNode(true);
+      clone.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;max-width:none;width:auto";
+      el.parentElement.appendChild(clone);
+      const one = clone.getBoundingClientRect().height;
+      clone.remove();
+      return Math.round(el.getBoundingClientRect().height / one);
     });
     await ctx.close();
     check(
@@ -6724,6 +6805,7 @@ if (!chromium) {
       /* The other three presets hydrate in from the JSON script (change 24),
          so wait for the full strip. waitHydrated is no use here: under
          reduced motion data-t stays "settled" and never advances. */
+      await liveSections(pg);
       await pg.waitForFunction(() => document.querySelectorAll("[data-tab]").length === 4);
       reads191.push({
         w,
@@ -6769,6 +6851,7 @@ if (!chromium) {
       const pg = await c.newPage();
       await pg.goto(`${base}/?biz=${biz}`, { waitUntil: "domcontentloaded" });
       await pg.evaluate(() => document.fonts.ready);
+      await liveSections(pg);
       await pg.waitForFunction(() => document.querySelectorAll("[data-panel]").length === 4);
       await goSection(pg, 2);
       await pg.waitForTimeout(700);
@@ -6964,6 +7047,7 @@ if (!chromium) {
       const pg = await c.newPage();
       await pg.goto(base, { waitUntil: "domcontentloaded" });
       await pg.evaluate(() => document.fonts.ready);
+      await liveSections(pg);
       await pg.waitForFunction(() => document.querySelectorAll("[data-panel]").length === 4);
       const rows = await pg.evaluate((src) => {
         const initials = new Function("name", src);
@@ -7032,6 +7116,7 @@ if (!chromium) {
       const pg = await c.newPage();
       await pg.goto(base + "/?biz=" + biz, { waitUntil: "domcontentloaded" });
       await pg.evaluate(() => document.fonts.ready);
+      await liveSections(pg);
       await pg.waitForFunction(() => document.querySelectorAll("[data-panel]").length === 4);
       await goSection(pg, 2);
       await pg.waitForTimeout(700);
@@ -7162,6 +7247,7 @@ if (!chromium) {
       const pg = await c.newPage();
       await pg.goto(base + "/?biz=" + biz, { waitUntil: "domcontentloaded" });
       await pg.evaluate(() => document.fonts.ready);
+      await liveSections(pg);
       await pg.waitForFunction(() => document.querySelectorAll("[data-panel]").length === 4);
       await goSection(pg, 2);
       await pg.waitForTimeout(700);
@@ -7231,6 +7317,7 @@ if (!chromium) {
       const pg = await c.newPage();
       await pg.goto(base, { waitUntil: "domcontentloaded" });
       await pg.evaluate(() => document.fonts.ready);
+      await liveSections(pg);
       await pg.waitForFunction(() => document.querySelectorAll("[data-panel]").length === 4);
       reads199.push({
         vp: vp.w + "x" + vp.h,
@@ -7391,6 +7478,7 @@ if (!chromium) {
       const pg = await c.newPage();
       await pg.goto(base + "/?biz=" + biz, { waitUntil: "domcontentloaded" });
       await pg.evaluate(() => document.fonts.ready);
+      await liveSections(pg);
       await pg.waitForFunction(() => document.querySelectorAll("[data-panel]").length === 4);
       await goSection(pg, 2);
       await pg.waitForTimeout(800);
@@ -7508,6 +7596,7 @@ if (!chromium) {
       const pg = await c.newPage();
       await pg.goto(base + "/?biz=" + biz, { waitUntil: "domcontentloaded" });
       await pg.evaluate(() => document.fonts.ready);
+      await liveSections(pg);
       await pg.waitForFunction(() => document.querySelectorAll("[data-panel]").length === 4);
       await goSection(pg, 2);
       await pg.waitForTimeout(800);
@@ -7596,7 +7685,10 @@ if (!chromium) {
       if (o.init) await pg.addInitScript(o.init, o.initArg);
       await pg.goto(base + (o.path ?? ""), { waitUntil: "domcontentloaded" });
       await pg.evaluate(() => document.fonts.ready);
-      if (o.panels) await pg.waitForFunction(() => document.querySelectorAll("[data-panel]").length === 4);
+      if (o.panels) {
+        await liveSections(pg);
+        await pg.waitForFunction(() => document.querySelectorAll("[data-panel]").length === 4);
+      }
       const out = await fn(pg);
       await c.close();
       return out;
