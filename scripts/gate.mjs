@@ -163,6 +163,11 @@ async function getPage(path) {
     html,
     text: decode(html),
     bubbles: (html.match(/data-bubble="/g) ?? []).length,
+    /* change 43a: section 1's device is the OWNER's phone — its SSR floor
+       is the settled lock screen (three notes) — and the thread renders
+       settled on the section-3 phone, one static instance. */
+    threadBubbles: (html.slice(Math.max(0, html.indexOf('data-section="yours"'))).match(/data-s-bubble="/g) ?? []).length,
+    ownerNotes: (html.match(/data-owner-note="/g) ?? []).length,
     biz: elementsIn(html, "data-biz-name"),
   };
 }
@@ -181,7 +186,7 @@ const home = await getPage("");
 if (home.status !== 200) throw new Error(`gate setup: GET ${base}/ returned ${home.status}`);
 
 const observed = {
-  bubbles: home.bubbles,
+  bubbles: home.threadBubbles,
   ledger: elementsIn(home.html, "data-ledger-recovered"),
   calls: elementsIn(home.html, "data-calls-caught"),
   math: elementsIn(home.html, "data-math"),
@@ -189,9 +194,12 @@ const observed = {
   anchors: [...home.html.matchAll(/<a\b[^>]*\shref="([^"]*)"/gi)].map((m) => m[1]),
 };
 
+/* Amended (change 43a): the live thread left section 1 with the customer's
+   phone; the thread is counted on the section-3 phone, which renders it
+   settled. */
 check(
   1,
-  "thread bubble count",
+  "thread bubble count (the section-3 phone's settled thread)",
   observed.bubbles > 0 && observed.bubbles === expected.bubbles,
   `rendered ${observed.bubbles}, config ${expected.bubbles} (must also be > 0)`,
 );
@@ -258,11 +266,13 @@ check(
 
 /* ---------- 8-11, 21: SSR is the causal source of the preset ------------- */
 
+/* Amended (change 43a): the no-JS floor is the owner's settled lock screen
+   — all three notes — plus the settled thread on the section-3 phone. */
 check(
   8,
-  "SSR no-JS floor on /",
-  home.bubbles > 0 && home.bubbles === expected.bubbles && home.biz[0] === expected.bizName,
-  `${home.bubbles} bubbles (need ${expected.bubbles}, > 0), header ${JSON.stringify(home.biz[0] ?? null)}`,
+  "SSR no-JS floor on /: the owner's lock screen holds all three notes; the section-3 thread is whole",
+  home.ownerNotes === 3 && home.threadBubbles > 0 && home.threadBubbles === expected.bubbles && home.biz[0] === expected.bizName,
+  `${home.ownerNotes} owner note(s) (need 3), ${home.threadBubbles} thread bubbles (need ${expected.bubbles}, > 0), header ${JSON.stringify(home.biz[0] ?? null)}`,
 );
 
 const homePreset = byId("home");
@@ -273,11 +283,12 @@ check(
   9,
   "SSR /?biz=home",
   ssrHome.status === 200 &&
-    ssrHome.bubbles === homePreset.bubbles &&
-    ssrHome.bubbles > 0 &&
+    ssrHome.threadBubbles === homePreset.bubbles &&
+    ssrHome.threadBubbles > 0 &&
+    ssrHome.ownerNotes === 3 &&
     ssrHome.biz[0] === homePreset.bizName &&
     missHome.length === 0,
-  `HTTP ${ssrHome.status}, ${ssrHome.bubbles} bubbles (need ${homePreset.bubbles}), header ${JSON.stringify(ssrHome.biz[0] ?? null)}, missing ${JSON.stringify(missHome)}`,
+  `HTTP ${ssrHome.status}, ${ssrHome.threadBubbles} thread bubbles (need ${homePreset.bubbles}), ${ssrHome.ownerNotes} owner notes (need 3), header ${JSON.stringify(ssrHome.biz[0] ?? null)}, missing ${JSON.stringify(missHome)}`,
 );
 
 const dentalPreset = byId("dental");
@@ -288,23 +299,26 @@ check(
   10,
   "SSR /?biz=dental",
   ssrDental.status === 200 &&
-    ssrDental.bubbles === dentalPreset.bubbles &&
-    ssrDental.bubbles > 0 &&
+    ssrDental.threadBubbles === dentalPreset.bubbles &&
+    ssrDental.threadBubbles > 0 &&
+    ssrDental.ownerNotes === 3 &&
     ssrDental.biz[0] === dentalPreset.bizName &&
     missDental.length === 0,
-  `HTTP ${ssrDental.status}, ${ssrDental.bubbles} bubbles (need ${dentalPreset.bubbles}), header ${JSON.stringify(ssrDental.biz[0] ?? null)}, missing ${JSON.stringify(missDental)}`,
+  `HTTP ${ssrDental.status}, ${ssrDental.threadBubbles} thread bubbles (need ${dentalPreset.bubbles}), ${ssrDental.ownerNotes} owner notes (need 3), header ${JSON.stringify(ssrDental.biz[0] ?? null)}, missing ${JSON.stringify(missDental)}`,
 );
 
 const ssrJunk = await getPage("/?biz=garbage");
 check(
   11,
   "unknown ?biz falls back to default, HTTP 200",
+  /* Amended (change 43a): the section-3 thread and the owner's three notes. */
   ssrJunk.status === 200 &&
-    ssrJunk.bubbles === expected.bubbles &&
-    ssrJunk.bubbles > 0 &&
+    ssrJunk.threadBubbles === expected.bubbles &&
+    ssrJunk.threadBubbles > 0 &&
+    ssrJunk.ownerNotes === 3 &&
     ssrJunk.biz[0] === expected.bizName &&
     ssrJunk.text.includes(usd(expected.recovered)),
-  `HTTP ${ssrJunk.status}, ${ssrJunk.bubbles} bubbles (need ${expected.bubbles}), header ${JSON.stringify(ssrJunk.biz[0] ?? null)}, expected ${JSON.stringify(expected.bizName)}`,
+  `HTTP ${ssrJunk.status}, ${ssrJunk.threadBubbles} thread bubbles (need ${expected.bubbles}), ${ssrJunk.ownerNotes} owner notes (need 3), header ${JSON.stringify(ssrJunk.biz[0] ?? null)}, expected ${JSON.stringify(expected.bizName)}`,
 );
 
 /* Change 11 retired four call-card gates: the missed-call card carried the
@@ -468,7 +482,15 @@ const sampleFn = (EFF) => {
   const cardr = card ? card.getBoundingClientRect() : null;
   const stackr = stack ? stack.getBoundingClientRect() : null;
 
+  /* change 43a: the owner's lock-screen notes that have LANDED (a note
+     that has not is height 0 and visibility hidden). */
+  const notes = [...document.querySelectorAll("[data-owner-note]")]
+    .filter((n) => vis(n) > 0.5 && n.getBoundingClientRect().height > 1)
+    /* VISUAL order, top to bottom — newest must be on top on screen. */
+    .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
   return {
+    notes: notes.length,
+    noteKinds: notes.map((n) => n.getAttribute("data-owner-note")),
     panelRecovered: panelRecovered ? panelRecovered.textContent.trim() : null,
     caughtVisible: caughtRows.filter((r) => r && vis(r) > 0.5).length,
     caughtRow0Number: caughtRows[0] ? caughtRows[0].textContent.trim() : null,
@@ -602,6 +624,13 @@ if (!chromium) {
     await page.evaluate(() => document.fonts.ready);
 
     const snaps = {};
+    /* change 43a: the owner's notes, on the story clock (the phone rings
+       out: the miss at 3.6, the text at 4.4, the booking at 9.6). */
+    const early12 = {};
+    for (const T of [3.0, 3.9, 4.8]) {
+      await waitT(page, T);
+      early12[T] = await page.evaluate(sampleFn, EFF);
+    }
     /* Samples at 5.5, not the spec's literal 5.0: the recovered roll is
        LEDGER_AT(4.6) + LEDGER_DUR(0.8) = settles at 5.4, so 5.0 would always
        read a mid-roll value regardless of correctness. 5.5 is unambiguously
@@ -614,18 +643,19 @@ if (!chromium) {
     const finalLedger = usd(expected.recovered);
     const finalLeak = usd(expected.lost);
 
+    /* Amended (change 43a): the bubble reveal left section 1 with the
+       customer's phone. What reveals on the clock now is the owner's lock
+       screen: nothing while it rings, Missed call on the miss, Text sent on
+       the text, Booked on the booking — newest on top. */
+    const kinds12 = (r) => JSON.stringify(r.noteKinds);
     check(
       12,
-      "bubble reveal follows the timeline",
-      snaps[0.3].total === expected.bubbles &&
-        snaps[0.3].total > 0 &&
-        snaps[0.3].visible === VISIBLE_AT[0.3] &&
-        snaps[2.5].visible === VISIBLE_AT[2.5] &&
-        snaps[6.0].visible === VISIBLE_AT[6.0] &&
-        snaps[6.0].delivered === true,
-      `${snaps[0.3].total} bubbles in DOM (need ${expected.bubbles}, > 0); visible ` +
-        `t=0.3 ${snaps[0.3].visible}/${VISIBLE_AT[0.3]}, t=2.5 ${snaps[2.5].visible}/${VISIBLE_AT[2.5]}, ` +
-        `t=6.0 ${snaps[6.0].visible}/${VISIBLE_AT[6.0]}, delivered ${snaps[6.0].delivered}`,
+      "owner notes reveal on the story clock: none at 3.0 (ringing), [missed] at 3.9, [text, missed] at 4.8, [booked, text, missed] once settled",
+      early12[3.0].notes === 0 &&
+        kinds12(early12[3.9]) === '["missed"]' &&
+        kinds12(early12[4.8]) === '["text","missed"]' &&
+        kinds12(snaps[5.5]) === '["booked","text","missed"]',
+      `t=3.0 ${kinds12(early12[3.0])}, t=3.9 ${kinds12(early12[3.9])}, t=4.8 ${kinds12(early12[4.8])}, t=${(5.5 + INTRO).toFixed(1)} ${kinds12(snaps[5.5])}`,
     );
 
     check(
@@ -707,9 +737,8 @@ if (!chromium) {
 
     check(
       17,
-      "reduced motion settles immediately",
-      r.visible === expected.bubbles &&
-        r.visible > 0 &&
+      "reduced motion settles immediately (amended change 43a: the owner's lock screen holds all three notes)",
+      r.notes === 3 &&
         r.ledger === usd(expected.recovered) &&
         r.leak === usd(expected.lost) &&
         r.panelRecovered === usd(expected.recovered) &&
@@ -717,7 +746,7 @@ if (!chromium) {
         r.caughtVisible === 3 &&
         r.replay === false &&
         r.share === true,
-      `visible ${r.visible}/${expected.bubbles}, ledger ${JSON.stringify(r.ledger)}, ` +
+      `owner notes ${r.notes}/3 ${JSON.stringify(r.noteKinds)}, ledger ${JSON.stringify(r.ledger)}, ` +
         `leak ${JSON.stringify(r.leak)}, panel recovered ${JSON.stringify(r.panelRecovered)}, ` +
         `caught rows visible ${r.caughtVisible}/3 (change 28: desktop shows 3), replay visible ${r.replay} (need false), ` +
         `share visible ${r.share} (need true)`,
@@ -882,6 +911,17 @@ if (!chromium) {
         ticketCount: tickets.length,
         pageGoldCount: pageGold.length,
         receiptGoldCount: [...document.querySelectorAll("[data-receipt], [data-receipt-m]")].filter(isGold).length,
+        /* Amended (change 43a): gold drawn as a BACKGROUND or a border is
+           gold too — the census used to read text colour only. */
+        bgGold: [...document.querySelectorAll("*")]
+          .filter((el) => {
+            const cs = getComputedStyle(el);
+            /* A border counts only where it is DRAWN — an unset border
+               colour is currentColor, so every gold TEXT element "has" one. */
+            const edge = (side) => parseFloat(cs[`border${side}Width`]) > 0 && cs[`border${side}Color`] === gold;
+            return cs.backgroundColor === gold || ["Top", "Right", "Bottom", "Left"].some(edge);
+          })
+          .map((el) => (el.hasAttribute("data-cta") ? "cta" : el.hasAttribute("data-rail-tick") ? "rail-tick" : el.tagName.toLowerCase() + "." + String(el.className).slice(0, 24))),
       };
     });
 
@@ -929,11 +969,17 @@ if (!chromium) {
         /* Amended (change 36, C1): the beat strip's figure is the FIFTH gold
            region — one element, beside "Booked", where the retired mobile
            receipt used to shout over the caption. */
-        tokens.pageGoldCount === tokens.heroGoldCount + tokens.bandGoldCount + tokens.yoursGoldCount + tokens.receiptGoldCount + 1,
+        tokens.pageGoldCount === tokens.heroGoldCount + tokens.bandGoldCount + tokens.yoursGoldCount + tokens.receiptGoldCount + 1 &&
+        /* Amended (change 43a): and every gold FILL is the CTA pill or the
+           rail's 2px money tick (the spec's "gold tick on the money beat"). */
+        tokens.bgGold.length > 0 &&
+        tokens.bgGold.every((x) => x === "cta" || x === "rail-tick") &&
+        tokens.bgGold.filter((x) => x === "rail-tick").length === 1,
       `hero panel: ${tokens.heroGoldCount} gold (need 1, on data-panel-recovered: ${tokens.heroGoldIsRecovered}); ` +
         `band: ${tokens.bandGoldCount} gold vs ${tokens.numeralCount} data-math-numeral (all gold: ${tokens.bandGoldIsNumerals}); ` +
         `preset track: ${tokens.yoursGoldCount} gold vs ${tokens.ticketCount} data-ticket (all gold: ${tokens.yoursGoldIsTickets}); ` +
-        `receipt: ${tokens.receiptGoldCount} gold (need 1); page-wide: ${tokens.pageGoldCount} gold total (must equal hero + band + track + receipt + the beat figure)`,
+        `receipt: ${tokens.receiptGoldCount} gold (need 1); page-wide: ${tokens.pageGoldCount} gold total (must equal hero + band + track + receipt + the beat figure); ` +
+        `gold fills ${JSON.stringify(tokens.bgGold)} (only the CTA pill and ONE rail tick)`,
     );
 
     /* 82 (change 13; census made preset-count-relative in change 19): one
@@ -1529,6 +1575,7 @@ if (!chromium) {
    * the call is ringing (thread and headline must not exist visually); at
    * 4.0 the miss has landed and the headline has landed with it. --- */
   await block("call-choreography", async () => {
+    const missedLabel43 = need(/missed:\s*"([^"]+)"/, "COPY.beats.missed");
     /* 49 runs at BOTH widths: the call-screen assertions are identical. The
        headline is static content in section 2 (change 12): it must exist,
        must NOT live inside section 1, and is visible from load. */
@@ -1545,24 +1592,25 @@ if (!chromium) {
       await waitT(page, 0.5);
       const early = await page.evaluate((EFF) => {
         const vis = eval(EFF);
-        const call = document.querySelector("[data-call]");
-        const status = document.querySelector("[data-call-status]");
-        const callBiz = document.querySelector("[data-call-biz]");
-        const endBtn = document.querySelector("[data-call-end]");
-        const bubbles = [...document.querySelectorAll("[data-bubble]")];
+        /* Amended (change 43a): the OWNER's incoming call. */
+        const call = document.querySelector("[data-owner-incoming]");
+        const caller = document.querySelector("[data-owner-caller]");
+        const callBiz = call?.querySelector("[data-biz-name]");
+        const decline = document.querySelector("[data-owner-decline]");
+        const knob = document.querySelector("[data-owner-knob]");
+        const notes = [...document.querySelectorAll("[data-owner-note]")];
         const headline = document.querySelector("[data-headline]");
         const callSection = document.querySelector('[data-section="call"]');
-        const callText = call ? call.textContent : "";
         return {
           t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
           callVisible: call ? vis(call) > 0.5 : false,
-          statusText: status ? status.textContent.trim() : null,
+          statusText: caller ? caller.textContent.trim() : null,
           callBizText: callBiz ? callBiz.textContent.trim() : null,
-          endVisible: endBtn ? vis(endBtn) > 0.5 : false,
-          hasDecline: callText.includes("Decline"),
-          hasAccept: callText.includes("Accept"),
-          visibleBubbles: bubbles.filter((b) => vis(b) > 0.5).length,
-          bubbleCount: bubbles.length,
+          endVisible: decline ? vis(decline) > 0.5 : false,
+          hasDecline: decline ? vis(decline) > 0.5 : false,
+          hasAccept: knob ? vis(knob) > 0.5 && knob.getAttribute("role") === "button" : false,
+          visibleBubbles: notes.filter((b) => vis(b) > 0.5 && b.getBoundingClientRect().height > 1).length,
+          bubbleCount: notes.length,
           headlinePresent: headline != null,
           headlineInCallSection: headline != null && callSection != null && callSection.contains(headline),
           headlineOpacity: headline ? vis(headline) : null,
@@ -1572,19 +1620,21 @@ if (!chromium) {
       await ctx.close();
     }
 
+    /* Amended (change 43a): section 1 opens on the OWNER's phone ringing —
+       the caller's name, the business line it rings, Decline and the
+       slide-to-answer; no lock-screen note has landed yet. */
     check(
       49,
-      "at t=0.5: callingLabel + bizName on the call screen, End present, no Decline/Accept, thread not rendered; headline exists outside section 1 (both viewports)",
+      "at t=0.5: the owner's incoming call — customerName + bizName, Decline and slide-to-answer present, no lock-screen note landed; headline exists outside section 1 (both viewports)",
       rows.length === 2 &&
         rows.every(
           (r) =>
             r.callVisible === true &&
-            r.statusText != null &&
-            r.statusText.startsWith("calling") &&
+            r.statusText === expected.customerName &&
             r.callBizText === expected.bizName &&
             r.endVisible === true &&
-            r.hasDecline === false &&
-            r.hasAccept === false &&
+            r.hasDecline === true &&
+            r.hasAccept === true &&
             r.bubbleCount > 0 &&
             r.visibleBubbles === 0 &&
             r.headlinePresent === true &&
@@ -1595,9 +1645,9 @@ if (!chromium) {
       rows
         .map(
           (r) =>
-            `${r.vp} t=${r.t}: call visible ${r.callVisible}, status ${JSON.stringify(r.statusText)} (must start "calling"), ` +
-            `bizName ${JSON.stringify(r.callBizText)} (want ${JSON.stringify(expected.bizName)}), End ${r.endVisible}, ` +
-            `Decline ${r.hasDecline}/Accept ${r.hasAccept} (need false), bubbles ${r.visibleBubbles}/${r.bubbleCount} visible (need 0 of > 0), ` +
+            `${r.vp} t=${r.t}: incoming visible ${r.callVisible}, caller ${JSON.stringify(r.statusText)} (want ${JSON.stringify(expected.customerName)}), ` +
+            `bizName ${JSON.stringify(r.callBizText)} (want ${JSON.stringify(expected.bizName)}), ` +
+            `Decline ${r.hasDecline}/slider ${r.hasAccept} (need true), notes ${r.visibleBubbles}/${r.bubbleCount} landed (need 0 of > 0), ` +
             `headline present ${r.headlinePresent}, inside section 1 ${r.headlineInCallSection} (need false), opacity ${r.headlineOpacity}`,
         )
         .join(" | "),
@@ -1612,22 +1662,26 @@ if (!chromium) {
     await waitT(page50, 4.0);
     const ended = await page50.evaluate((EFF) => {
       const vis = eval(EFF);
-      const status = document.querySelector("[data-call-status]");
-      const headline = document.querySelector("[data-headline]");
+      /* Amended (change 43a): the owner's call has ended unanswered — the
+         incoming screen is gone and the lock screen's top note is the miss. */
+      const incoming = document.querySelector("[data-owner-incoming]");
+      const missed = document.querySelector('[data-owner-note="missed"]');
       return {
         t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
-        statusVisible: status ? vis(status) > 0.5 : false,
-        statusText: status ? status.textContent.trim() : null,
-        headlineVisible: headline ? vis(headline) > 0.5 : false,
+        statusVisible: incoming ? vis(incoming) > 0 : true,
+        statusText: missed && vis(missed) > 0.5 && missed.getBoundingClientRect().height > 1 ? missed.textContent.trim() : null,
       };
     }, EFF);
 
     check(
       50,
-      "at t=4.0: endedLabel visible on the dimmed call screen",
-      ended.statusVisible === true && ended.statusText === "Call Ended",
-      `t=${ended.t}: status visible ${ended.statusVisible}, text ${JSON.stringify(ended.statusText)} ` +
-        `(must be "Call Ended")`,
+      "at t=4.0: the owner's incoming call is gone and the Missed call note has landed with the caller's name (amended, change 43a)",
+      ended.statusVisible === false &&
+        ended.statusText != null &&
+        ended.statusText.includes(missedLabel43) &&
+        ended.statusText.includes(expected.customerName),
+      `t=${ended.t}: incoming visible ${ended.statusVisible} (need false), missed note ${JSON.stringify(ended.statusText)} ` +
+        `(must contain ${JSON.stringify(missedLabel43)} and ${JSON.stringify(expected.customerName)})`,
     );
 
     await ctx50.close();
@@ -1650,7 +1704,8 @@ if (!chromium) {
     const at95 = await page.evaluate((EFF) => {
       const vis = eval(EFF);
       const screen = document.querySelector("[data-phone-screen]");
-      const phoneCard = document.querySelector("[data-notify-phone]");
+      /* Amended (change 43a): the booking lands on the OWNER's lock screen. */
+      const phoneCard = document.querySelector('[data-owner-note="booked"]');
       const ledgerCard = document.querySelector("[data-notify-ledger]");
       const panel = document.querySelector("[data-ledger-panel]");
       const sr = screen ? screen.getBoundingClientRect() : null;
@@ -1677,25 +1732,28 @@ if (!chromium) {
     await waitT(page, 13.3);
     const at125 = await page.evaluate((EFF) => {
       const vis = eval(EFF);
-      const phoneCard = document.querySelector("[data-notify-phone]");
+      const phoneCard = document.querySelector('[data-owner-note="booked"]');
       return {
         t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
         phoneCardVisible: phoneCard ? vis(phoneCard) > 0.5 : false,
       };
     }, EFF);
 
+    /* Amended (change 43a): the booking card is the owner's Booked note — it
+       names the caller (caught[0].name) and the amount, and a lock screen
+       KEEPS its notifications: still there at 13.3. */
     check(
       51,
-      "at t=10.3: notification card visible inside the phone screen with bizName and caught[0].amount; gone by t=13.3",
+      "at t=10.3: the owner's Booked note visible inside the phone screen with caught[0].name and caught[0].amount; still there at t=13.3 (amended, change 43a)",
       at95.phoneCardVisible === true &&
         at95.phoneCardInsideScreen === true &&
         at95.phoneCardText != null &&
-        at95.phoneCardText.includes(expected.bizName) &&
+        at95.phoneCardText.includes(row0.name) &&
         at95.phoneCardText.includes(`$${row0.amount}`) &&
-        at125.phoneCardVisible === false,
+        at125.phoneCardVisible === true,
       `t=${at95.t}: visible ${at95.phoneCardVisible}, inside screen ${at95.phoneCardInsideScreen}, ` +
-        `text ${JSON.stringify(at95.phoneCardText)} (must contain ${JSON.stringify(expected.bizName)} and "$${row0.amount}"); ` +
-        `t=${at125.t}: visible ${at125.phoneCardVisible} (need false)`,
+        `text ${JSON.stringify(at95.phoneCardText)} (must contain ${JSON.stringify(row0.name)} and "$${row0.amount}"); ` +
+        `t=${at125.t}: visible ${at125.phoneCardVisible} (need true)`,
     );
 
     check(
@@ -1719,16 +1777,19 @@ if (!chromium) {
     await page.fill("[data-name-input]", "Test Salon");
     await page.waitForTimeout(300);
     const named = await page.evaluate(() => ({
-      phoneHeader: document.querySelector("[data-biz-name]")?.textContent?.trim() ?? null,
-      callScreen: document.querySelector("[data-call-biz]")?.textContent?.trim() ?? null,
-      notifyText: document.querySelector("[data-notify-phone]")?.textContent?.trim() ?? null,
+      /* Amended (change 43a): the section-3 phone's contact header, the
+         owner phone's incoming line, and its Text sent note's skinned
+         auto-text — three different surfaces. */
+      phoneHeader: document.querySelector('[data-section="yours"] [data-crop-biz]')?.textContent?.trim() ?? null,
+      callScreen: document.querySelector("[data-owner-incoming] [data-biz-name]")?.textContent?.trim() ?? null,
+      notifyText: document.querySelector('[data-owner-note="text"]')?.textContent?.trim() ?? null,
       ledgerHeader: document.querySelector("[data-ledger-biz]")?.textContent?.trim() ?? null,
       url: location.href,
     }));
 
     check(
       53,
-      'typing "Test Salon" re-skins the phone header, call screen, notification template, and ledger header within 300ms; URL carries name=Test%20Salon',
+      'typing "Test Salon" re-skins the section-3 phone header, the owner phone\'s incoming line, its Text sent note, and the ledger header within 300ms; URL carries name=Test%20Salon',
       named.phoneHeader === "Test Salon" &&
         named.callScreen === "Test Salon" &&
         named.notifyText != null &&
@@ -1787,7 +1848,8 @@ if (!chromium) {
     const afterClick = await page.evaluate((EFF) => {
       const vis = eval(EFF);
       const input = document.querySelector("[data-name-input]");
-      const call = document.querySelector("[data-call]");
+      /* Amended (change 43a): the reset lands on the owner's phone ringing. */
+      const call = document.querySelector("[data-owner-incoming]");
       return {
         inputValue: input ? input.value : null,
         lockVisible: call ? vis(call) > 0.5 : false,
@@ -1799,9 +1861,9 @@ if (!chromium) {
       afterClick.t === "swap" || (Number.isFinite(parseFloat(afterClick.t)) && parseFloat(afterClick.t) < 2);
     check(
       56,
-      "preset snap after typing clears the field and resets to the call screen within 200ms",
+      "preset snap after typing clears the field and resets to the owner's incoming call within 200ms",
       afterClick.inputValue === "" && afterClick.lockVisible === true && tOk,
-      `input value ${JSON.stringify(afterClick.inputValue)} (need ""), call screen visible ${afterClick.lockVisible}, ` +
+      `input value ${JSON.stringify(afterClick.inputValue)} (need ""), incoming call visible ${afterClick.lockVisible}, ` +
         `data-t ${JSON.stringify(afterClick.t)} (need "swap" or < 2)`,
     );
 
@@ -1873,53 +1935,58 @@ if (!chromium) {
     await waitT(page, 4.8);
     const atBanner = await page.evaluate((EFF) => {
       const vis = eval(EFF);
-      const banner = document.querySelector("[data-banner]");
-      const call = document.querySelector("[data-call]");
+      /* Amended (change 43a): the text going out lands on the OWNER's lock
+         screen as the Text sent note, above the miss. */
+      const banner = document.querySelector('[data-owner-note="text"]');
+      const missed = document.querySelector('[data-owner-note="missed"]');
       return {
         t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
-        bannerVisible: banner ? vis(banner) > 0.5 : false,
+        bannerVisible: banner ? vis(banner) > 0.5 && banner.getBoundingClientRect().height > 1 : false,
         bannerText: banner ? banner.textContent.trim() : null,
-        callVisible: call ? vis(call) > 0.5 : false,
+        callVisible: banner && missed ? banner.getBoundingClientRect().bottom <= missed.getBoundingClientRect().top + 0.5 : false,
       };
     }, EFF);
 
     check(
       58,
-      "at t=4.8: banner visible over the call screen with bizName + the first 40 chars of thread[0].text; call screen still rendered beneath",
+      "at t=4.8: the owner's Text sent note is up with the first 40 chars of thread[0].text, stacked ABOVE Missed call (amended, change 43a)",
       atBanner.bannerVisible === true &&
         atBanner.bannerText != null &&
-        atBanner.bannerText.includes(expected.bizName) &&
         atBanner.bannerText.includes(expected.firstText.slice(0, 40)) &&
         atBanner.callVisible === true,
-      `t=${atBanner.t}: banner visible ${atBanner.bannerVisible}, text ${JSON.stringify(atBanner.bannerText)} ` +
-        `(must contain ${JSON.stringify(expected.bizName)} and ${JSON.stringify(expected.firstText.slice(0, 40))}); ` +
-        `call screen visible ${atBanner.callVisible} (need true)`,
+      `t=${atBanner.t}: text note visible ${atBanner.bannerVisible}, text ${JSON.stringify(atBanner.bannerText)} ` +
+        `(must contain ${JSON.stringify(expected.firstText.slice(0, 40))}); ` +
+        `above the missed note ${atBanner.callVisible} (need true)`,
     );
 
     await waitT(page, 6.5);
     const atThread = await page.evaluate((EFF) => {
       const vis = eval(EFF);
-      const banner = document.querySelector("[data-banner]");
-      const call = document.querySelector("[data-call]");
-      const threadArea = document.querySelector("[data-thread-area]");
+      /* Amended (change 43a): mid-story the owner's lock screen is up, the
+         in-call and incoming layers are both down, and no customer-side
+         surface (banner, call screen, call card) exists in section 1. */
+      const sec1 = document.querySelector('[data-section="call"]');
+      const lock = document.querySelector("[data-owner-lock]");
+      const incoming = document.querySelector("[data-owner-incoming]");
+      const incall = document.querySelector("[data-owner-incall]");
       return {
         t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
-        bannerVisible: banner ? vis(banner) > 0.5 : false,
-        callVisible: call ? vis(call) > 0 : false,
-        threadVisible: threadArea ? vis(threadArea) > 0.5 : false,
+        bannerVisible: sec1 ? sec1.querySelector("[data-banner], [data-call], [data-notify-phone]") != null : true,
+        callVisible: (incoming ? vis(incoming) > 0 : true) || (incall ? vis(incall) > 0 : true),
+        threadVisible: lock ? vis(lock) > 0.5 : false,
         callCardInDom: document.querySelector("[data-call-card]") != null,
       };
     }, EFF);
 
     check(
       59,
-      "at t=6.5: banner gone, thread rendered, no call-card element in the DOM",
+      "at t=6.5: the owner's lock screen is up, incoming and in-call layers down; no banner, customer call screen or call card in section 1 (amended, change 43a)",
       atThread.bannerVisible === false &&
         atThread.callVisible === false &&
         atThread.threadVisible === true &&
         atThread.callCardInDom === false,
-      `t=${atThread.t}: banner visible ${atThread.bannerVisible} (need false), call screen visible ${atThread.callVisible} ` +
-        `(need false), thread area visible ${atThread.threadVisible} (need true), ` +
+      `t=${atThread.t}: customer surfaces in s1 ${atThread.bannerVisible} (need false), call layers visible ${atThread.callVisible} ` +
+        `(need false), lock screen visible ${atThread.threadVisible} (need true), ` +
         `call-card element in DOM ${atThread.callCardInDom} (need false)`,
     );
 
@@ -2339,7 +2406,9 @@ if (!chromium) {
     await page.waitForTimeout(400);
     const g = await page.evaluate(() => ({
       phoneHeader: document.querySelector("[data-biz-name]")?.textContent?.trim() ?? null,
-      callScreen: document.querySelector("[data-call-biz]")?.textContent?.trim() ?? null,
+      /* Amended (change 43a): the owner phone's incoming line and the
+         section-3 phone's contact header carry the name now. */
+      callScreen: document.querySelector('[data-section="yours"] [data-contact-name]')?.textContent?.trim() ?? null,
       ledgerHeader: document.querySelector("[data-ledger-biz]")?.textContent?.trim() ?? null,
       url: location.href,
     }));
@@ -2351,7 +2420,7 @@ if (!chromium) {
         g.callScreen === homePreset.bizName &&
         g.ledgerHeader === homePreset.bizName &&
         g.url.includes("biz=home"),
-      `phone header ${JSON.stringify(g.phoneHeader)}, call screen ${JSON.stringify(g.callScreen)}, ` +
+      `owner incoming line ${JSON.stringify(g.phoneHeader)}, s3 contact ${JSON.stringify(g.callScreen)}, ` +
         `ledger header ${JSON.stringify(g.ledgerHeader)} (all must be ${JSON.stringify(homePreset.bizName)}); url ${g.url}`,
     );
     await ctx.close();
@@ -2594,6 +2663,7 @@ if (!chromium) {
         /* Amended (change 30, D1/D2): the flap board renders at its specced
            44px on the 1x mobile ledger — figure furniture, not hierarchy. */
         if (el.closest("[data-flap-board]")) continue;
+        if (el.closest("[data-owner-clock]")) continue;
         if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
         /* Amended (change 18): rendered size, not layout size — a figure laid
            out at 44px inside the mobile scale-fit or the zoomed phone screen
@@ -2643,6 +2713,10 @@ if (!chromium) {
         /* Amended (change 30, D1/D2): the flap board renders at its specced
            44px on the 1x mobile ledger — figure furniture, not hierarchy. */
         if (el.closest("[data-flap-board]")) continue;
+        /* Amended (change 43a): the owner's lock-screen clock is the
+           device's own furniture (iOS sets it display-size), like the scene
+           type — not page hierarchy. */
+        if (el.closest("[data-owner-clock]")) continue;
         if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
         /* Amended (change 18): rendered size, not layout size — a figure laid
            out at 44px inside the mobile scale-fit or the zoomed phone screen
@@ -2894,6 +2968,8 @@ if (!chromium) {
           when: when ?? this.context.currentTime,
           ctxTime: this.context.currentTime,
           phase: parseFloat(document.querySelector("[data-demo]")?.getAttribute("data-t") ?? "NaN"),
+          /* change 43a: the rings ride the REAL clock. */
+          real: parseFloat(document.querySelector("[data-demo]")?.getAttribute("data-t-real") ?? "NaN"),
           freq: this.frequency.value,
           type: this.type,
         });
@@ -2913,9 +2989,10 @@ if (!chromium) {
     }));
     await ctxOff.close();
 
-    /* Sound ON: toggle (the gesture), then replay — exactly 5 oscillator
-       starts: 3 ring (40Hz custom PeriodicWave carrying 440+480), 1 chime
-       (triangle), 1 land (220 sine). */
+    /* Sound ON: toggle (the gesture), then replay — exactly 8 oscillator
+       starts (amended, change 43a: the owner's phone rings SIX times before
+       it rings out): 6 ring (40Hz custom PeriodicWave carrying 440+480), 1
+       chime (triangle), 1 land (220 sine). */
     const ctxOn = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const pageOn = await ctxOn.newPage();
     await pageOn.addInitScript(SPY);
@@ -2948,32 +3025,36 @@ if (!chromium) {
 
     check(
       88,
-      "sound OFF: zero AudioContexts and zero oscillator starts after full playback; sound ON (toggle then replay): exactly 5 beat oscillators — 3 ring, 1 chime, 1 land — plus the change-30 flap-tick voice (1200Hz sines only)",
+      "sound OFF: zero AudioContexts and zero oscillator starts after full playback; sound ON (toggle then replay, rung out): exactly 8 beat oscillators — 6 ring, 1 chime, 1 land — plus the change-30 flap-tick voice (1200Hz sines only) (amended, change 43a)",
       off.acCount === 0 &&
         off.oscStarts === 0 &&
-        core.length === 5 &&
-        rings.length === 3 &&
+        core.length === 8 &&
+        rings.length === 6 &&
         chimes.length === 1 &&
         lands.length === 1 &&
         ticks.length > 0 &&
         ticks.every((r) => r.type === "sine"),
       `OFF: ${off.acCount} AudioContext(s), ${off.oscStarts} start(s) (need 0/0); ` +
-        `ON: ${core.length} beat start(s) — ${rings.length} ring, ${chimes.length} chime, ${lands.length} land (need 3/1/1) + ${ticks.length} flap tick(s); ` +
+        `ON: ${core.length} beat start(s) — ${rings.length} ring, ${chimes.length} chime, ${lands.length} land (need 6/1/1) + ${ticks.length} flap tick(s); ` +
         `beat schedule: ${core.map((r) => `${r.type}@phase ${Number.isFinite(r.phase) ? r.phase.toFixed(3) : "?"}`).join(", ")}`,
     );
 
-    const BEATS_15 = [0.2, 1.4, 2.6, 4.4, 10.0];
-    const byPhase = [...core].sort((a, b) => a.phase - b.phase);
-    const rows = byPhase.map((r, i) => {
-      const beat = BEATS_15[i];
-      const phaseAtStart = r.phase + (r.when - r.ctxTime);
-      return { beat, phaseAtStart, delta: Math.abs(phaseAtStart - beat), type: r.type };
-    });
+    /* Amended (change 43a): the six rings are scheduled on the REAL clock
+       (data-t-real) — the story clock holds under the miss while the phone
+       rings — and the chime (the text, story 4.4) and the landing tone (the
+       owner's Booked note, story 9.6) on the STORY clock (data-t). */
+    const RINGS_43 = [0.2, 1.4, 2.6, 3.8, 5.0, 6.2];
+    const STORY_43 = { triangle: 4.4, sine: 9.6 };
+    const ringRows = [...rings]
+      .sort((a, b) => a.real - b.real)
+      .map((r, i) => ({ beat: RINGS_43[i], phaseAtStart: r.real + (r.when - r.ctxTime), type: r.type }));
+    const storyRows = [...chimes, ...lands].map((r) => ({ beat: STORY_43[r.type], phaseAtStart: r.phase + (r.when - r.ctxTime), type: r.type }));
+    const rows = [...ringRows, ...storyRows].map((r) => ({ ...r, delta: Math.abs(r.phaseAtStart - r.beat) }));
 
     check(
       89,
-      "each oscillator's scheduled start, converted to phase seconds, is within 50ms of its beat (0.2, 1.4, 2.6, 4.4, 10.0)",
-      rows.length === 5 && rows.every((r) => Number.isFinite(r.phaseAtStart) && r.delta <= 0.05),
+      "each oscillator's scheduled start, converted to clock seconds, is within 50ms of its beat — rings on the real clock (0.2, 1.4, 2.6, 3.8, 5.0, 6.2), chime 4.4 and land 9.6 on the story clock (amended, change 43a)",
+      rows.length === 8 && rows.every((r) => Number.isFinite(r.phaseAtStart) && r.delta <= 0.05),
       rows.length === 0
         ? "no oscillator starts recorded"
         : rows
@@ -3079,7 +3160,9 @@ if (!chromium) {
       const g = await page.evaluate(() => {
         const sec1 = document.querySelector('[data-section="call"]');
         const screen = sec1?.querySelector("[data-phone-screen]");
-        const bubble = sec1?.querySelector("[data-bubble]");
+        /* Amended (change 43a): the owner's phone has no bubble — its
+           15px body text is the Missed call note's caller line. */
+        const bubble = sec1?.querySelector('[data-owner-note="missed"] [data-owner-note-card] p:last-child');
         if (!sec1 || !screen || !bubble) return null;
         const sr = screen.getBoundingClientRect();
         const brect = bubble.getBoundingClientRect();
@@ -3423,12 +3506,17 @@ if (!chromium) {
     await ctx.close();
   });
 
-  /* --- 100: the design-scale thread reserve fits every preset's thread. --- */
+  /* --- 100: the design-scale reserve fits every preset's lock screen.
+     Amended (change 43a): section 1 holds the OWNER's lock screen, not a
+     thread — the claim is the same one: at the shortest phone (390x700)
+     the settled stack (three notes, the longest auto-text clamped to two
+     lines) sits wholly inside the screen and clear of the hardware
+     shortcuts, every preset. --- */
   await block("reserve-16", async () => {
     const rows = [];
     for (const p of presets) {
       const ctx = await browser.newContext({
-        viewport: { width: 390, height: 844 },
+        viewport: { width: 390, height: 700 },
         reducedMotion: "reduce",
       });
       const page = await ctx.newPage();
@@ -3437,34 +3525,27 @@ if (!chromium) {
       const g = await page.evaluate(() => {
         const sec1 = document.querySelector('[data-section="call"]');
         const screen = sec1?.querySelector("[data-phone-screen]");
-        const bubbles = sec1 ? [...sec1.querySelectorAll("[data-bubble]")] : [];
-        const delivered = sec1?.querySelector("[data-delivered]");
-        if (!screen || bubbles.length === 0 || !delivered) return null;
+        const notes = sec1 ? [...sec1.querySelectorAll("[data-owner-note-card]")] : [];
+        const shortcuts = sec1?.querySelector("[data-owner-shortcuts]");
+        if (!screen || notes.length === 0 || !shortcuts) return null;
         const sr = screen.getBoundingClientRect();
-        const inside = (r) => r.top >= sr.top - 0.5 && r.bottom <= sr.bottom + 0.5;
-        const clipped = bubbles.filter((b) => !inside(b.getBoundingClientRect())).length;
-        return {
-          total: bubbles.length,
-          clipped,
-          deliveredInside: inside(delivered.getBoundingClientRect()),
-          reserveDesign: sec1.querySelector("[data-thread-viewport]")?.clientHeight ?? null,
-        };
+        const floor = shortcuts.getBoundingClientRect().top;
+        const inside = (r) => r.top >= sr.top - 0.5 && r.bottom <= Math.min(sr.bottom, floor) + 0.5;
+        const clipped = notes.filter((b) => !inside(b.getBoundingClientRect())).length;
+        const last = notes[notes.length - 1].getBoundingClientRect();
+        const k = sr.width / 360;
+        return { total: notes.length, clipped, clearDesign: +((floor - last.bottom) / k).toFixed(1) };
       });
       rows.push({ id: p.id, g });
       await ctx.close();
     }
     check(
       100,
-      "thread reserve at 390 fits the longest thread: 0 clipped bubbles + Delivered inside the screen, all presets",
+      "lock-screen reserve at 390x700 fits the settled stack: 3 notes, 0 clipped, all above the hardware shortcuts, all presets (amended, change 43a)",
       rows.length === presets.length &&
-        rows.every(
-          (r) => r.g != null && r.g.total > 0 && r.g.clipped === 0 && r.g.deliveredInside === true,
-        ),
+        rows.every((r) => r.g != null && r.g.total === 3 && r.g.clipped === 0),
       rows
-        .map(
-          (r) =>
-            `${r.id}: ${r.g ? `${r.g.clipped}/${r.g.total} clipped, delivered inside ${r.g.deliveredInside}, reserve ${r.g.reserveDesign}px design` : "nodes missing"}`,
-        )
+        .map((r) => `${r.id}: ${r.g ? `${r.g.clipped}/${r.g.total} clipped, ${r.g.clearDesign}px design clear above the shortcuts` : "nodes missing"}`)
         .join(" | "),
     );
   });
@@ -3478,41 +3559,42 @@ if (!chromium) {
 
     /* Call-screen pass: sample while the call is still ringing. */
     await waitT(page, 0.8);
+    /* Amended (change 43a): the call screen is the OWNER's incoming call —
+       no in-call grid (that was the customer's outgoing screen). The
+       geometry claim carries over: the slide track sits 56±8 design px off
+       the screen bottom, Decline above it, and the caller's name and the
+       business line share one centre. */
     const g101 = await page.evaluate(() => {
       const sec1 = document.querySelector('[data-section="call"]');
       const screen = sec1?.querySelector("[data-phone-screen]");
-      /* RENDERED buttons only — a display:none grid is not a grid. */
-      const buttons = sec1
-        ? [...sec1.querySelectorAll("[data-call-grid-btn]")].filter(
-            (b) => b.getBoundingClientRect().width > 0,
-          )
-        : [];
-      const end = sec1?.querySelector("[data-call-end-btn]");
-      const name = sec1?.querySelector("[data-call-biz]");
-      const status = sec1?.querySelector("[data-call-status]");
-      if (!screen || !end || !name || !status) return null;
+      const track = sec1?.querySelector("[data-owner-track]");
+      const decline = sec1?.querySelector("[data-owner-decline]");
+      const name = sec1?.querySelector("[data-owner-caller]");
+      const status = sec1?.querySelector("[data-owner-line]");
+      if (!screen || !track || !decline || !name || !status) return null;
       const sr = screen.getBoundingClientRect();
-      const zoom = sr.width / 390;
-      const er = end.getBoundingClientRect();
+      const zoom = sr.width / 360;
+      const tr = track.getBoundingClientRect();
+      const dr = decline.getBoundingClientRect();
       const nr = name.getBoundingClientRect();
       const str = status.getBoundingClientRect();
       return {
-        buttons: buttons.length,
-        endGapDesign: (sr.bottom - er.bottom) / zoom,
+        buttons: dr.bottom <= tr.top ? 1 : 0,
+        endGapDesign: (sr.bottom - tr.bottom) / zoom,
         centerDeltaDesign: Math.abs((nr.left + nr.right) / 2 - (str.left + str.right) / 2) / zoom,
       };
     });
     check(
       101,
-      "call screen: exactly 6 grid buttons; End circle bottom 64±8px above the screen bottom (design scale); name and status centers within 2px",
+      "owner incoming call: the slide track's bottom 56±8px above the screen bottom (design scale), Decline wholly above it; caller name and business line centres within 2px (amended, change 43a)",
       g101 != null &&
-        g101.buttons === 6 &&
-        Math.abs(g101.endGapDesign - 64) <= 8 &&
+        g101.buttons === 1 &&
+        Math.abs(g101.endGapDesign - 56) <= 8 &&
         g101.centerDeltaDesign <= 2,
       g101 == null
-        ? "call screen nodes not found"
-        : `${g101.buttons} grid button(s) (need 6); End gap ${g101.endGapDesign.toFixed(1)}px design (need 64±8); ` +
-          `name/status center delta ${g101.centerDeltaDesign.toFixed(2)}px (need <= 2)`,
+        ? "incoming call nodes not found"
+        : `Decline above the track ${g101.buttons === 1}; track gap ${g101.endGapDesign.toFixed(1)}px design (need 56±8); ` +
+          `name/line center delta ${g101.centerDeltaDesign.toFixed(2)}px (need <= 2)`,
     );
 
     const g102 = await page.evaluate(() => {
@@ -3551,38 +3633,16 @@ if (!chromium) {
           `streak pointer-events ${JSON.stringify(g102.streak)} (need "none")`,
     );
 
-    /* Banner pass: t=4.8, the banner is landed and clamped. */
-    await waitT(page, 4.8);
-    const g103 = await page.evaluate(() => {
-      const sec1 = document.querySelector('[data-section="call"]');
-      const body = sec1?.querySelector("[data-banner-body]");
-      const banner = sec1?.querySelector("[data-banner]");
-      const notch = sec1?.querySelector("[data-island]");
-      if (!body || !banner || !notch) return null;
-      const lh = parseFloat(getComputedStyle(body).lineHeight);
-      const lines = Math.round(body.getBoundingClientRect().height / (lh * (body.getBoundingClientRect().width / body.offsetWidth)));
-      const br = banner.getBoundingClientRect();
-      const nr = notch.getBoundingClientRect();
-      const hit = br.left < nr.right && br.right > nr.left && br.top < nr.bottom && br.bottom > nr.top;
-      return { lines, hit, bannerTop: br.top, notchBottom: nr.bottom };
-    });
-    check(
-      103,
-      "banner body renders exactly 2 line boxes at t=4.8; banner box intersects no notch",
-      g103 != null && g103.lines === 2 && g103.hit === false,
-      g103 == null
-        ? "banner nodes not found"
-        : `${g103.lines} line box(es) (need 2); banner top ${g103.bannerTop.toFixed(1)} vs notch bottom ${g103.notchBottom.toFixed(1)}, ` +
-          `intersects ${g103.hit} (need false)`,
-    );
+    retired(103, "change 43a: the customer's Messages banner left section 1 with her phone — the text going out is the owner's Text sent note now (gate 58)");
 
-    /* Settled pass: bubbles + mask. */
+    /* Settled pass: bubbles. Amended (change 43a): the thread lives on the
+       section-3 phone now — measured there, against its own screen. */
     await waitT(page, 6.0);
     const g105 = await page.evaluate(() => {
-      const sec1 = document.querySelector('[data-section="call"]');
-      const bubble = sec1?.querySelector('[data-bubble="business"]');
-      const screen = sec1?.querySelector("[data-phone-screen]");
-      const vp = sec1?.querySelector("[data-thread-viewport]");
+      const sec3 = document.querySelector('[data-section="yours"]');
+      const bubble = sec3?.querySelector('[data-s-bubble="business"]');
+      const screen = bubble?.closest("[data-phone-screen]");
+      const vp = sec3?.querySelector("[data-s-viewport]");
       if (!bubble || !screen || !vp) return null;
       const lum = (c) => {
         const m = c.match(/\d+(\.\d+)?/g).map(Number);
@@ -3618,12 +3678,7 @@ if (!chromium) {
         ? "bubble/screen not found"
         : `bubble ${g105.bb} vs screen ${g105.sb} -> contrast ${g105.ratio.toFixed(3)} (need >= 1.4); distance ${g105.dist.toFixed(1)}, bubble lighter ${g105.lighter}`,
     );
-    check(
-      106,
-      "thread container has a mask-image",
-      g105 != null && g105.mask != null && g105.mask !== "none",
-      g105 == null ? "thread viewport not found" : `mask-image ${String(g105.mask).slice(0, 80)}`,
-    );
+    retired(106, "change 43a: the live, scrolling thread left section 1 — the mask faded it under the header; every remaining thread is static and top-anchored (change 35, B1) and never scrolls under anything");
     await ctx.close();
   });
 
@@ -3886,8 +3941,10 @@ if (!chromium) {
           .map((el) => `${el.tagName}:${(el.textContent || "").slice(0, 12)}`);
         const displayFont = document.querySelector("h1") ? getComputedStyle(document.querySelector("h1")).fontFamily : null;
 
-        /* 111: uppercase-tracked census — all hits must be folios. */
+        /* 111: uppercase-tracked census — all hits must be folios (or, from
+           change 43a, the rail's caption-role beat words). */
         const upperHits = [];
+        let captionHits = 0;
         for (const el of document.querySelectorAll("body *")) {
           if (!vis(el)) continue;
           if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
@@ -3896,6 +3953,13 @@ if (!chromium) {
           const ls = parseFloat(cs.letterSpacing);
           const fs = parseFloat(cs.fontSize);
           if (!Number.isFinite(ls) || !(ls / fs > 0.03)) continue;
+          /* Amended (change 43a): DESIGN.md's caption role (Plex Sans 500,
+             13, +0.04em, uppercase) is the second sanctioned class — the
+             progress rail's three beat words, and nothing else. */
+          if (el.hasAttribute("data-beat")) {
+            captionHits++;
+            continue;
+          }
           if (!el.hasAttribute("data-folio") && !el.closest("[data-folio]"))
             upperHits.push(`${el.tagName}:${(el.textContent || "").trim().slice(0, 20)}`);
         }
@@ -4065,6 +4129,7 @@ if (!chromium) {
           badFigures: badFigures.slice(0, 5),
           displayFont,
           upperHits: upperHits.slice(0, 5),
+          captionHits,
           folioCount,
           slabs,
           rowBorders,
@@ -4101,9 +4166,9 @@ if (!chromium) {
 
     check(
       111,
-      "exactly one uppercase-tracked element class: every text-transform-uppercase + letter-spacing > 0.03em hit is a folio mark",
-      both((g) => g.folioCount === 4 && g.upperHits.length === 0),
-      detail((g) => `${g.folioCount} folio(s) (need 4); non-folio uppercase-tracked hits ${JSON.stringify(g.upperHits)}`),
+      "uppercase-tracked elements are folio marks and the progress rail's three caption-role beat words (DESIGN.md caption; amended, change 43a) — nothing else",
+      both((g) => g.folioCount === 4 && g.captionHits === 3 && g.upperHits.length === 0),
+      detail((g) => `${g.folioCount} folio(s) (need 4); ${g.captionHits} rail caption(s) (need 3); other uppercase-tracked hits ${JSON.stringify(g.upperHits)}`),
     );
 
     /* change 36 (A7): retired. There are no accent slabs left to place —
@@ -4455,28 +4520,13 @@ if (!chromium) {
         `(want ${JSON.stringify(usd(other.recovered))}); tickets ${JSON.stringify(ticketsOther)} (need to include $${other.ticket})`,
     );
 
-    /* 121: the mobile caption rides the beats at 390; absent at 1440. */
+    /* 121 retired (change 43a, below); its 390 load still serves 129. */
     const ctxM = await browser.newContext({ viewport: { width: 390, height: 844 } });
     const pageM = await ctxM.newPage();
     await pageM.goto(base, { waitUntil: "domcontentloaded" });
     await pageM.evaluate(() => document.fonts.ready);
-    const readCaption = () =>
-      pageM.evaluate((EFF) => {
-        const vis = eval(EFF);
-        const box = document.querySelector("[data-scene-mobile]");
-        const lines = box ? [...box.querySelectorAll("[data-scene-line]")] : [];
-        const visible = lines.filter((l) => vis(l) > 0.5);
-        return {
-          t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
-          texts: visible.map((l) => l.textContent.trim()),
-        };
-      }, EFF);
-    await waitT(pageM, 0.5);
-    const c1 = await readCaption();
-    await waitT(pageM, 4.0);
-    const c2 = await readCaption();
-    await waitT(pageM, 6.5);
-    const c3 = await readCaption();
+    await waitHydrated(pageM);
+    await pageM.waitForFunction(() => document.querySelectorAll("[data-panel]").length === 4, null, { timeout: 10000 }).catch(() => {});
     /* change 24: the hydrated track — four panels once the JSON fills in. */
     const hydratedPanels = await pageM.evaluate(() => document.querySelectorAll("[data-panel]").length);
     await ctxM.close();
@@ -4495,29 +4545,7 @@ if (!chromium) {
         `thread[0] present ${otherSSR.text.includes(other.firstText)}; amounts ${JSON.stringify(otherAmounts)} sum ${otherSum} (want ${other.recovered})`,
     );
 
-    const ctxD = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
-    const pageD = await ctxD.newPage();
-    await pageD.goto(base, { waitUntil: "domcontentloaded" });
-    const capD = await pageD.evaluate((EFF) => {
-      const vis = eval(EFF);
-      const box = document.querySelector("[data-scene-mobile]");
-      return box ? vis(box) : null;
-    }, EFF);
-    await ctxD.close();
-
-    check(
-      121,
-      `mobile caption at 390: ${JSON.stringify(mobileCalls)} at t=0.5, ${JSON.stringify(mobileNobody)} at t=4.0, ${JSON.stringify(mobileCaught)} at t=6.5; absent at 1440`,
-      c1.texts.length === 1 &&
-        c1.texts[0] === mobileCalls &&
-        c2.texts.length === 1 &&
-        c2.texts[0] === mobileNobody &&
-        c3.texts.length === 1 &&
-        c3.texts[0] === mobileCaught &&
-        capD === 0,
-      `t=${c1.t}: ${JSON.stringify(c1.texts)}; t=${c2.t}: ${JSON.stringify(c2.texts)}; t=${c3.t}: ${JSON.stringify(c3.texts)}; ` +
-        `1440 caption effective opacity ${capD} (need 0)`,
-    );
+    retired(121, "change 43a: the mobile caption slot is the STAKE line now (what the call is worth losing, in ember) — gate 227 holds its count-up and freeze");
 
     /* 122 + 125: the ledger header + auto-reply tag, one desktop load. */
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
@@ -4636,8 +4664,10 @@ if (!chromium) {
       await page.evaluate(() => document.fonts.ready);
       const g = await page.evaluate((presetId) => {
         const sec1 = document.querySelector('[data-section="call"]');
-        const biz = sec1?.querySelector('[data-bubble="business"]');
-        const cust = sec1?.querySelector('[data-bubble="customer"]');
+        /* Amended (change 43a): the bubbles live on the section-3 phone. */
+        const sec3 = document.querySelector('[data-section="yours"]');
+        const biz = sec3?.querySelector('[data-s-bubble="business"]');
+        const cust = sec3?.querySelector('[data-s-bubble="customer"]');
         const slab = sec1?.querySelector("[data-accent-slab]");
         const ring = sec1?.querySelector("[data-sonar-ring]");
         const stamp = document.querySelector("[data-stamp]");
@@ -5288,31 +5318,8 @@ if (!chromium) {
       const decay = Math.exp(-zeta * w0 * t);
       return 1 - decay * (Math.cos(wd * t) + ((zeta * w0) / wd) * Math.sin(wd * t));
     };
-    await waitT(page, 2.2 + INTRO + 0.1);
-    const mid = await page.evaluate(() => {
-      const t = parseFloat(document.querySelector("[data-demo]")?.getAttribute("data-t") ?? "NaN");
-      const row = document.querySelector('[data-row="1"]');
-      const cs = getComputedStyle(row);
-      const m = cs.transform.match(/matrix\(([-\d.]+)/);
-      return { t, scale: m ? parseFloat(m[1]) : NaN, anim: cs.animationName };
-    });
-    await waitT(page, 2.2 + INTRO + 0.42);
-    const late = await page.evaluate(() => {
-      const row = document.querySelector('[data-row="1"]');
-      const m = getComputedStyle(row).transform.match(/matrix\(([-\d.]+)/);
-      return { scale: m ? parseFloat(m[1]) : NaN };
-    });
-    const closed = 0.92 + 0.08 * spring(mid.t - INTRO - 2.2);
-    check(
-      153,
-      "spring: bubble scale ~120ms after its beat is in (0.96, 1.02) and matches the closed form within 0.5%; exactly 1.000 by beat+400ms; no CSS animation on the row",
-      mid.scale > 0.96 &&
-        mid.scale < 1.02 &&
-        Math.abs(mid.scale - closed) / closed <= 0.005 &&
-        late.scale === 1 &&
-        mid.anim === "none",
-      `observed scale ${mid.scale?.toFixed?.(4)} at t=${mid.t} (closed form ${closed.toFixed(4)}); settled scale ${late.scale} (need exactly 1); animation ${JSON.stringify(mid.anim)}`,
-    );
+    void spring;
+    retired(153, "change 43a: no bubble enters on section 1's clock any more — the live thread left with the customer's phone; the owner's slider spring is gate 226's, the notes' push gate 12's");
 
     /* 155: the push — rows 1-3 move by row[0]'s height; no fade on row[0]. */
     await waitT(page, 4.2 + INTRO);
@@ -5402,15 +5409,7 @@ if (!chromium) {
     /* 157: avatar initials follow typing within 300ms. */
     await goSection(page, 2);
     await page.waitForTimeout(200);
-    await page.fill("[data-name-input]", "Zack Corp");
-    await page.waitForTimeout(300);
-    const initials = await page.evaluate(() => document.querySelector("[data-avatar-initials]")?.textContent?.trim());
-    check(
-      157,
-      "call-screen avatar initials update from the live bizName within 300ms of typing",
-      initials === "ZC",
-      `initials ${JSON.stringify(initials)} (want "ZC" for "Zack Corp")`,
-    );
+    retired(157, "change 43a: the customer's call screen (and its avatar) left section 1 — the contact-block initials that follow typing are gate 195's");
     await ctx.close();
 
     /* 154: section-2 entry FX — first entry only. */
@@ -5732,35 +5731,7 @@ if (!chromium) {
         .join(" | "),
     );
 
-    /* 166: the banner leaves the DOM by settle — every preset, real motion. */
-    const reads166 = await Promise.all(
-      ["salon", "home", "dental", "other"].map(async (biz) => {
-        const cm = await browser.newContext({ viewport: { width: 390, height: 844 } });
-        const pm = await cm.newPage();
-        await pm.goto(`${base}/?biz=${biz}`, { waitUntil: "domcontentloaded" });
-        const early = await pm.evaluate(() => document.querySelector("[data-banner]") != null);
-        await pm.waitForFunction(
-          () => {
-            const t = document.querySelector("[data-demo]")?.getAttribute("data-t");
-            return t != null && parseFloat(t) >= 12.0;
-          },
-          undefined,
-          { timeout: 60000 },
-        );
-        const late = await pm.evaluate(() => ({
-          t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
-          banner: document.querySelector("[data-banner]") != null,
-        }));
-        await cm.close();
-        return { biz, early, late };
-      }),
-    );
-    check(
-      166,
-      "the banner element is ABSENT from the DOM at settle (t >= 12.0) — all four presets (it exists pre-run and unmounts 2.6s after landing)",
-      reads166.every((r) => r.early === true && r.late.banner === false),
-      reads166.map((r) => `${r.biz}: mounted pre-run ${r.early}, present at t=${r.late.t} ${r.late.banner} (need false)`).join(" | "),
-    );
+    retired(166, "change 43a: the customer's Messages banner left section 1 with her phone, and its unmount latch (change 27) with it");
   });
 
   /* --- 167-168: change 28 — the desktop spine. --- */
@@ -5831,36 +5802,7 @@ if (!chromium) {
 
   /* --- 169-170: change 29 — confirmation exit, one replay label. --- */
   await block("exit-29", async () => {
-    /* 169: the confirmation card leaves the DOM 3.0s after landing (10.3 +
-       3.0 = 13.3) — sampled past it, every preset, real motion. */
-    const reads169 = await Promise.all(
-      ["salon", "home", "dental", "other"].map(async (biz) => {
-        const cm = await browser.newContext({ viewport: { width: 390, height: 844 } });
-        const pm = await cm.newPage();
-        await pm.goto(`${base}/?biz=${biz}`, { waitUntil: "domcontentloaded" });
-        const early = await pm.evaluate(() => document.querySelector("[data-notify-phone]") != null);
-        await pm.waitForFunction(
-          () => {
-            const t = document.querySelector("[data-demo]")?.getAttribute("data-t");
-            return t != null && parseFloat(t) >= 13.5;
-          },
-          undefined,
-          { timeout: 60000 },
-        );
-        const late = await pm.evaluate(() => ({
-          t: document.querySelector("[data-demo]")?.getAttribute("data-t"),
-          card: document.querySelector("[data-notify-phone]") != null,
-        }));
-        await cm.close();
-        return { biz, early, late };
-      }),
-    );
-    check(
-      169,
-      "the booking-confirmation card is ABSENT from the DOM at settle (t >= 13.5; it unmounts at 13.3, 3.0s after landing) — all four presets",
-      reads169.every((r) => r.early === true && r.late.card === false),
-      reads169.map((r) => `${r.biz}: mounted pre-run ${r.early}, present at t=${r.late.t} ${r.late.card} (need false)`).join(" | "),
-    );
+    retired(169, "change 43a: the customer's booking-confirmation card left section 1 with her phone, and its unmount latch (change 29) with it — the owner's Booked note STAYS on the lock screen (gate 51)");
 
     /* 170: one replay label. */
     const replayLabel = need(/replayLabel:\s*"([^"]+)"/, "COPY.replayLabel");
@@ -6393,38 +6335,7 @@ if (!chromium) {
   });
 
   /* --- 181: change 32 — the in-call family at one weight. --- */
-  await block("callglyph-32", async () => {
-    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
-    const page = await ctx.newPage();
-    await page.goto(base, { waitUntil: "domcontentloaded" });
-    await page.evaluate(() => document.fonts.ready);
-    /* The call screen is the OPENING beat — sample while it is on. */
-    await waitT(page, 1.2);
-    const g = await page.evaluate(() => {
-      const glyphs = [...document.querySelectorAll("[data-call-glyph]")];
-      /* Every DRAWABLE child, not just <path>: the keypad is circles and
-         FaceTime is rect + path, so a path-only scan would silently skip
-         two of the six glyphs entirely. */
-      const shapes = glyphs.flatMap((svg) => [...svg.querySelectorAll("path, rect, circle")]);
-      const widths = [...new Set(shapes.map((el) => getComputedStyle(el).strokeWidth))];
-      const svgWidths = [...new Set(glyphs.map((el) => getComputedStyle(el).strokeWidth))];
-      const labels = glyphs.map((el) => el.closest("[data-call-grid-btn]")?.textContent?.trim().slice(0, 12) ?? "?");
-      return { glyphCount: glyphs.length, shapeCount: shapes.length, widths, svgWidths, labels };
-    });
-    await ctx.close();
-    check(
-      181,
-      "in-call grid: all six glyphs carry ONE stroke weight — every [data-call-glyph] and every drawable child (path, rect, circle) computes stroke-width 1.8px (change 36, B3: iOS weight, not the page's chrome weight)",
-      g.glyphCount === 6 &&
-        g.shapeCount >= 6 &&
-        g.widths.length === 1 &&
-        g.widths[0] === "1.8px" &&
-        g.svgWidths.length === 1 &&
-        g.svgWidths[0] === "1.8px",
-      `${g.glyphCount} glyph(s) ${JSON.stringify(g.labels)} (need 6), ${g.shapeCount} drawable shape(s); ` +
-        `svg widths ${JSON.stringify(g.svgWidths)}, shape widths ${JSON.stringify(g.widths)} (need exactly ["1.8px"])`,
-    );
-  });
+  retired(181, "change 43a: the in-call grid was the customer's outgoing call screen, which left section 1 — the owner's incoming call has no grid");
 
   /* --- 182-189: change 33 — structural corrections. --- */
   await block("structure-33", async () => {
@@ -7046,7 +6957,9 @@ if (!chromium) {
       await pg.waitForFunction(() => document.querySelectorAll("[data-panel]").length === 4);
       const rows = await pg.evaluate((src) => {
         const initials = new Function("name", src);
-        return [...document.querySelectorAll("[data-phone-device]")].map((dev) => {
+        /* Amended (change 43a): every THREAD instance — the owner's phone
+           is a lock screen and an incoming call, not a conversation. */
+        return [...document.querySelectorAll("[data-phone-device]")].filter((dev) => dev.querySelector("[data-bubble], [data-s-bubble]")).map((dev) => {
           const block = dev.querySelector("[data-contact-block]");
           const b0 = dev.querySelector("[data-bubble], [data-s-bubble]");
           const nameEl = block && block.querySelector("[data-contact-name]");
@@ -7378,7 +7291,10 @@ if (!chromium) {
             return "rgb(" + parseInt(x.slice(0, 2), 16) + ", " + parseInt(x.slice(2, 4), 16) + ", " + parseInt(x.slice(4, 6), 16) + ")";
           };
           const screen = document.querySelector('[data-section="call"] [data-phone-screen]');
-          const bubble = screen.querySelector('[data-bubble="business"]');
+          /* Amended (change 43a): the incoming bubble is read on the
+             section-3 phone; the accent scan stays on section 1's screen
+             — the owner's phone, which carries no accent at all. */
+          const bubble = document.querySelector('[data-section="yours"] [data-s-bubble="business"]');
           const accent = hex(getComputedStyle(document.querySelector("[data-demo]")).getPropertyValue("--accent"));
           const PROPS = ["color", "backgroundColor", "borderTopColor", "borderRightColor", "borderBottomColor", "borderLeftColor", "fill", "stroke", "outlineColor"];
           const strays = [];
@@ -7747,7 +7663,7 @@ if (!chromium) {
           if (el.style && el.style.zoom) live.push("inline " + el.tagName + "=" + el.style.zoom);
         }
         const outside = [];
-        for (const sel of ["[data-beats]", "[data-scene-mobile]", "[data-controls]", "[data-rail-next]"]) {
+        for (const sel of ["[data-beats]", "[data-stake-line]", "[data-controls]", "[data-rail-next]"]) {
           for (const el of document.querySelectorAll(sel)) {
             if (el.closest("[data-phone-screen]")) {
               outside.push(sel + " is inside the scaled screen");
@@ -7793,7 +7709,8 @@ if (!chromium) {
       return pg.evaluate(() => {
         const sec1 = document.querySelector('[data-section="call"]');
         const screen = sec1?.querySelector("[data-phone-screen]");
-        const bubble = sec1?.querySelector("[data-bubble]");
+        /* Amended (change 43a): the owner's 15px note body. */
+        const bubble = sec1?.querySelector('[data-owner-note="missed"] [data-owner-note-card] p:last-child');
         const time = screen?.querySelector("span");
         if (!screen || !bubble || !time || bubble.offsetWidth === 0) return null;
         const sr = screen.getBoundingClientRect();
@@ -7908,7 +7825,8 @@ if (!chromium) {
           const sec = q('[data-section="call"]');
           const folio = sec.querySelector("[data-section-mark]");
           const folioP = folio.querySelector("[data-folio]");
-          const cap = q("[data-scene-mobile]");
+          /* Amended (change 43a): the caption slot is the stake line. */
+          const cap = q("[data-call-stage] [data-stake-line]");
           const dev = sec.querySelector("[data-phone-device]");
           const strip = q("[data-beats]");
           const word = strip.querySelector("[data-beat]");
@@ -7969,7 +7887,7 @@ if (!chromium) {
     };
     verdict(
       206,
-      "section 1 fixed stack (change 40, A): folio top 24/h 16; caption 24 below/h 28; phone 16 below, HEIGHT = H − 280 and width = height × 390/810; strip 24 below/h 24 at 13px with the +$ figure at 20px; controls 16 below/h 44, two equal transparent ink-stroke secondaries; controls clear the 64px band; caret bottom at 12 (env 0), centred — both engines, 700 + 740 + 844",
+      "section 1 fixed stack (change 40, A; amended 43a): folio top 24/h 16; stake line 24 below/h 28; phone 16 below, HEIGHT = H − 280 and width = height × 390/810; rail 24 below/h 24 at 13px with the +$ figure at 20px; controls 16 below/h 44, two equal transparent ink-stroke secondaries; controls clear the 64px band; caret bottom at 12 (env 0), centred — both engines, 700 + 740 + 844",
       g206,
       ok206,
       (g) =>
@@ -8400,6 +8318,21 @@ if (!chromium) {
   for (const n of BROWSER_GATES) {
     if (!results.some((r) => r.n === n)) {
       check(n, "browser gate", false, `not reached — ${failures.join(" | ") || "unknown error"}`);
+    }
+  }
+}
+
+/* ---------- 226-229 (change 43a): the owner's phone, in its own module */
+
+{
+  const OWNER_GATES = [226, 227, 228, 229];
+  try {
+    if (!chromium) throw new Error(`playwright unavailable: ${browserError}`);
+    const { runOwnerGates } = await import("./gate-owner.mjs");
+    await runOwnerGates({ base, pw: { chromium, webkit }, check });
+  } catch (err) {
+    for (const n of OWNER_GATES) {
+      if (!results.some((r) => r.n === n)) check(n, "owner gate", false, `not reached — ${String(err.message).slice(0, 160)}`);
     }
   }
 }

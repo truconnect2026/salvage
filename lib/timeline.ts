@@ -87,10 +87,56 @@ export const LOOP_UNTIL = 13.8;
 
 /* ---- Sound (change 15, B1). Beats on the SAME clock as everything else —
    the engine schedules a sound only when the rAF phase crosses its beat.
-   Three ring bursts inside the ring window; the chime rides the banner
+   change 43a: six ring bursts on the REAL clock, 1.2s apart; the chime rides the banner
    beat; the landing tone rides the in-phone confirmation card. ---- */
-export const RING_BEATS = [0.2, 1.4, 2.6];
+export const RING_BEATS = [0.2, 1.4, 2.6, 3.8, 5.0, 6.2];
 export const RING_BURST_DUR = 0.8;
+
+/* ---- change 43a: the OWNER's phone rings, and the owner can act. ----
+   Two clocks, one rAF. The REAL clock (seconds since playback began) drives
+   the ringing — six rings, 1.2s apart, on RING_BEATS above — the slider and
+   the stake counter. The STORY clock is the change-11 global clock every
+   post-call beat is written in (CALL_ENDED_AT = the miss = 3.6): it runs
+   with the real clock up to the miss, holds just under it while the phone
+   keeps ringing, and resumes AT the miss from whichever path the owner
+   chose. So every beat after the miss keeps its coordinate, whichever way
+   the call ended.
+     ringing      story = min(real, MISS - ε)
+     missed at m  story = MISS + (real - m)      timeout: m = RING_TIMEOUT
+     answered at a: the call holds ANSWER_HOLD, then
+                  story = ANSWER_STORY_AT + (real - a - ANSWER_HOLD)
+   The story only ever moves forward. */
+export const RING_TIMEOUT = 7.2; // the sixth ring ends at 7.0; the miss lands 0.2 later
+export const ANSWER_HOLD = 1.8; // an answered call is this long, then it ends
+/* Answered: the story resumes just before the booking beat — the booked
+   beat lands early (RECEIPT_AT - 0.4 later), the missed and text beats
+   never happen. */
+export const ANSWER_STORY_AT = 9.2;
+/* The owner's slide-to-answer: answered on release at >= this share of
+   the travel; anything short springs home on the DESIGN.md spring. */
+export const SLIDE_ANSWER_AT = 0.8;
+export const SLIDE_K = 420;
+export const SLIDE_C = 34;
+
+export type CallPath = "ringing" | "missed" | "answered";
+
+/** The story clock (see above). `at` is the real time of the miss or the
+    answer; it is unused while ringing. */
+export function storyAt(real: number, path: CallPath, at: number): number {
+  const hold = CALL_ENDED_AT - 0.001;
+  if (path === "ringing") return Math.min(real, hold);
+  if (path === "missed") return CALL_ENDED_AT + (real - at);
+  return real < at + ANSWER_HOLD ? hold : ANSWER_STORY_AT + (real - at - ANSWER_HOLD);
+}
+
+/** The stake: what this call is worth losing, counting up over the six
+    rings in REAL time and frozen at the stored `lost` at the miss — never
+    above it. Answered, it freezes where the answer caught it. */
+export function stakeAt(real: number, lost: number, path: CallPath, at: number): number {
+  if (path === "missed") return lost;
+  const upTo = path === "answered" ? at : real;
+  return Math.round(clamp01(upTo / RING_TIMEOUT) * lost);
+}
 
 /* change 18 (D1): the sonar rings ride the SAME ring beats as the sound —
    each ring lives RING_DUR seconds, growing to 1.6x the phone height as its
@@ -109,7 +155,9 @@ export const STAMP_IN = 0.12;
 export const FLAP_STEP = 0.08;
 export const FLAP_STAGGER = 0.04;
 export const CHIME_AT = BANNER_AT; // 4.4
-export const LAND_AT = NOTIFY_AT; // 10.0
+/* change 43a: the landing tone rides the owner's Booked note, which lands
+   on the booking beat with the rail's third segment and the money. */
+export const LAND_AT = RECEIPT_AT; // 9.6
 
 /* Scene-type beats (change 15, A2): line 2 crossfades on the miss and on the
    thread's first beat. */

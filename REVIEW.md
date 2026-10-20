@@ -325,3 +325,86 @@ a mutated build (Chromium + WebKit). Frames in review/change-45.1.
 | 5 | Glyph keys (45 lens 3 #8) | Config's `JOB_GLYPH` maps each approved job STRING to a semantic glyph id; the list's order no longer matters. | Gate 223 asserts each chip carries the glyph its own string maps to. With jobs.plumbing reversed it stays green — still matched; with the same reversal and glyphs assigned by position it goes red ("Something else=pipe-burst want else"). |
 
 Unchanged by call: Text us still goes to 757, Call and Save to 804.
+
+## Change 43a — adversarial review (3 lenses)
+
+Section 1's device is the OWNER's phone: it rings six times, and the owner can
+slide to answer, decline, or let it ring out — three paths that converge on
+Booked. Two clocks off the one rAF: `data-t` is the story clock (the change-11
+coordinates every post-call beat is written in), `data-t-real` the playback
+clock. An independent reviewer read the full diff, DESIGN.md and the frames
+(read-only, no browser). Every confirmed finding below was fixed, rebuilt,
+re-gated and — where a gate changed — proven red before the 43a commit.
+
+### Lens 1 — "The prospect, on an iPhone in the Facebook browser: does it read as THEIR phone ringing, can a thumb work it, can the story be stranded?"
+
+| # | Finding | Verdict |
+|---|---------|---------|
+| 1 | Tapping sound after answering restarted the run: an answered call also holds the story clock under 3.6, and the toggle restarted any run below 3.6. | **Fixed.** The restart is for a RINGING call only. New gate 229 (a). Proven red (O5: "answered then sound on -> ringing"). |
+| 2 | At 390x700 the screen renders at ~0.52: the knob is ~33px, Decline ~35px, and a swipe that starts beside the knob scrolled the pager. | **Fixed.** The whole track takes the drag (`touch-action: none` on the track); Decline carries a 20-design-px invisible hit margin. Gate 226 now drives a real touch drag (Chromium CDP) that starts ON THE TRACK beside the knob: it answers and the pager moves 0px. |
+| 3 | Leaving section 1 mid-ring let the phone ring out unseen (haptics firing over section 2); a backgrounded tab came back already settled. | **Fixed.** A ringing call parks when section 1 drops under 60% or the tab hides, and rings from the top on return. Gate 229 (b). Proven red (O5: "+7s t 5.411/missed"). |
+| 4 | A landscape load measured the slider's travel while the guard hid the app (1px — any jitter answered) and the sonar height as 0. | **Fixed.** The travel is re-measured on every pointerdown; every resize re-collects the device. Gate 229 (c): landscape load, rotate upright, 228 design px of travel, a 40% drag does not answer. |
+| 5 | Reduced-motion visitors get the settled lock screen and can never touch the phone. | **Open — owner's call.** Reduced motion has been the settled SSR state since change 12 (gate 17). An interactive reduced path (a still incoming call; Decline/answer cut to that path's settled state) is a spec decision. |
+| 6 | `role="slider"` answered on ArrowRight — a screen-reader user exploring the value would answer by accident. | **Fixed.** The knob is a button to assistive tech, as VoiceOver presents iOS's own control; Enter or Space answers. |
+| 7 | (Suspected.) It may not read as ringing in 3s — the 1px sonar is the only motion; the business name under the caller reads as the CALLER's company. | **Fixed.** "slide to answer" breathes with each ring (engine opacity on the ring beats); the business line moved ABOVE the caller as an iOS second-line label (a lettered tile + the name). |
+| 8 | The SSR first paint is the settled ending, then the ringing phone at $0. | **Unchanged by design.** The same contract as every change since 11 — no-JS and reduced motion get the settled story. The money and its tick ship at opacity 0 (gate 184: the money is a beat). |
+
+### Lens 2 — "Does it obey DESIGN.md?"
+
+| # | Finding | Verdict |
+|---|---------|---------|
+| 1 | Answered, the stake faded to muted: lost money shown gray (§1: "never gray"). | **Fixed.** On an answer the whole stake line leaves over 300ms (lens 3 #1). Gate 227 asserts opacity 0 at +0.7s. |
+| 2 | Sizes off the type table: stake 13/17px, rail words 12px, money 20px Newsreader. | **Fixed.** Stake label = label (Plex Sans 500, 17); stake figure = data (Plex Mono 20 mobile, 28 desktop); rail words = caption (Plex Sans 500, 13, +0.04em, uppercase); money = data 20, gold. Gate 111 amended: the rail's three caption-role words are the second sanctioned uppercase-tracked class, exactly 3; gate 206 holds 13px. Proven red (MB: an uppercase stake label). |
+| 3 | The desktop stake sat inside the clock block and faded out under the receipt. | **Fixed.** Moved out of it; gate 227 asserts exactly one visible stake per viewport and the stored figure still showing at settle. |
+| 4 | Low: the rail fill fell back to teal; the desktop ":03" froze for ~3.6s while the phone still rang. | **Fixed.** Muted fallback; the seconds run on the real clock until the call ends (":07" on a ring-out). |
+| 5 | Low: the rail's three accent fills are page chrome, not "the active instrument" (§4); the 2px gold tick is not itself money. | **Spec wins.** Change 43a specifies both. Counted below. |
+| 6 | One rAF: `stepSlider` integrates off the frame delta; the handlers only write `ctx.slider`/`ctx.call` and call `schedule()`. | **Clean.** (The step now takes up to 250ms of wall time per frame in 4ms substeps — a 64ms cap made the knob drift off the closed form on a slow frame.) |
+
+### Lens 3 — "Can a figure be invented, stale or wrong — and can a gate pass while it is?"
+
+| # | Finding | Verdict |
+|---|---------|---------|
+| 1 | Answered, the stake froze at `round(at / 7.2 × lost)` — a figure nobody stored, resting on screen as "Lost per month". | **Fixed.** The line leaves on an answer; only the stored `lost` ever rests (gate 227). |
+| 2 | An answered call is credited to Salvage: the story clock jumps to 9.2, so section 2 still inserts the caught row with SALVAGED and rolls Recovered; the answered path never shows Missed → Text, which is what the product sells. | **Open — owner's call.** The spec has the answered path's Booked beat land early and every path converge on Booked. |
+| 3 | Retiring 153 left the spring unchecked — 226 only asked that the knob fall and reach 0; a snap or a linear tween passed. | **Fixed.** 226 fits the release time and checks every in-flight frame against the k 420 / c 34 closed form (worst 0.6–0.9px). Proven red (O4: k 200, "worst 25.75px"). |
+| 4 | 226 dragged with the mouse only. | **Fixed.** Plus a real touch drag (lens 1 #2). |
+| 5 | The gold census read text colour only — a gold fill anywhere passed. | **Fixed.** Gate 38 also counts gold fills and DRAWN gold borders: only the CTA pill and one rail tick. Proven red (MA: a gold knob). |
+| 6 | Retiring 121 dropped "absent at 1440"; 227 took the first visible stake. | **Fixed.** 227 asserts exactly one visible stake at every sample. |
+| 7 | Low: 53 read one node twice; no ring haptic was asserted; nothing gated sound-after-answer, landscape load or leaving mid-ring. | **Fixed.** 53 reads three different surfaces; 228 asserts the ring-out's six ring buzzes, the miss and the booking in order (Chromium — WebKit has no vibrate); gate 229. |
+| 8 | Copy: the in-call timer "0:SS" is written by code; "Lost per month" climbing during one call, and Decline dropping the whole monthly figure at once, can read as one call costing a month. | **Timer: a figure, not copy** (formatted like every count-up). **Framing: open — owner's call** (approved string, specified behaviour). |
+
+### Gate triage
+
+Section 1's customer phone (her outgoing call screen, the Messages banner, the
+live thread, the confirmation card) left with this change; 43b brings a
+customer phone back at ≥1100. Each gate that read it was amended to the owner
+phone's equivalent, re-pointed to the section-3 phone's settled thread, or
+retired with its reason printed in the gate output.
+
+- **Amended:** 1, 8–11 (the SSR floor is the lock screen's three notes; the thread is counted on the section-3 phone), 12 (the notes reveal on the story clock, newest on top — read in VISUAL order), 17, 49 (the incoming call), 50 (the miss lands), 51 (Booked lands and STAYS), 53, 56, 58 (Text sent above Missed call), 59, 69, 80 (the lock clock is device furniture), 88/89 (six rings on the real clock; chime 4.4, land 9.6 on the story clock), 91 + the scale-16 probe (the note's 15px body), 100 (the settled stack fits above the lock screen's shortcuts at 390x700, every preset), 101 (the incoming call's geometry), 105/131/135/200 (bubbles read on the section-3 phone), 111, 195 (every THREAD instance), 205/206 (the stake line holds the caption's slot), 38.
+- **Retired:** 103 (the banner), 106 (the live thread's mask), 121 (the mobile caption is the stake line — 227), 153 (no bubble enters on the s1 clock — 226/12), 157 (the call-screen avatar — 195), 166/169 (the banner and confirmation-card unmount latches), 181 (the in-call grid).
+- **New:** 226 (slide to answer, spring closed form, touch), 227 (the stake), 228 (three paths, one ending; the engine stops; reduced motion), 229 (the story can't be stranded). All four run in Chromium and WebKit at 390x700, 390x844, 1440x900, and at 844x390, where the change-41 orientation guard hides the app and they assert the call never starts.
+
+### Accent, gold, teal and ember in section 1 (after the fixes)
+
+| State | Trade accent | Gold | Teal | Ember |
+|---|---|---|---|---|
+| Ringing | sonar rings ×2 (transient, on the ring beats) | 0 | caret; focus rings | stake ×1 |
+| Settled — rang out / declined | rail fills ×3 | rail tick + money ×2 (desktop + the 120px receipt: 3) | caret | stake ×1 |
+| Settled — answered | rail fill ×1 (Booked only) | 2 (desktop 3) | caret | 0 (the line left) |
+
+Off-system colours are the device's own: iOS green #34C759 (the Phone app
+mark, the answer handset), red #FF3B30 (Decline, End).
+
+### Proofs (mutated builds, both engines)
+
+| Build | Defect planted | Red |
+|---|---|---|
+| O1 | the answer line at 0 | 226 ("+800ms x=228 answered") |
+| O2 | the stake keeps counting through the miss | 227 ("shows $4,089, +1.5s $4,958"; decline "$1,011") |
+| O3 | Decline does nothing | 228 ("decline: missed/timeout") |
+| O4 | a softer spring (k 200) | 226 ("worst 25.75px vs k420/c34") |
+| O5 | no park on leaving; sound-on restarts any run under 3.6 | 229 (a) and (b) |
+| MA | Phone-side: the stack oldest-on-top, the incoming line names the preset id, Decline hidden, the track 90px up, the static thread one bubble short, lower-case initials, a sunk gray bubble, the lock clock unmarked, the shortcuts in the stack, a 17px note body, Booked hidden under reduced motion, a gold knob | 1, 8–12, 17, 38, 49, 53, 58, 69, 80, 91, 100, 101, 105, 131, 135, 195, 200, 227, 228 (+ 6, 18, 54, 55, 129 collateral) |
+| MB | engine-side: the incoming call never leaves on a miss, Booked at 13.5, the rings on the story clock, a 32px stake line, a scaled stage, a snap that keeps the name, an un-skinned Text sent note, an uppercase stake label | 12, 50, 51, 53, 56, 59, 89, 111, 205, 206, 228 (+ 114, 174 collateral) |
+| M88 | the phone rings three times | 88 ("5 beat start(s) — 3 ring"), 89, 228 (the ring-out's haptics) |

@@ -445,13 +445,18 @@ body {
     left: var(--col-left);
   }
   /* change 30 (A3): the settled pair sits fully ON the band — right edge
-     at the band's right - 24 (the band right = col-left - 48 + width). */
+     at the band's right - 24 (the band right = col-left - 48 + width).
+     change 43a: the band left in change 36 and that width outlived it,
+     running the pair 100px into the device column and over the rail's
+     first word. The right edge is the DEVICE's left - 24 now: the grid is
+     [61fr dev 39fr] inside 48px padding, so the device starts at
+     48 + 0.61 x (W - 96 - dev) from the content box's left edge. */
   [data-controls] {
     position: absolute;
     bottom: 47px;
     left: 0;
     z-index: 20;
-    width: calc(0.58 * (min(1240px, 100vw) - 96px) - 0.17 * var(--dev-w) + 24px);
+    width: calc(0.61 * (min(1240px, 100vw) - 96px - var(--dev-w)) + 24px);
     justify-content: flex-end;
   }
 }

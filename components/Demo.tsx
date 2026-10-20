@@ -3,12 +3,13 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 
 import Ledger from "@/components/Ledger";
-import Phone, { NotifyCard } from "@/components/Phone";
+import Phone, { NotifyCard, type OwnerHandlers } from "@/components/Phone";
 import { COPY, MAX_NAME_LEN, META, SHARE_ORIGIN, resolveName, type Preset } from "@/lib/client.config";
 import { track } from "@/lib/track";
 import { type LedgerDates } from "@/lib/dates";
 import { usd } from "@/lib/format";
 import {
+  ANSWER_HOLD,
   BANNER_AT,
   BANNER_IN,
   RECEIPT_AT,
@@ -34,9 +35,13 @@ import {
   RING_DUR,
   RING_MAX_FACTOR,
   RING_MAX_OPACITY,
+  RING_TIMEOUT,
   SCENE_CAUGHT_AT,
   SCENE_DIALING_AT,
   SCENE_FADE,
+  SLIDE_ANSWER_AT,
+  SLIDE_C,
+  SLIDE_K,
   STAMP_IN,
   SWAP_FADE,
   SWAP_ROLL,
@@ -44,12 +49,15 @@ import {
   THREAD_FADE_DUR,
   THREAD_START,
   TYPING,
+  type CallPath,
   caughtRowProgress,
   clamp01,
   easeOut,
   leakAt,
   notifyPresence,
   panelRecoveredAt,
+  stakeAt,
+  storyAt,
 } from "@/lib/timeline";
 
 /* The status line's animated ellipsis renders stem + dots separately; the
@@ -140,7 +148,25 @@ type Nodes = {
   announceRecovered: HTMLElement | null;
   flapCells: { el: HTMLElement; face: HTMLElement; digit: boolean }[];
   stamp: HTMLElement | null;
+  /* change 43a: the owner's phone — its three layers, the slider, the
+     lock-screen notes with their natural (design-px) heights — the stake
+     figures and the progress rail. */
+  ownerIncoming: HTMLElement | null;
+  ownerIncall: HTMLElement | null;
+  ownerTimer: HTMLElement | null;
+  ownerKnob: HTMLElement | null;
+  ownerTrack: HTMLElement | null;
+  ownerSlideLabel: HTMLElement | null;
+  ownerMax: number;
+  ownerNotes: { el: HTMLElement; card: HTMLElement; kind: NoteKind; h: number }[];
+  stakeValues: HTMLElement[];
+  stakeBodies: HTMLElement[];
+  railFills: HTMLElement[];
+  railTick: HTMLElement | null;
 };
+
+type NoteKind = "missed" | "text" | "booked";
+type CallHow = "" | "swipe" | "key" | "decline" | "timeout";
 
 /* ---------------------------------------------------------------------------
  * Sound (change 15, B). Web Audio synthesis only — no samples. Every event is
@@ -280,15 +306,20 @@ type Ctx = {
   announced: boolean;
   toastLatched: boolean;
   fireToast: () => void;
-  /* change 27 (C2): the banner unmounts 2.6s after it lands (4.7 + 2.6 =
-     7.3); park/replay remount it for the next run. */
-  bannerLatched: boolean;
-  setBannerGone: (gone: boolean) => void;
-  /* change 29: the booking-confirmation card follows the same contract —
-     its slide-out completes at 13.0; the element leaves the DOM at 13.3
-     (land 10.3 + 3.0). Gate 169. */
-  confirmLatched: boolean;
-  setConfirmGone: (gone: boolean) => void;
+  /* change 43a: the customer's banner and confirmation card left section
+     1 with her phone, and their unmount latches (changes 27/29) with them.
+     The owner's call: its path, the REAL time it ended, and how. */
+  call: { path: CallPath; at: number; how: CallHow };
+  /* The slide-to-answer knob, in design px. Pointer handlers write x while
+     dragging; the tick owns everything else (the spring, the paint). */
+  slider: { x: number; v: number; drag: boolean; pid: number | null; startClient: number; startX: number; k: number };
+  /* The last painted real time, and the rAF stamp the spring's delta is
+     measured from. */
+  lastReal: number;
+  lastNow: number | null;
+  /* Haptic crossings, like audio.lastT: the previous real and story times. */
+  hapticReal: number;
+  hapticT: number;
   /* change 30 (G1): the slab receipt mounts on the booking beat; the
      desktop clock crossfades out under it. */
   receiptLatched: boolean;
@@ -322,7 +353,11 @@ function playFlapTick(actx: AudioContext) {
   osc.stop(actx.currentTime + 0.014);
 }
 
-function scheduleAudio(ctx: Ctx, prevT: number, t: number) {
+/* change 43a: the rings ride the REAL clock (the phone rings six times
+   unless the owner acts; a ring is never born after the call ends), the
+   chime and the landing tone ride the STORY clock — the chime is the text
+   going out, so an answered call has none. */
+function scheduleAudio(ctx: Ctx, prevReal: number, real: number, prevT: number, t: number) {
   const a = ctx.audio;
   if (!a.enabled || !a.actx || a.actx.state !== "running") return;
   /* Belt and braces on the gesture gate (B2): a session-restored "on" must
@@ -343,16 +378,41 @@ function scheduleAudio(ctx: Ctx, prevT: number, t: number) {
      dropped instead. The normal one-frame-late path (~16ms) is untouched. */
   const crossed = (beat: number) => prevT < beat && t >= beat && t - beat < 0.25;
   const at = (beat: number) => actx.currentTime + Math.max(0, beat - t);
-  for (const b of RING_BEATS) if (crossed(b)) playRing(actx, at(b));
-  if (crossed(CHIME_AT)) {
-    playChime(actx, at(CHIME_AT));
-    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
-      try {
-        navigator.vibrate(30);
-      } catch {}
-    }
-  }
+  const crossedReal = (beat: number) => prevReal < beat && real >= beat && real - beat < 0.25;
+  const endAt = ctx.call.path === "ringing" ? Infinity : ctx.call.at;
+  for (const b of RING_BEATS)
+    if (b < endAt && crossedReal(b)) playRing(actx, actx.currentTime + Math.max(0, b - real));
+  if (ctx.call.path === "missed" && crossed(CHIME_AT)) playChime(actx, at(CHIME_AT));
   if (crossed(LAND_AT)) playLand(actx, at(LAND_AT));
+}
+
+/* change 43a: haptics — a buzz per ring, a double on the miss, a tap on the
+   booking. Event-driven and independent of the sound toggle; a page the
+   visitor has not touched yet is skipped (the browser would refuse it and
+   log an intervention). iOS has no vibrate; nothing happens there. */
+const BUZZ_RING = 300;
+const BUZZ_MISSED = [60, 80, 60];
+const BUZZ_BOOKED = 30;
+function buzz(pattern: number | number[]) {
+  if (typeof navigator === "undefined" || !("vibrate" in navigator)) return;
+  if ("userActivation" in navigator && !navigator.userActivation.hasBeenActive) return;
+  try {
+    navigator.vibrate(pattern);
+  } catch {}
+}
+function scheduleHaptics(ctx: Ctx, prevReal: number, real: number, prevT: number, t: number) {
+  const endAt = ctx.call.path === "ringing" ? Infinity : ctx.call.at;
+  for (const b of RING_BEATS)
+    if (b < endAt && prevReal < b && real >= b && real - b < 0.25) buzz(BUZZ_RING);
+  if (prevT < RECEIPT_AT && t >= RECEIPT_AT && t - RECEIPT_AT < 0.25) buzz(BUZZ_BOOKED);
+}
+
+/* The knob's travel: the track less the knob and its 4px insets. All design
+   px — offsetWidth ignores the screen's scale transform. A hidden app (the
+   landscape guard) measures 0; the slider re-measures on pointerdown and
+   every resize re-collects. */
+function measureTravel(track: HTMLElement | null, knob: HTMLElement | null) {
+  return track && knob ? Math.max(1, track.offsetWidth - knob.offsetWidth - 8) : 1;
 }
 
 function collect(root: HTMLElement): Nodes {
@@ -418,6 +478,29 @@ function collect(root: HTMLElement): Nodes {
     slabs: Array.from(root.querySelectorAll<HTMLElement>("[data-accent-slab]")),
     announceLeak: q("[data-announce-leak]"),
     announceRecovered: q("[data-announce-recovered]"),
+    ownerIncoming: q("[data-owner-incoming]"),
+    ownerIncall: q("[data-owner-incall]"),
+    ownerTimer: q("[data-owner-timer]"),
+    ownerKnob: q("[data-owner-knob]"),
+    ownerTrack: q("[data-owner-track]"),
+    ownerSlideLabel: q("[data-owner-slide-label]"),
+    ownerMax: measureTravel(q("[data-owner-track]"), q("[data-owner-knob]")),
+    ownerNotes: Array.from(root.querySelectorAll<HTMLElement>("[data-owner-note]")).map((el) => {
+      const prev = el.style.height;
+      el.style.height = "";
+      const h = el.offsetHeight;
+      el.style.height = prev;
+      return {
+        el,
+        card: el.querySelector<HTMLElement>("[data-owner-note-card]") as HTMLElement,
+        kind: el.dataset.ownerNote as NoteKind,
+        h,
+      };
+    }),
+    stakeValues: Array.from(root.querySelectorAll<HTMLElement>("[data-stake-value]")),
+    stakeBodies: Array.from(root.querySelectorAll<HTMLElement>("[data-stake-body]")),
+    railFills: Array.from(root.querySelectorAll<HTMLElement>("[data-rail-fill]")),
+    railTick: q("[data-rail-tick]"),
   };
 }
 
@@ -472,11 +555,228 @@ function paintFade(ctx: Ctx, o: number) {
   if (ctx.nodes.ledgerPanel) ctx.nodes.ledgerPanel.style.opacity = s;
 }
 
+/* change 43a: the owner's phone, the stake and the rail. The layers and the
+   slider ride the REAL clock (what the owner does happens in real time);
+   the lock-screen notes and the rail ride the STORY clock, so each lands on
+   its change-11 beat whichever way the call ended. An answered call never
+   misses and never texts: only the booking lands. */
+const NOTE_AT: Record<NoteKind, number> = { missed: CALL_ENDED_AT, text: BANNER_AT, booked: RECEIPT_AT };
+const BEAT_AT = [CALL_ENDED_AT, BANNER_AT, RECEIPT_AT];
+const beatLands = (path: CallPath, i: number) => path === "missed" || (path === "answered" && i === 2);
+
+function paintOwner(ctx: Ctx, t: number, real: number) {
+  const n = ctx.nodes;
+  const c = ctx.call;
+  const ringing = c.path === "ringing";
+
+  /* Incoming is the top layer: up while it rings, out over 250ms when the
+     call ends — revealing the in-call layer (answered) or the lock screen. */
+  if (n.ownerIncoming) {
+    const o = ringing ? 1 : 1 - clamp01((real - c.at) / 0.25);
+    n.ownerIncoming.style.opacity = String(o);
+    n.ownerIncoming.style.visibility = o > 0 ? "visible" : "hidden";
+  }
+  if (n.ownerIncall) {
+    const e = real - c.at;
+    const o = c.path !== "answered" ? 0 : e < ANSWER_HOLD ? 1 : 1 - clamp01((e - ANSWER_HOLD) / 0.3);
+    n.ownerIncall.style.opacity = String(o);
+    n.ownerIncall.style.visibility = o > 0 ? "visible" : "hidden";
+    if (n.ownerTimer) {
+      const sec = c.path === "answered" ? Math.min(59, Math.max(0, Math.floor(e))) : 0;
+      const txt = `0:${String(sec).padStart(2, "0")}`;
+      if (n.ownerTimer.textContent !== txt) n.ownerTimer.textContent = txt;
+    }
+  }
+
+  /* The slider: the tick owns the knob's transform (stepSlider integrates
+     it). The label breathes with each ring — up over the ring's first half,
+     down over its second — and fades as the knob covers it. */
+  if (n.ownerKnob) {
+    const x = ctx.slider.x;
+    n.ownerKnob.style.transform = `translateX(${x.toFixed(1)}px)`;
+    if (n.ownerSlideLabel) {
+      let pulse = 0;
+      if (ringing)
+        for (const b of RING_BEATS) {
+          const e = real - b;
+          if (e >= 0 && e < RING_BURST_DUR) pulse = Math.sin((Math.PI * e) / RING_BURST_DUR);
+        }
+      const cover = 1 - clamp01(x / (0.5 * n.ownerMax));
+      n.ownerSlideLabel.style.opacity = (cover * (0.55 + 0.45 * pulse)).toFixed(3);
+    }
+  }
+
+  /* The lock-screen notes PUSH, newest on top: the outer box grows from 0
+     to its natural height (the older notes move down by exactly that)
+     while the card drops in from above. */
+  n.ownerNotes.forEach((note) => {
+    const e = t - NOTE_AT[note.kind];
+    const lands = !ringing && (c.path === "missed" || note.kind === "booked");
+    const shown = lands && e >= 0;
+    const p = shown ? easeOut(clamp01(e / 0.32)) : 0;
+    if (shown && (p >= 1 || note.h <= 0)) {
+      note.el.style.height = "";
+      note.el.style.overflow = "";
+      note.el.style.visibility = "";
+    } else {
+      note.el.style.overflow = "hidden";
+      note.el.style.height = `${(p * note.h).toFixed(1)}px`;
+      note.el.style.visibility = shown ? "" : "hidden";
+    }
+    if (note.card) {
+      note.card.style.opacity = String(lands ? clamp01(e / 0.2) : 0);
+      note.card.style.transform =
+        p >= 1 ? "" : `translateY(${((p - 1) * 24).toFixed(1)}px) scale(${(0.96 + 0.04 * p).toFixed(3)})`;
+    }
+  });
+
+  /* The stake: counts up in real time over the six rings, frozen at the
+     stored figure on the miss (never above it), frozen where the answer
+     caught it otherwise. */
+  const stake = usd(stakeAt(real, ctx.preset.lost, c.path, c.at));
+  n.stakeValues.forEach((el) => {
+    if (el.textContent !== stake) el.textContent = stake;
+  });
+  /* Answered, nothing was lost — and the count stopped mid-climb at a
+     figure nobody stored. The whole line leaves over 300ms: a computed
+     figure never rests on screen, and lost money is never shown gray. */
+  const stakeOn = String(c.path === "answered" ? 1 - clamp01((real - c.at) / 0.3) : 1);
+  n.stakeBodies.forEach((el) => {
+    if (el.style.opacity !== stakeOn) el.style.opacity = stakeOn;
+  });
+
+  /* The progress rail: a segment fills in accent over 400ms on the beat it
+     names; the gold tick and the money land with the booking. */
+  n.railFills.forEach((el) => {
+    const i = Number(el.dataset.railFill);
+    const f = beatLands(c.path, i) ? easeOut(clamp01((t - BEAT_AT[i]) / 0.4)) : 0;
+    el.style.transform = `scaleX(${f.toFixed(3)})`;
+  });
+  n.beatWords.forEach((el) => {
+    const i = Number(el.dataset.beat);
+    el.style.color = beatLands(c.path, i) && t >= BEAT_AT[i] ? "var(--color-ink)" : "var(--color-muted)";
+  });
+  const money = beatLands(c.path, 2) ? clamp01((t - RECEIPT_AT) / 0.4) : 0;
+  if (n.beatMoney) n.beatMoney.style.opacity = String(money);
+  if (n.railTick) n.railTick.style.opacity = String(beatLands(c.path, 2) ? clamp01((t - RECEIPT_AT) / 0.2) : 0);
+}
+
+/* The slide-to-answer spring (DESIGN.md: k 420, c 34, m 1), integrated
+   in 4ms substeps off the rAF's own frame delta. Home is 0 while it rings;
+   an answered knob runs on to the end of the track. The track's ends are
+   hard stops — the knob never overshoots out of it. */
+function stepSlider(ctx: Ctx, dt: number) {
+  const sl = ctx.slider;
+  if (sl.drag) {
+    sl.v = 0;
+    return;
+  }
+  const max = ctx.nodes.ownerMax;
+  const target = ctx.call.path === "answered" ? max : 0;
+  if (sl.x === target && sl.v === 0) return;
+  let rem = dt;
+  while (rem > 1e-6) {
+    const h = Math.min(rem, 0.004);
+    sl.v += (-SLIDE_K * (sl.x - target) - SLIDE_C * sl.v) * h;
+    sl.x += sl.v * h;
+    rem -= h;
+  }
+  if (sl.x < 0) {
+    sl.x = 0;
+    sl.v = 0;
+  }
+  if (sl.x > max) {
+    sl.x = max;
+    sl.v = 0;
+  }
+  if (Math.abs(sl.x - target) < 0.5 && Math.abs(sl.v) < 5) {
+    sl.x = target;
+    sl.v = 0;
+  }
+}
+
+/* A fresh run: the phone rings again, the knob is home. */
+function resetCall(ctx: Ctx) {
+  ctx.call = { path: "ringing", at: 0, how: "" };
+  ctx.slider.x = 0;
+  ctx.slider.v = 0;
+  ctx.slider.drag = false;
+  ctx.slider.pid = null;
+  ctx.lastReal = 0;
+  ctx.lastNow = null;
+  ctx.hapticReal = -1;
+  ctx.hapticT = -1;
+}
+
+/* A call left ringing where nobody can see it — section 1 scrolled away,
+   the tab hidden — is not allowed to ring out unseen: the run re-arms, and
+   the phone rings again from the top when section 1 is back. */
+function parkIfRinging(ctx: Ctx) {
+  if (ctx.reduced || ctx.armed || ctx.transition || ctx.call.path !== "ringing") return;
+  if (ctx.raf != null) {
+    cancelAnimationFrame(ctx.raf);
+    ctx.raf = null;
+  }
+  park(ctx);
+  if (ctx.mathRoll.started && !ctx.mathRoll.done) schedule(ctx);
+}
+
+/* The owner acts (or the sixth ring runs out). Only a RINGING call on a
+   running clock can end; the end is stamped at the last painted real time,
+   so the next frame's clocks only move forward. */
+function endCall(ctx: Ctx, path: "missed" | "answered", how: CallHow) {
+  if (ctx.reduced || ctx.armed || ctx.transition || ctx.start == null || ctx.call.path !== "ringing") return;
+  ctx.call = { path, at: ctx.lastReal, how };
+  ctx.slider.drag = false;
+  ctx.slider.pid = null;
+  if (path === "missed") buzz(BUZZ_MISSED);
+  schedule(ctx);
+}
+
+/* The slider's pointer plumbing. Pointer deltas are client px — divided by
+   the screen's scale to land in the 360-wide design space the knob lives
+   in. These write the drag position and nothing else; the tick paints. */
+function slideDown(ctx: Ctx, track: HTMLElement, pid: number, clientX: number) {
+  if (ctx.reduced || ctx.armed || ctx.transition || ctx.start == null || ctx.call.path !== "ringing") return;
+  try {
+    track.setPointerCapture(pid);
+  } catch {}
+  ctx.nodes.ownerMax = measureTravel(track, track.querySelector<HTMLElement>("[data-owner-knob]"));
+  const screen = track.closest<HTMLElement>("[data-phone-screen]");
+  const k = screen && screen.offsetWidth > 0 ? screen.getBoundingClientRect().width / screen.offsetWidth : 1;
+  const sl = ctx.slider;
+  sl.drag = true;
+  sl.pid = pid;
+  sl.startClient = clientX;
+  sl.startX = sl.x;
+  sl.k = k > 0 ? k : 1;
+  sl.v = 0;
+  schedule(ctx);
+}
+function slideMove(ctx: Ctx, pid: number, clientX: number) {
+  const sl = ctx.slider;
+  if (!sl.drag || pid !== sl.pid) return;
+  sl.x = Math.min(ctx.nodes.ownerMax, Math.max(0, sl.startX + (clientX - sl.startClient) / sl.k));
+  schedule(ctx);
+}
+function slideUp(ctx: Ctx, pid: number, released: boolean) {
+  const sl = ctx.slider;
+  if (!sl.drag || pid !== sl.pid) return;
+  sl.drag = false;
+  sl.pid = null;
+  /* Released past the line, it answers; anything short (or a cancelled
+     pointer) springs home and the phone keeps ringing. */
+  if (released && sl.x >= SLIDE_ANSWER_AT * ctx.nodes.ownerMax) endCall(ctx, "answered", "swipe");
+  else schedule(ctx);
+}
+
 /* One function, one clock. `t` is GLOBAL time (the call screen starts at 0);
-   the pre-existing thread beats are thread-relative, offset by THREAD_START. */
-function paintScene(ctx: Ctx, t: number) {
+   the pre-existing thread beats are thread-relative, offset by THREAD_START.
+   change 43a: `t` is the STORY clock; `real` drives the owner's phone. */
+function paintScene(ctx: Ctx, t: number, real: number = t) {
   const n = ctx.nodes;
   const tt = t - THREAD_START;
+  paintOwner(ctx, t, real);
 
   /* --- The customer's outgoing call (0 .. THREAD_START) --- */
   if (n.call) {
@@ -577,16 +877,8 @@ function paintScene(ctx: Ctx, t: number) {
     n.controls.style.opacity = String(c);
   }
 
-  /* --- change 36 (C1): the beat strip. Three words under the phone, each
-         inking at the beat it names — the miss (3.6), the text (4.4), the
-         booking (RECEIPT_AT) — and the money landing beside the third.
-         Same clock, no second timer. --- */
-  const BEAT_AT = [CALL_ENDED_AT, BANNER_AT, RECEIPT_AT];
-  n.beatWords.forEach((el) => {
-    const i = Number(el.dataset.beat);
-    el.style.color = t >= BEAT_AT[i] ? "var(--color-ink)" : "var(--color-muted)";
-  });
-  if (n.beatMoney) n.beatMoney.style.opacity = String(clamp01((t - RECEIPT_AT) / 0.4));
+  /* change 36 (C1)'s beat strip is change 43a's progress rail — painted
+     path-aware in paintOwner above. */
 
   /* --- Desktop scene type (change 15, A2): line 2 crossfades on the miss
          and again when the thread begins. Same clock as everything else. --- */
@@ -616,10 +908,14 @@ function paintScene(ctx: Ctx, t: number) {
          height, opacity falls from RING_MAX_OPACITY, both ease-out. Three
          beats share two circles; a beat's ring is dead long before its
          circle is needed again. --- */
+  /* change 43a: on the REAL clock — six rings while it rings; a ring is
+     never born after the call ends (the ones in flight fade out). */
   if (n.sonarRings.length === 2 && n.sonarH > 0) {
     const live: ({ r: number; o: number } | null)[] = [null, null];
+    const endAt = ctx.call.path === "ringing" ? Infinity : ctx.call.at;
     RING_BEATS.forEach((beat, bi) => {
-      const e = t - beat;
+      if (beat >= endAt) return;
+      const e = real - beat;
       if (e >= 0 && e < RING_DUR) {
         const p = easeOut(e / RING_DUR);
         live[bi % 2] = { r: RING_MAX_FACTOR * n.sonarH * p, o: RING_MAX_OPACITY * (1 - p) };
@@ -663,12 +959,9 @@ function park(ctx: Ctx) {
   ctx.audio.lastT = -1;
   ctx.caretLatched = false;
   ctx.setCaretBob(false);
-  ctx.bannerLatched = false;
-  ctx.setBannerGone(false);
-  ctx.confirmLatched = false;
-  ctx.setConfirmGone(false);
   ctx.receiptLatched = false;
   ctx.setReceiptShown(false);
+  resetCall(ctx);
   if (ctx.nodes.sceneClock) ctx.nodes.sceneClock.style.opacity = "1";
   if (ctx.nodes.clockSeconds) ctx.nodes.clockSeconds.textContent = ":00";
   ctx.lastFlapValue = -1;
@@ -688,6 +981,9 @@ function park(ctx: Ctx) {
   if (ctx.nodes.announceLeak) ctx.nodes.announceLeak.textContent = "";
   if (ctx.nodes.announceRecovered) ctx.nodes.announceRecovered.textContent = "";
   ctx.root.dataset.t = "0.000";
+  ctx.root.dataset.tReal = "0.000";
+  ctx.root.dataset.callPath = "ringing";
+  ctx.root.dataset.callHow = "";
 }
 
 function beginPlayback(ctx: Ctx) {
@@ -697,6 +993,7 @@ function beginPlayback(ctx: Ctx) {
   ctx.audio.lastT = -1;
   ctx.caretLatched = false;
   ctx.setCaretBob(false);
+  resetCall(ctx);
   schedule(ctx);
 }
 
@@ -794,16 +1091,38 @@ function tick(ctx: Ctx, now: number) {
       park(ctx);
       return;
     }
+    ctx.armed = false;
     ctx.start = now;
     ctx.audio.lastT = -1;
+    resetCall(ctx);
   }
 
+  /* A parked run never plays (a park can land between a schedule() and
+     its frame). */
+  if (ctx.armed) return;
+
   if (ctx.start == null) ctx.start = now;
-  const t = (now - ctx.start) / 1000;
+  /* change 43a: two clocks off the one rAF stamp. `real` is playback time;
+     the sixth ring running out is the miss. `t` is the story clock every
+     post-call beat is written in (lib/timeline.ts, storyAt). */
+  const real = (now - ctx.start) / 1000;
+  if (ctx.call.path === "ringing" && real >= RING_TIMEOUT) {
+    ctx.call = { path: "missed", at: RING_TIMEOUT, how: "timeout" };
+    ctx.slider.drag = false;
+    ctx.slider.pid = null;
+    buzz(BUZZ_MISSED);
+  }
+  const t = storyAt(real, ctx.call.path, ctx.call.at);
   const tt = t - THREAD_START;
   const p = ctx.preset;
 
-  paintScene(ctx, t);
+  /* Up to 250ms of wall time per frame (4ms substeps keep it stable): a
+     slow frame must not slow the spring, or it drifts off k 420 / c 34. */
+  stepSlider(ctx, ctx.lastNow == null ? 0 : Math.min(0.25, (now - ctx.lastNow) / 1000));
+  ctx.lastNow = now;
+  ctx.lastReal = real;
+
+  paintScene(ctx, t, real);
   paintFade(ctx, 1);
   paintNumbers(ctx, leakAt(tt, p.lost), panelRecoveredAt(tt, p.recovered, p.caught[0].amount));
   paintFlaps(ctx, tt, (q) => leakAt(q, p.lost));
@@ -822,10 +1141,13 @@ function tick(ctx: Ctx, now: number) {
     ctx.lastFlapTickAt = now;
   }
   ctx.lastFlapValue = flapNow;
-  /* change 30 (G2): the clock seconds — one step per phase-second, frozen
-     at the miss beat (":03"). */
-  if (ctx.nodes.clockSeconds)
-    ctx.nodes.clockSeconds.textContent = ":0" + Math.min(3, Math.max(0, Math.floor(t)));
+  /* change 30 (G2): the clock seconds — one step per second, frozen when
+     the call ends. change 43a: on the REAL clock while it rings (six rings
+     run to ":07"), frozen at the second the owner acted or it rang out. */
+  if (ctx.nodes.clockSeconds) {
+    const sec = Math.floor(ctx.call.path === "ringing" ? real : ctx.call.at);
+    ctx.nodes.clockSeconds.textContent = ":0" + Math.min(9, Math.max(0, sec));
+  }
   /* change 30 (G1): the desktop clock crossfades out under the receipt. */
   if (ctx.nodes.sceneClock)
     ctx.nodes.sceneClock.style.opacity = String(1 - clamp01((t - RECEIPT_AT) / 0.4));
@@ -834,6 +1156,9 @@ function tick(ctx: Ctx, now: number) {
     ctx.setReceiptShown(true);
   }
   ctx.root.dataset.t = t.toFixed(3);
+  ctx.root.dataset.tReal = real.toFixed(3);
+  ctx.root.dataset.callPath = ctx.call.path;
+  ctx.root.dataset.callHow = ctx.call.how;
 
   /* change 26 (G5): announce the settled figures ONCE, politely. */
   if (!ctx.announced && tt >= 5.5) {
@@ -847,26 +1172,17 @@ function tick(ctx: Ctx, now: number) {
     ctx.caretLatched = true;
     ctx.setCaretBob(true);
   }
-  /* change 27 (C2): the banner leaves the DOM 2.6s after its landing
-     (BANNER_AT 4.4 + BANNER_IN 0.3 + 2.6). Gate 166. */
-  if (!ctx.bannerLatched && t >= 7.3) {
-    ctx.bannerLatched = true;
-    ctx.setBannerGone(true);
-  }
-  /* change 29: the confirmation card leaves the DOM 3.0s after it lands
-     (10.3 + 3.0; its slide-out already completed at 13.0). */
-  if (!ctx.confirmLatched && t >= 13.3) {
-    ctx.confirmLatched = true;
-    ctx.setConfirmGone(true);
-  }
-  if (!ctx.toastLatched && t >= 0.5) {
+  if (!ctx.toastLatched && real >= 0.5) {
     ctx.toastLatched = true;
     ctx.fireToast();
   }
 
-  /* Sound rides the same phase value this frame just painted with. */
-  scheduleAudio(ctx, ctx.audio.lastT, t);
+  /* Sound and haptics ride the same clocks this frame just painted with. */
+  scheduleAudio(ctx, ctx.hapticReal, real, ctx.audio.lastT, t);
+  scheduleHaptics(ctx, ctx.hapticReal, real, ctx.hapticT, t);
   ctx.audio.lastT = t;
+  ctx.hapticReal = real;
+  ctx.hapticT = t;
 
   /* change 30 (G5): the math roll — 600ms, once, on the same rAF. */
   const mr = ctx.mathRoll;
@@ -1104,11 +1420,6 @@ export default function Demo({
   const [yoursPanel, setYoursPanel] = useState(activeIndex);
   /* One-shot swipe cue: shown when section 3 first becomes active, dismissed
      by the first horizontal scroll or a 4s timeout. */
-  /* change 27 (C2): the banner's DOM presence — the engine latches it gone
-     at t=7.3; park/replay flip it back. */
-  const [bannerGone, setBannerGone] = useState(false);
-  /* change 29: same contract for the booking-confirmation card. */
-  const [confirmGone, setConfirmGone] = useState(false);
   /* change 30 (G1): the receipt mounts on the booking beat; SSR (and
      reduced motion) render it settled — park hides it for a motion run. */
   const [receiptShown, setReceiptShown] = useState(false);
@@ -1209,6 +1520,7 @@ export default function Demo({
       return;
     }
     if (ctx.transition?.swapped) {
+      resetCall(ctx);
       paintScene(ctx, 0);
       paintFade(ctx, 0);
       paintNumbers(ctx, ctx.shown.lost, ctx.shown.panelRecovered);
@@ -1249,14 +1561,13 @@ export default function Demo({
     nameFlashArmed.current = true;
   }, [name]);
 
-  /* change 27 (C2) / change 29: the banner and the confirmation card mount
-     and unmount mid-run — re-collect so the engine never paints a detached
-     node and always finds a fresh one. */
+  /* The receipt mounts mid-run — re-collect so the engine never paints a
+     detached node and always finds a fresh one. */
   useLayoutEffect(() => {
     const ctx = ctxRef.current;
     if (!ctx) return;
     ctx.nodes = collect(ctx.root);
-  }, [bannerGone, confirmGone, receiptShown]);
+  }, [receiptShown]);
 
   /* Mount. Reduced motion means zero timers: the SSR settled state stands.
      Otherwise the clock PARKS at t=0 (change 12) — the section observer
@@ -1284,10 +1595,12 @@ export default function Demo({
       setCaretBob,
       announced: false,
       toastLatched: false,
-      bannerLatched: false,
-      setBannerGone,
-      confirmLatched: false,
-      setConfirmGone,
+      call: { path: "ringing", at: 0, how: "" },
+      slider: { x: 0, v: 0, drag: false, pid: null, startClient: 0, startX: 0, k: 1 },
+      lastReal: 0,
+      lastNow: null,
+      hapticReal: -1,
+      hapticT: -1,
       receiptLatched: false,
       setReceiptShown,
       mathRoll: { started: false, at: null, done: false },
@@ -1329,8 +1642,12 @@ export default function Demo({
     if (ctx.reduced) {
       root.dataset.t = "settled";
       /* change 33 (B4): reduced motion has no beats — the receipt is simply
-         already there, at settle. */
+         already there, at settle. change 43a: so are the rail's money and
+         its tick (they ship at opacity 0: the money is a beat). A state,
+         set once; nothing travels. */
       setReceiptShown(true);
+      if (ctx.nodes.beatMoney) ctx.nodes.beatMoney.style.opacity = "1";
+      if (ctx.nodes.railTick) ctx.nodes.railTick.style.opacity = "1";
       return;
     }
 
@@ -1342,7 +1659,7 @@ export default function Demo({
        (these styles are set here, client-side, not in the SSR markup). */
     const fontFade = [
       ...root.querySelectorAll<HTMLElement>("[data-scene]"),
-      ...root.querySelectorAll<HTMLElement>("[data-scene-mobile]"),
+      ...root.querySelectorAll<HTMLElement>("[data-call-stage] [data-stake-line]"),
       /* change 26 (B5): only section 1's folio rides the fonts fade — the
          others ink in on their section's first entry. */
       ...root.querySelectorAll<HTMLElement>('[data-section="call"] [data-section-mark]'),
@@ -1467,6 +1784,7 @@ export default function Demo({
             if (ctx) {
               ctx.callSectionVisible = on;
               if (on) beginPlayback(ctx);
+              else parkIfRinging(ctx);
             }
           }
         });
@@ -1517,6 +1835,16 @@ export default function Demo({
     window.addEventListener("pointerdown", resumeAudio);
     window.addEventListener("keydown", resumeAudio);
 
+    /* change 43a: a hidden tab parks a ringing call; coming back to section
+       1 rings it again from the top. */
+    const onVisibility = () => {
+      const ctx = ctxRef.current;
+      if (!ctx) return;
+      if (document.hidden) parkIfRinging(ctx);
+      else if (ctx.callSectionVisible) beginPlayback(ctx);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
     /* Resize (rotate) re-asserts the switcher track's resting panel: the
        browser keeps scrollLeft in PIXELS while panel widths move, and a
        resize during a smooth scroll animates on to a stale pixel target —
@@ -1528,6 +1856,9 @@ export default function Demo({
       const ctx = ctxRef.current;
       const track = yoursTrackRef.current;
       if (!ctx || !track) return;
+      /* change 43a: a rotate re-measures the device — the slider's travel
+         and the sonar's height read 0 while the landscape guard hid it. */
+      ctx.nodes = collect(ctx.root);
       const id = ctx.pendingPresetId ?? ctx.transition?.to.id ?? ctx.preset.id;
       const i = (ctxRef.current?.presets ?? []).findIndex((p) => p.id === id);
       if (i >= 0) track.scrollTo({ left: i * track.clientWidth, behavior: "auto" });
@@ -1600,6 +1931,7 @@ export default function Demo({
       panelIOs.forEach((io) => io.disconnect());
       window.removeEventListener("pointerdown", resumeAudio);
       window.removeEventListener("keydown", resumeAudio);
+      document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("resize", onResize);
       window.removeEventListener("keydown", onKey);
     };
@@ -1828,12 +2160,9 @@ export default function Demo({
     ctx.audio.lastT = -1;
     ctx.caretLatched = false;
     setCaretBob(false);
-    ctx.bannerLatched = false;
-    setBannerGone(false);
-    ctx.confirmLatched = false;
-    setConfirmGone(false);
     ctx.receiptLatched = false;
     setReceiptShown(false);
+    resetCall(ctx);
     schedule(ctx);
   };
 
@@ -1868,11 +2197,14 @@ export default function Demo({
          (t < 3.6) restarts the run from 0 WITH sound — the rings deserve
          their audio. Later than the miss, no restart. */
       const t = parseFloat(ctx.root.dataset.t ?? "");
-      if (Number.isFinite(t) && t > 0 && t < 3.6 && !ctx.armed && !ctx.transition) {
+      /* change 43a: only while the phone is still RINGING — an answered
+         call also holds the story under 3.6, and must not ring again. */
+      if (Number.isFinite(t) && t > 0 && t < 3.6 && !ctx.armed && !ctx.transition && ctx.call.path === "ringing") {
         ctx.start = null;
         ctx.audio.lastT = -1;
         ctx.caretLatched = false;
         setCaretBob(false);
+        resetCall(ctx);
         schedule(ctx);
       }
     } else if (ctx.audio.actx) {
@@ -1943,9 +2275,43 @@ export default function Demo({
       ctx.audio.lastT = -1;
       ctx.caretLatched = false;
       setCaretBob(false);
+      ctx.receiptLatched = false;
+      setReceiptShown(false);
+      resetCall(ctx);
       schedule(ctx);
     }
     goSection(0);
+  };
+
+  /* change 43a: the owner's controls. Decline and the slider only ever
+     WRITE intent (the call's path, the knob's drag position); the one rAF
+     paints. */
+  const ownerHandlers: OwnerHandlers = {
+    onDecline: () => {
+      const ctx = ctxRef.current;
+      if (ctx) endCall(ctx, "missed", "decline");
+    },
+    onSlideDown: (e) => {
+      const ctx = ctxRef.current;
+      if (ctx) slideDown(ctx, e.currentTarget, e.pointerId, e.clientX);
+    },
+    onSlideMove: (e) => {
+      const ctx = ctxRef.current;
+      if (ctx) slideMove(ctx, e.pointerId, e.clientX);
+    },
+    onSlideUp: (e) => {
+      const ctx = ctxRef.current;
+      if (ctx) slideUp(ctx, e.pointerId, e.type === "pointerup");
+    },
+    onSlideKey: (e) => {
+      /* The knob is a button to assistive tech (VoiceOver presents iOS's
+         own slide-to-answer the same way): Enter or Space answers. Handled
+         here, so the pager never sees the Space. */
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      const ctx = ctxRef.current;
+      if (ctx) endCall(ctx, "answered", "key");
+    },
   };
 
   const goSection = (i: number) => {
@@ -2119,74 +2485,88 @@ export default function Demo({
               </p>
             </div>
             </div>
+            {/* change 43a: the stake — what this call is worth losing,
+                counting up in ember over the six rings and frozen at the
+                miss. Outside the clock block, so it stays when the receipt
+                takes the clock's place. Label 17 / data 28 (DESIGN.md). SSR
+                seeds the settled (missed) figure. */}
+            <p data-stake-line className="mt-8">
+              <span data-stake-body className="flex items-baseline gap-3">
+                <span className="text-[17px] font-medium text-muted">{COPY.yours.rows.lost}</span>
+                <span data-stake-value data-figure="data" className="text-[28px] leading-none text-ember">
+                  {usd(preset.lost)}
+                </span>
+              </span>
+            </p>
           </div>
 
           {/* change 27 (B1): the stage column carries an explicit width — a
               shrink-wrapped grid column gives the aspect-boxed device
               nothing to size against (globals sets 82dvh * 390/810). */}
           <div data-call-stage data-phone-entry={phoneEntry ?? undefined} className="w-full max-w-[390px] shrink-0">
-            {/* change 19 (B1): the mobile caption — Newsreader italic 22px,
-                centered above the phone, height reserved, riding the same
-                three beats as the desktop scene type (same slots, one
-                clock). SSR seeds the settled "caught" line. */}
-            <div data-scene-mobile data-chrome="caption" data-client-world className="relative mb-4 h-7 text-left min-[1100px]:hidden">
-              <p
-                data-scene-line="closed"
-                className="absolute left-0 top-0 w-fit whitespace-nowrap font-caption text-[22px] font-normal italic leading-7 text-ink"
-                style={{ opacity: 0 }}
-              >
-                {COPY.scene.mobile.calls}
-              </p>
-              <p
-                data-scene-line="dialing"
-                className="absolute left-0 top-0 w-fit whitespace-nowrap font-caption text-[22px] font-normal italic leading-7 text-ink"
-                style={{ opacity: 0 }}
-              >
-                {COPY.scene.mobile.nobody}
-              </p>
-              {/* change 36 (C2): the 56px receipt over the caption slot is
-                  gone from mobile — the beat strip under the phone carries
-                  the money now, beside the word it belongs to. Desktop
-                  keeps the clock crossfade (C2). */}
-              <p
-                data-scene-line="caught"
-                className="absolute left-0 top-0 w-fit whitespace-nowrap font-caption text-[22px] font-normal italic leading-7 text-ink"
-                style={{ opacity: 1 }}
-              >
-                {COPY.scene.mobile.caught.pre}
-                <span style={{ color: "var(--accent, #8AA0B4)" }}>{COPY.scene.mobile.caught.em}</span>
-                {COPY.scene.mobile.caught.post}
-              </p>
+            {/* change 43a: the mobile caption's slot (and its h-7 budget) is
+                the stake line now — the label and the ember figure that
+                counts up while the owner's phone rings. */}
+            <div data-stake-line data-chrome="caption" data-client-world className="relative mb-4 h-7 min-[1100px]:hidden">
+              {/* Label 17 / data 20 (DESIGN.md), baselines shared. */}
+              <span data-stake-body className="flex h-7 items-baseline gap-2">
+                <span className="text-[17px] font-medium leading-7 text-muted">{COPY.yours.rows.lost}</span>
+                <span data-stake-value data-figure="data" className="text-[20px] leading-7 text-ember">
+                  {usd(preset.lost)}
+                </span>
+              </span>
             </div>
-            <Phone preset={preset} bizName={bizName} typingBefore={[2]} sonar showBanner={!bannerGone} showConfirm={!confirmGone} />
-            {/* change 36 (C1): the mechanism, in three words, under the
-                phone at every width. Each inks at its own beat; "+${ticket}"
-                lands 12px right of "Booked" on the booking beat. This is
-                where the money lives now — section 1 leads with what the
-                product DOES and closes on what it made. */}
-            <div data-beats data-chrome="beats" className="mt-6 flex h-6 items-center justify-center">
-              <div className="flex items-center gap-6 font-figures text-[13px] leading-none">
+            {/* change 43a: section 1's device is the OWNER's phone. */}
+            <Phone preset={preset} bizName={bizName} variant="owner" sonar ownerHandlers={ownerHandlers} />
+            {/* change 36 (C1) -> change 43a: the beat strip is a three-segment
+                progress rail. Each segment fills in accent on the beat its
+                word names; a 2px gold tick and "+${ticket}" land on the
+                booking, the money 12px right of BOOKED. An answered call
+                fills the third alone — it never missed and never texted.
+                Words in the DESIGN.md caption role (Plex Sans 500, 13,
+                +0.04em, uppercase), the money in the data role (Plex Mono
+                20). Columns size to their words (the whole rail measures
+                309px, so it holds at 360). SSR fills the rail; the money and
+                its tick ship at opacity 0 — the money is a beat (gate 184). */}
+            <div data-beats data-chrome="beats" className="mt-6 h-6">
+              <div data-progress-rail className="grid h-6 grid-cols-[minmax(max-content,1fr)_minmax(max-content,1fr)_auto] gap-x-3">
                 {[COPY.beats.missed, COPY.beats.text, COPY.beats.booked].map((w, i) => (
-                  <Fragment key={w}>
-                    {i > 0 && (
-                      <span aria-hidden="true" className="-mx-3 text-muted opacity-40">
-                        ·
-                      </span>
-                    )}
-                    <span data-beat={i} className="whitespace-nowrap" style={{ color: "var(--color-muted)" }}>
-                      {w}
+                  <div key={w} className="flex flex-col">
+                    <span className="relative block h-[2px] bg-[rgba(233,238,244,0.14)]">
+                      <span
+                        data-rail-fill={i}
+                        data-accent-ok
+                        className="absolute inset-0 origin-left bg-[var(--accent,#8AA0B4)]"
+                      />
+                      {i === 2 && (
+                        <span data-rail-tick className="absolute -top-[3px] right-0 h-2 w-[2px] bg-gold" style={{ opacity: 0 }} />
+                      )}
                     </span>
-                  </Fragment>
+                    {/* A zero-width 20px strut (a pseudo-element, no text node)
+                        gives every label row the money's baseline, so the
+                        three words sit on one line with or without it. */}
+                    <span className="mt-1.5 flex h-4 items-baseline whitespace-nowrap after:text-[20px] after:leading-4 after:content-['\200b']">
+                      <span
+                        data-beat={i}
+                        className="text-[13px] font-medium uppercase leading-4 tracking-[0.04em]"
+                        style={{ color: "var(--color-ink)" }}
+                      >
+                        {w}
+                      </span>
+                      {i === 2 && (
+                        <span
+                          data-beat-money
+                          data-figure="data"
+                          className="ml-3 text-[20px] leading-4 text-gold"
+                          style={{ opacity: 0 }}
+                        >
+                          +${preset.ticket}
+                        </span>
+                      )}
+                    </span>
+                  </div>
                 ))}
               </div>
-              <span
-                data-beat-money
-                data-figure="hero"
-                className="ml-3 whitespace-nowrap text-[20px] font-medium leading-none text-gold"
-                style={{ opacity: 0 }}
-              >
-                +${preset.ticket}
-              </span>
             </div>
 
             {/* change 26 (C7): the settled pair — centered under the
