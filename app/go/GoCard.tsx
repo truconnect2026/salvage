@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import {
   buildIcs,
@@ -9,26 +9,38 @@ import {
   fill,
   formatTyping,
   googleCalendarUrl,
+  isOpenAt,
+  minuteOfDay,
   nextSlot,
   openDays,
+  openToday,
   phoneDigits,
   smsHref,
   telNumber,
   type Booking,
+  type Schedule,
   type Slot,
   type SlotDay,
 } from "@/lib/go";
 import { track } from "@/lib/track";
 
+import { CompassRose, Glyph, jobGlyph, SLOT } from "./glyphs";
+
 /*
- * change 42: the /go card. Identity on top, big action slots, one primary
- * CTA (the Captain's Card structure — not its styling). The server renders
- * all of it; JS adds the booking sheet and the downloads. The entrance is
- * CSS, so nothing waits at opacity 0 for hydration.
+ * change 45: the door, rebuilt. Identity on top with a STATUS INSTRUMENT
+ * (a drawn 24h dial: the open window as the accent arc, a hand at the
+ * current time), the emergency band — the page's ONE filled surface — then
+ * 72px slots, the demo's owner phone pinned under them, and a proof row of
+ * config data under a drawn compass rose.
  *
- * Accent discipline: the trade accent paints ONLY the primary slot, the
- * status dot and the trade label. Teal is focus and interactivity; gold is
- * the confirm CTA and the owner's money line.
+ * Accent discipline (DESIGN.md §4): the trade accent paints the dial's
+ * open arc, the emergency band, and a slot's left rule while it is
+ * pressed. Teal is controls only (focus, the step rail, the chosen day).
+ * Gold is the owner card's booked ticket — money gained.
+ *
+ * The server renders all of it; JS adds the sheet, the downloads, the
+ * minute clock and the typed done line. The entrance is CSS, so nothing
+ * waits at opacity 0 for hydration.
  */
 
 export type GoCopy = {
@@ -39,10 +51,15 @@ export type GoCopy = {
   confirm: string; sendQuote: string; back: string; close: string;
   doneTitle: string; doneSub: string; quoteDoneTitle: string; quoteDoneSub: string;
   addCal: string; copyNumber: string; copied: string; ownerSide: string;
-  demoNote: string; poweredBy: string;
+  demoNote: string; poweredBy: string; installHint: string;
   recoveredLabel: string;
+  /** The Salvage mark's letter — COPY.productName's first. */
+  mark: string;
   notify: { bookedLabel: string; appTag: string; nowLabel: string };
 };
+
+export type GoJob = { label: string; glyph: string };
+export type GoProof = { radius: string; hoursLabel: string; hours: string; reply: string | null };
 
 type Props = {
   biz: string;
@@ -50,7 +67,7 @@ type Props = {
   nameSlot: ReactNode;
   presetId: string;
   trade: string;
-  jobs: readonly string[];
+  jobs: GoJob[];
   emergency: boolean;
   demo: boolean;
   refId: string;
@@ -64,108 +81,169 @@ type Props = {
   smsBase: string;
   ios: boolean;
   inApp: boolean;
-  open: boolean;
-  nextLabel: string;
+  /** iOS Safari, from the request's UA — the Add to Home Screen hint. */
+  installHint: boolean;
+  schedule: Schedule;
+  serverNow: number;
+  proof: GoProof;
+  /** Demo mode's standing owner card: a stored caller and job. */
+  sample: { name: string; job: string } | null;
   copy: GoCopy;
 };
 
 type Mode = null | "book" | "quote" | "save";
 type BookStep = "job" | "time" | "you" | "done";
+type OwnerCard = { id: number; name: string; job: string; when: string; fresh: boolean };
 
 const usd = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
 
-/* ---------- glyphs: hand-drawn, 24px box, the demo's stroke weight ------- */
+/* ---------- the page's one clock: minute boundaries ---------------------
+   Status, dial hand and the next-open line re-check on it. A timer, not a
+   frame loop — the page's ONE rAF loop is the typed done line. */
+let clockNow = 0;
+let clockTimer: ReturnType<typeof setTimeout> | null = null;
+const clockSubs = new Set<() => void>();
+function armClock() {
+  clockTimer = setTimeout(() => {
+    clockNow = Date.now();
+    clockSubs.forEach((f) => f());
+    armClock();
+  }, 60_000 - (Date.now() % 60_000) + 25);
+}
+/* A phone woken from sleep must not show the status it went to sleep with
+   until the next minute boundary: resume re-reads the clock at once. */
+function onResume() {
+  if (document.visibilityState !== "visible") return;
+  clockNow = Date.now();
+  clockSubs.forEach((f) => f());
+  if (clockTimer) clearTimeout(clockTimer);
+  armClock();
+}
+function subscribeClock(cb: () => void) {
+  clockSubs.add(cb);
+  if (!clockTimer) {
+    armClock();
+    document.addEventListener("visibilitychange", onResume);
+    addEventListener("pageshow", onResume);
+  }
+  return () => {
+    clockSubs.delete(cb);
+    if (!clockSubs.size && clockTimer) {
+      clearTimeout(clockTimer);
+      clockTimer = null;
+      document.removeEventListener("visibilitychange", onResume);
+      removeEventListener("pageshow", onResume);
+    }
+  };
+}
+function useNow(serverNow: number) {
+  return useSyncExternalStore(
+    subscribeClock,
+    () => clockNow || (clockNow = Date.now()),
+    () => serverNow,
+  );
+}
 
-function Glyph({ children, size = 24 }: { children: ReactNode; size?: number }) {
+const reduced = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* Types `text` in, one character per 22ms, on the page's ONE rAF loop.
+   Reduced motion: the whole line, at once. */
+function useTyped(text: string, run: boolean, delayMs = 0) {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (!run) return;
+    if (reduced()) {
+      setN(text.length);
+      return;
+    }
+    let raf = 0;
+    let t0 = 0;
+    const step = (ts: number) => {
+      if (!t0) t0 = ts;
+      const k = Math.max(0, Math.floor((ts - t0 - delayMs) / 22));
+      setN(Math.min(text.length, k));
+      if (k < text.length) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [text, run, delayMs]);
+  return text.slice(0, n);
+}
+
+/* ---------- the status instrument: a 24h dial ---------------------------
+   Noon at the top, midnight at the foot — the day's arc rides over the
+   crown like the sun's. The open window is the accent arc on an open day
+   and a muted hairline on a closed one (the usual hours, not today's);
+   the hand is the zone's current minute. */
+const DIAL = 64;
+const DC = DIAL / 2;
+const DR = 26;
+const angleAt = (hours: number) => ((hours - 12) / 24) * 2 * Math.PI;
+const onDial = (hours: number, r: number) => [DC + r * Math.sin(angleAt(hours)), DC - r * Math.cos(angleAt(hours))];
+const f2 = (n: number) => Math.round(n * 100) / 100;
+
+function Dial({ schedule, now }: { schedule: Schedule; now: number }) {
+  const open = isOpenAt(now, schedule);
+  const day = openToday(now, schedule);
+  const minute = minuteOfDay(now, schedule.tz);
+  const [ax, ay] = onDial(schedule.open, DR);
+  const [bx, by] = onDial(schedule.close, DR);
+  const large = schedule.close - schedule.open > 12 ? 1 : 0;
+  const [hx, hy] = onDial(minute / 60, DR - 7);
   return (
     <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
+      data-go-dial
+      data-open={open ? "1" : "0"}
+      data-from={schedule.open}
+      data-to={schedule.close}
+      data-minute={minute}
+      width={DIAL}
+      height={DIAL}
+      viewBox={`0 0 ${DIAL} ${DIAL}`}
       fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
       aria-hidden="true"
       className="shrink-0"
     >
-      {children}
+      <circle cx={DC} cy={DC} r={DR} stroke="var(--go-rule)" strokeWidth="1" />
+      {Array.from({ length: 24 }, (_, h) => {
+        const major = h % 6 === 0;
+        const [x1, y1] = onDial(h, DR + 2.5);
+        const [x2, y2] = onDial(h, DR + (major ? 6 : 4));
+        return <line key={h} x1={f2(x1)} y1={f2(y1)} x2={f2(x2)} y2={f2(y2)} stroke="var(--color-muted)" strokeWidth={major ? 1.25 : 0.75} />;
+      })}
+      <path
+        data-go-arc
+        d={`M${f2(ax)} ${f2(ay)}A${DR} ${DR} 0 ${large} 1 ${f2(bx)} ${f2(by)}`}
+        stroke={day ? "var(--accent)" : "var(--color-muted)"}
+        strokeWidth={day ? 4 : 1.5}
+        strokeLinecap="butt"
+      />
+      <line data-go-hand x1={DC} y1={DC} x2={f2(hx)} y2={f2(hy)} stroke="var(--color-ink)" strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx={DC} cy={DC} r="2.5" fill="var(--color-ink)" />
     </svg>
   );
 }
 
-const G = {
-  calendar: (
-    <Glyph>
-      <rect x="3.5" y="5" width="17" height="15.5" rx="0.75" />
-      <path d="M3.5 9.5h17M8 3v4M16 3v4" />
-      <rect x="13.5" y="13" width="3.5" height="3.5" fill="currentColor" stroke="none" />
-    </Glyph>
-  ),
-  text: (
-    <Glyph>
-      <path d="M3.5 5h17v11h-9.5l-4.5 3.8V16h-3z" />
-      <path d="M7.5 9.2h9M7.5 12.2h5.5" />
-    </Glyph>
-  ),
-  call: (
-    <Glyph>
-      <path d="M7 3.6l2.5-.4 1.5 4.1-1.9 1.4a10.6 10.6 0 0 0 4.7 4.7l1.4-1.9 4.1 1.5-.4 2.5a2 2 0 0 1-2.1 1.7C11 16.8 6.2 12 5.3 5.7A2 2 0 0 1 7 3.6z" />
-    </Glyph>
-  ),
-  emergency: (
-    <Glyph>
-      <path d="M6 5.6l2.5-.4 1.5 4.1-1.9 1.4a10.6 10.6 0 0 0 4.7 4.7l1.4-1.9 4.1 1.5-.4 2.5a2 2 0 0 1-2.1 1.7C10 18.8 5.2 14 4.3 7.7A2 2 0 0 1 6 5.6z" />
-      <path d="M14.5 3.5a5.5 5.5 0 0 1 5 5" />
-      <path d="M14.2 6.4a2.8 2.8 0 0 1 2.4 2.4" />
-    </Glyph>
-  ),
-  camera: (
-    <Glyph>
-      <path d="M3 8.2h4.2l1.6-2.7h6.4l1.6 2.7H21V19H3z" />
-      <circle cx="12" cy="13.4" r="3.3" />
-      <path d="M17.8 10.6h.01" />
-    </Glyph>
-  ),
-  save: (
-    <Glyph>
-      <rect x="3.5" y="4.5" width="17" height="15" rx="0.75" />
-      <circle cx="9" cy="10.4" r="2.1" />
-      <path d="M5.9 16.4c.6-1.7 1.7-2.5 3.1-2.5s2.5.8 3.1 2.5M14.5 9.6h3.5M14.5 12.6h3.5" />
-    </Glyph>
-  ),
-  chevron: (
-    <Glyph size={20}>
-      <path d="M9.5 6.5l5.5 5.5-5.5 5.5" />
-    </Glyph>
-  ),
-  back: (
-    <Glyph size={20}>
-      <path d="M14.5 6.5L9 12l5.5 5.5" />
-    </Glyph>
-  ),
-  close: (
-    <Glyph size={20}>
-      <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" />
-    </Glyph>
-  ),
-};
+/* ---------- small parts -------------------------------------------------- */
+
+function SMark({ mark, size = 18 }: { mark: string; size?: number }) {
+  return (
+    <span aria-hidden="true" className="go-smark" style={{ width: size, height: size, fontSize: Math.round(size * 0.68) }}>
+      {mark}
+    </span>
+  );
+}
 
 /* The drawn check: a ring, then the tick, each stroked on by CSS. */
 function DrawnCheck() {
   return (
-    <svg data-go-check width="56" height="56" viewBox="0 0 56 56" fill="none" aria-hidden="true" className="text-teal">
+    <svg data-go-check width="56" height="56" viewBox="0 0 56 56" fill="none" aria-hidden="true" className="text-ink">
       <circle className="go-draw go-draw-ring" cx="28" cy="28" r="25" stroke="currentColor" strokeWidth="1.5" pathLength={1} />
       <path className="go-draw go-draw-tick" d="M17.5 28.8l7 7 14-15.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" pathLength={1} />
     </svg>
   );
 }
-
-const noSubscribe = () => () => {};
-
-/* ---------- downloads ---------------------------------------------------- */
 
 function download(name: string, type: string, body: string) {
   const url = URL.createObjectURL(new Blob([body], { type }));
@@ -181,17 +259,15 @@ function download(name: string, type: string, body: string) {
 /* ---------- the card ----------------------------------------------------- */
 
 export default function GoCard(props: Props) {
-  const { biz, copy, accent, accentInk, demo } = props;
-  /* The next-open sub-line: the server's request-clock value through
-     hydration, then the visitor's own clock. */
-  const next = useSyncExternalStore(
-    noSubscribe,
-    () => nextSlot(Date.now())?.label ?? "",
-    () => props.nextLabel,
-  );
+  const { biz, copy, accent, accentInk, demo, schedule } = props;
+  const now = useNow(props.serverNow);
+  const open = isOpenAt(now, schedule);
+  const nextFree = nextSlot(now, schedule);
+
   const [mode, setMode] = useState<Mode>(null);
   const [step, setStep] = useState<BookStep>("job");
   const [days, setDays] = useState<SlotDay[]>([]);
+  const [dayKey, setDayKey] = useState("");
   const [job, setJob] = useState("");
   const [slot, setSlot] = useState<Slot | null>(null);
   const [name, setName] = useState("");
@@ -201,6 +277,21 @@ export default function GoCard(props: Props) {
   const [photo, setPhoto] = useState<string | null>(null);
   const [quoteDone, setQuoteDone] = useState(false);
   const [copied, setCopied] = useState(false);
+  /* The owner's phone: booked cards land on top; a booking made in the
+     sheet waits until the sheet closes, so its landing is seen. */
+  const [cards, setCards] = useState<OwnerCard[]>([]);
+  const pendingCard = useRef<OwnerCard | null>(null);
+  const cardSeq = useRef(1);
+  /* Starts booked in this visit leave the offer: the owner's phone never
+     shows a slot the page is still selling. */
+  const [taken, setTaken] = useState<number[]>([]);
+  const offer = useCallback(
+    (ms: number) =>
+      openDays(ms, schedule)
+        .map((d) => ({ ...d, slots: d.slots.filter((s) => !taken.includes(s.start)) }))
+        .filter((d) => d.slots.length > 0),
+    [schedule, taken],
+  );
 
   const panelRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLHeadingElement>(null);
@@ -211,17 +302,20 @@ export default function GoCard(props: Props) {
   }, [mode]);
 
   const sms = smsHref(props.smsBase, fill(copy.smsBody, biz), props.ios);
-  const ping = useCallback(
-    (action: string) => track("go_action", { action, preset: props.presetId, ref: props.refId, lead: props.lead }),
-    [props.presetId, props.refId, props.lead],
-  );
+  const meta = useMemo(() => ({ preset: props.presetId, ref: props.refId, lead: props.lead }), [props.presetId, props.refId, props.lead]);
+  const tap = useCallback((slotName: string) => track("go_tap", { ...meta, slot: slotName }), [meta]);
+  useEffect(() => {
+    track("go_view", { ...meta, mode: demo ? "demo" : "live" });
+  }, [meta, demo]);
 
   /* ---- sheet: open / close, history, focus ---- */
 
   const openSheet = (m: Exclude<Mode, null>, trigger: HTMLElement) => {
     triggerRef.current = trigger;
     if (m === "book") {
-      setDays(openDays(Date.now()));
+      const d = offer(Date.now());
+      setDays(d);
+      setDayKey(d[0]?.key ?? "");
       setStep("job");
       setJob("");
       setSlot(null);
@@ -237,7 +331,6 @@ export default function GoCard(props: Props) {
     setMode(m);
     /* Browser Back closes the sheet: one history entry per open. */
     history.pushState({ ...(history.state ?? {}), goSheet: true }, "");
-    ping(m);
   };
 
   const closeSheet = useCallback(() => {
@@ -259,7 +352,9 @@ export default function GoCard(props: Props) {
   }, []);
 
   /* Scroll lock without a jump: the document keeps its offset, and the
-     gutter is reserved in CSS so nothing shifts sideways either. */
+     gutter is reserved in CSS so nothing shifts sideways either. Closing
+     returns focus to the slot that opened the sheet and lands any booking
+     made inside it on the owner's phone. */
   useEffect(() => {
     const root = document.documentElement;
     if (mode) root.setAttribute("data-go-locked", "");
@@ -267,6 +362,11 @@ export default function GoCard(props: Props) {
     if (!mode && triggerRef.current) {
       triggerRef.current.focus({ preventScroll: true });
       triggerRef.current = null;
+    }
+    if (!mode && pendingCard.current) {
+      const c = pendingCard.current;
+      pendingCard.current = null;
+      setCards((cs) => [c, ...cs.map((x) => ({ ...x, fresh: false }))]);
     }
   }, [mode]);
 
@@ -322,9 +422,22 @@ export default function GoCard(props: Props) {
   const confirm = () => {
     setTried(true);
     if (!nameOk || !phoneOk || !slot) return;
-    setBooking({ job, slot, name: name.trim(), phone });
+    /* A slot that slid inside the lead window while the sheet sat open
+       goes back to the picker instead of booking it. */
+    if (slot.start < Date.now() + schedule.leadMinutes * 60_000) {
+      const d = offer(Date.now());
+      setDays(d);
+      setDayKey(d[0]?.key ?? "");
+      setSlot(null);
+      setStep("time");
+      return;
+    }
+    const b = { job, slot, name: name.trim(), phone };
+    setBooking(b);
     setStep("done");
-    ping("booked");
+    setTaken((t) => [...t, slot.start]);
+    track("go_book_done", meta);
+    if (demo) pendingCard.current = { id: cardSeq.current++, name: b.name, job: b.job, when: slot.label, fresh: true };
   };
   const back = () => setStep(step === "you" ? "time" : "job");
 
@@ -335,12 +448,10 @@ export default function GoCard(props: Props) {
       return;
     }
     download(`${fileStem(biz)}.vcf`, "text/vcard;charset=utf-8", buildVcf(biz, telNumber(props.tel)));
-    ping("save");
   };
   const addCalendar = () => {
     if (!booking) return;
-    download(`${fileStem(biz)}.ics`, "text/calendar;charset=utf-8", buildIcs(biz, booking, Date.now()));
-    ping("calendar");
+    download(`${fileStem(biz)}.ics`, "text/calendar;charset=utf-8", buildIcs(biz, booking, Date.now(), schedule.slotMinutes));
   };
   const copyNumber = async () => {
     const value = props.telPretty;
@@ -363,7 +474,7 @@ export default function GoCard(props: Props) {
     setPhoto(URL.createObjectURL(f));
   };
 
-  const open = mode !== null;
+  const sheetOpen = mode !== null;
   const heading =
     mode === "save"
       ? copy.save
@@ -380,6 +491,15 @@ export default function GoCard(props: Props) {
               : copy.doneTitle;
   const showBack = mode === "book" && (step === "time" || step === "you");
   const firstSlot = days[0]?.slots[0] ?? null;
+  const stepIndex = step === "job" ? 0 : step === "time" ? 1 : 2;
+  const typedLine = useTyped(booking ? `${booking.job} · ${booking.slot.label}` : "", mode === "book" && step === "done" && !!booking, 520);
+
+  /* The next-open line skips anything booked in this visit. */
+  const next = taken.includes(nextFree?.start ?? -1) ? (offer(now)[0]?.slots[0] ?? null) : nextFree;
+  /* The standing sample card names its job and nothing else: a time on it
+     would either be invented or be the very slot the page offers. */
+  const sampleCard: OwnerCard | null = props.sample ? { id: 0, name: props.sample.name, job: props.sample.job, when: "", fresh: false } : null;
+  const ownerCards = sampleCard ? [...cards, sampleCard] : cards;
 
   return (
     <div
@@ -387,160 +507,226 @@ export default function GoCard(props: Props) {
       data-preset={props.presetId}
       style={{ ["--accent" as string]: accent, ["--accent-ink" as string]: accentInk }}
     >
-      <main data-go inert={open} className="go-col">
-        {/* 1. Identity */}
-        <header data-go-identity className="go-in" style={{ ["--i" as string]: 0 }}>
+      <main data-go inert={sheetOpen} className="go-page">
+        {/* 1. Identity: the name, the trade, the status instrument */}
+        <header data-go-identity className="go-ident go-in" style={{ ["--i" as string]: 0 }}>
           {props.nameSlot}
-          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <div className="go-dialrow">
+            <Dial schedule={schedule} now={now} />
             {props.trade && (
-              <span data-go-trade className="font-figures text-[12px] uppercase tracking-[0.14em] text-[var(--accent)]">
+              <p data-go-trade className="go-caption text-muted">
                 {props.trade}
-              </span>
+              </p>
             )}
-            <span data-go-status data-open={props.open ? "1" : "0"} className="go-pill">
-              <span aria-hidden="true" className="go-dot" />
-              {props.open ? copy.open : copy.closed}
-            </span>
           </div>
+          <p data-go-status data-open={open ? "1" : "0"} className="go-status">
+            {open ? copy.open : copy.closed}
+          </p>
         </header>
 
-        <div data-go-slots className="mt-7 flex flex-col gap-2.5">
-          {/* 2. Emergency — home only, top of the stack */}
+        <section data-go-actions className="go-actions">
+          {/* 2. Emergency: the ONE filled surface on the page */}
           {props.emergency && (
-            <a
-              data-go-slot="emergency"
-              href={props.tel}
-              onClick={() => ping("emergency")}
-              className="go-slot go-slot-row go-in go-emergency"
-              style={{ ["--i" as string]: 1 }}
-            >
-              <span className="go-glyph text-ember">{G.emergency}</span>
-              <span className="text-[16px] font-medium">{copy.emergency}</span>
-              <span data-figure="data" className="ml-auto text-[13px] text-muted">
-                {props.telPretty}
+            <a data-go-slot="emergency" href={props.tel} onClick={() => tap("emergency")} className="go-emergency go-in" style={{ ["--i" as string]: 1 }}>
+              <span data-go-glyph className="go-glyph go-pulse">
+                <Glyph size={32}>{SLOT.emergency}</Glyph>
+              </span>
+              <span className="flex min-w-0 flex-col">
+                <span data-go-label className="go-label">
+                  {copy.emergency}
+                </span>
+                <span data-figure="data" className="go-data20">
+                  {props.telPretty}
+                </span>
               </span>
             </a>
           )}
 
-          {/* 3. Primary — the one CTA, in the trade accent */}
-          <button
-            type="button"
-            data-go-slot="book"
-            onClick={(e) => openSheet("book", e.currentTarget)}
-            className="go-slot go-slot-row go-in go-primary"
-            style={{ ["--i" as string]: 2 }}
-            aria-haspopup="dialog"
-          >
-            <span className="go-glyph">{G.calendar}</span>
-            <span className="flex min-w-0 flex-col items-start text-left">
-              <span className="text-[18px] font-medium leading-tight">{copy.book}</span>
-              {next && (
-                <span data-go-next data-figure="data" className="mt-1 text-[13px] leading-none opacity-75">
-                  {copy.nextLabel} · {next}
-                </span>
-              )}
-            </span>
-            <span className="ml-auto opacity-70">{G.chevron}</span>
-          </button>
-
-          {/* 4. The 2x2 */}
-          <div className="grid grid-cols-2 gap-2.5">
-            <a
-              data-go-slot="text"
-              href={sms}
-              onClick={() => ping("text")}
-              className="go-slot go-tile go-in"
-              style={{ ["--i" as string]: 3 }}
-            >
-              <span className="go-glyph text-teal">{G.text}</span>
-              <span>{copy.text}</span>
-            </a>
-            <a
-              data-go-slot="call"
-              href={props.tel}
-              onClick={() => ping("call")}
-              className="go-slot go-tile go-in"
-              style={{ ["--i" as string]: 4 }}
-            >
-              <span className="go-glyph text-teal">{G.call}</span>
-              <span>{copy.call}</span>
-            </a>
+          {/* 3. The slots: 72px, a left rule that lights on press */}
+          <div data-go-slots className="go-slots">
             <button
               type="button"
-              data-go-slot="quote"
-              onClick={(e) => openSheet("quote", e.currentTarget)}
-              className="go-slot go-tile go-in"
-              style={{ ["--i" as string]: 5 }}
+              data-go-slot="book"
+              onClick={(e) => {
+                tap("book");
+                openSheet("book", e.currentTarget);
+              }}
+              className="go-slot go-primary go-in"
+              style={{ ["--i" as string]: 2 }}
               aria-haspopup="dialog"
             >
-              <span className="go-glyph text-teal">{G.camera}</span>
-              <span>{copy.quote}</span>
+              <span data-go-glyph className="go-glyph">
+                <Glyph size={32}>{SLOT.book}</Glyph>
+              </span>
+              <span className="flex min-w-0 flex-col items-start text-left">
+                <span data-go-label className="go-label">
+                  {copy.book}
+                </span>
+                {next && (
+                  <>
+                    <span className="go-caption mt-1 text-muted">{copy.nextLabel}</span>
+                    <span data-go-next data-figure="data" className="go-data20 mt-0.5 text-ink">
+                      {next.label}
+                    </span>
+                  </>
+                )}
+              </span>
+              <span className="go-chev ml-auto">
+                <Glyph size={20}>{SLOT.chevron}</Glyph>
+              </span>
             </button>
-            <button
-              type="button"
-              data-go-slot="save"
-              onClick={saveContact}
-              className="go-slot go-tile go-in"
-              style={{ ["--i" as string]: 6 }}
-            >
-              <span className="go-glyph text-teal">{G.save}</span>
-              <span>{copy.save}</span>
-            </button>
-          </div>
-        </div>
 
-        {/* 5. Folio */}
-        <footer data-go-folio className="go-in mt-8 border-t border-line pt-3" style={{ ["--i" as string]: 7 }}>
-          <p className="flex items-center gap-2 text-[12px] text-muted">
-            <span aria-hidden="true" className="flex h-4 w-4 items-center justify-center rounded-[3px] bg-teal">
-              <span className="font-display text-[11px] font-semibold leading-none text-abyss">S</span>
-            </span>
+            <div className="go-grid">
+              <a data-go-slot="text" href={sms} onClick={() => tap("text")} className="go-slot go-tile go-in" style={{ ["--i" as string]: 3 }}>
+                <span data-go-glyph className="go-glyph">
+                  <Glyph size={32}>{SLOT.text}</Glyph>
+                </span>
+                <span data-go-label className="go-label">
+                  {copy.text}
+                </span>
+              </a>
+              <a data-go-slot="call" href={props.tel} onClick={() => tap("call")} className="go-slot go-tile go-in" style={{ ["--i" as string]: 4 }}>
+                <span data-go-glyph className="go-glyph">
+                  <Glyph size={32}>{SLOT.call}</Glyph>
+                </span>
+                <span data-go-label className="go-label">
+                  {copy.call}
+                </span>
+              </a>
+              <button
+                type="button"
+                data-go-slot="quote"
+                onClick={(e) => {
+                  tap("quote");
+                  openSheet("quote", e.currentTarget);
+                }}
+                className="go-slot go-tile go-in"
+                style={{ ["--i" as string]: 5 }}
+                aria-haspopup="dialog"
+              >
+                <span data-go-glyph className="go-glyph">
+                  <Glyph size={32}>{SLOT.quote}</Glyph>
+                </span>
+                <span data-go-label className="go-label">
+                  {copy.quote}
+                </span>
+              </button>
+              <button
+                type="button"
+                data-go-slot="save"
+                onClick={(e) => {
+                  tap("save");
+                  saveContact(e);
+                }}
+                className="go-slot go-tile go-in"
+                style={{ ["--i" as string]: 6 }}
+              >
+                <span data-go-glyph className="go-glyph">
+                  <Glyph size={32}>{SLOT.save}</Glyph>
+                </span>
+                <span data-go-label className="go-label">
+                  {copy.save}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* 4. Demo mode: the owner's phone, pinned under the slots */}
+          {demo && (
+            <div data-go-owner className="go-owner go-in" style={{ ["--i" as string]: 7 }}>
+              <p className="go-caption text-muted">{copy.ownerSide}</p>
+              <div className="go-mini-phone font-phone">
+                <span aria-hidden="true" className="go-island" />
+                <ul data-go-cards className="go-cards">
+                  {ownerCards.map((c) => (
+                    <li key={c.id} data-go-notify data-fresh={c.fresh ? "1" : undefined} className="go-notify">
+                      <div className="flex items-center gap-1.5">
+                        <SMark mark={copy.mark} />
+                        <span className="text-[13px] font-medium leading-4 text-muted">{copy.notify.appTag}</span>
+                        <span className="ml-auto text-[13px] leading-4 text-muted">{copy.notify.nowLabel}</span>
+                      </div>
+                      <div className="mt-1.5 flex items-end gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[15px] font-semibold leading-5 text-ink">
+                            {copy.notify.bookedLabel} · {c.name}
+                          </p>
+                          <p className="truncate text-[13px] leading-4.5 text-muted">
+                            {c.when ? `${c.job} · ${c.when}` : c.job}
+                          </p>
+                        </div>
+                        <span data-go-ticket data-figure="data" className="go-data20 shrink-0 text-gold">
+                          +{usd(props.ticket)}
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* 5. Proof: config data only, under the DJL compass rose */}
+        <section data-go-proof className="go-proof go-in" style={{ ["--i" as string]: 8 }}>
+          <span className="text-muted">
+            <CompassRose />
+          </span>
+          <div className="go-proof-list">
+            <p data-go-radius className="go-body">
+              {props.proof.radius}
+            </p>
+            <p className="flex items-baseline gap-2">
+              <span className="go-caption text-muted">{props.proof.hoursLabel}</span>
+              <span data-go-hours className="go-body">
+                {props.proof.hours}
+              </span>
+            </p>
+            {props.proof.reply && (
+              <p data-go-reply className="go-body">
+                {props.proof.reply}
+              </p>
+            )}
+          </div>
+        </section>
+
+        {/* 6. Folio */}
+        <footer data-go-folio className="go-folio go-in" style={{ ["--i" as string]: 9 }}>
+          <p className="flex items-center gap-2 text-[13px] text-muted">
+            <SMark mark={copy.mark} size={16} />
             {copy.poweredBy}
           </p>
           {demo && (
-            <p data-go-demo-note className="mt-1.5 font-caption text-[12px] italic text-muted">
+            <p data-go-demo-note className="mt-1.5 text-[13px] text-muted">
               {copy.demoNote}
             </p>
           )}
+          {props.installHint && <InstallHint text={copy.installHint} />}
         </footer>
       </main>
 
       {/* The sheet. One transform owner: [data-go-panel]. The backdrop only
           fades. Closed, it is invisible and out of the tab order. */}
-      <div data-go-sheet={open ? "open" : "closed"} className="go-sheet" aria-hidden={!open}>
+      <div data-go-sheet={sheetOpen ? "open" : "closed"} className="go-sheet" aria-hidden={!sheetOpen}>
         <div className="go-backdrop" onClick={closeSheet} />
-        <div
-          ref={panelRef}
-          data-go-panel
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="go-sheet-title"
-          className="go-panel"
-        >
+        <div ref={panelRef} data-go-panel role="dialog" aria-modal="true" aria-labelledby="go-sheet-title" className="go-panel">
           <div className="go-panel-inner">
-            <div aria-hidden="true" className="mx-auto mb-3 h-1 w-10 rounded-full bg-muted/30" />
+            <div aria-hidden="true" className="go-grip" />
             <div className="flex min-h-11 items-center gap-2">
               {showBack ? (
                 <button type="button" data-go-back onClick={back} className="go-icon-btn -ml-2 pr-2">
-                  {G.back}
-                  <span className="text-[14px]">{copy.back}</span>
+                  <Glyph size={20}>{SLOT.back}</Glyph>
+                  <span className="text-[16px]">{copy.back}</span>
                 </button>
               ) : null}
               {mode === "book" && step !== "done" && (
-                <span aria-hidden="true" className="ml-auto flex gap-1">
-                  {(["job", "time", "you"] as const).map((s) => (
-                    <span key={s} className={`h-0.5 w-4 ${s === step ? "bg-teal" : "bg-line"}`} />
+                <span data-go-steprail aria-hidden="true" className="go-steprail">
+                  {[0, 1, 2].map((i) => (
+                    <span key={i} data-on={i === stepIndex ? "1" : i < stepIndex ? "done" : undefined} />
                   ))}
                 </span>
               )}
-              <button
-                type="button"
-                data-go-close
-                onClick={closeSheet}
-                aria-label={copy.close}
-                className={`go-icon-btn -mr-2 ${mode === "book" && step !== "done" ? "" : "ml-auto"}`}
-              >
-                {G.close}
+              <button type="button" data-go-close onClick={closeSheet} aria-label={copy.close} className="go-icon-btn -mr-2 ml-auto">
+                <Glyph size={20}>{SLOT.close}</Glyph>
               </button>
             </div>
 
@@ -550,60 +736,87 @@ export default function GoCard(props: Props) {
                 ref={headRef}
                 tabIndex={-1}
                 data-go-step={mode === "book" ? step : mode ?? ""}
-                className="mt-1 font-display text-[26px] font-medium leading-tight text-ink outline-none"
+                className="go-headline mt-1 outline-none"
               >
                 {heading}
               </h2>
             )}
 
-            {/* Step 1: job */}
+            {/* Step 1: job — 64px chips, a drawn glyph each */}
             {mode === "book" && step === "job" && (
-              <ul data-go-jobs className="mt-4 border-t border-line">
-                {props.jobs.map((j) => (
-                  <li key={j} className="border-b border-line">
-                    <button type="button" data-go-job onClick={() => pickJob(j)} className="go-row">
-                      <span>{j}</span>
-                      <span className="ml-auto text-muted">{G.chevron}</span>
+              <div data-go-jobs className="go-jobgrid">
+                {props.jobs.map((j) => {
+                  const g = jobGlyph(j.glyph);
+                  return (
+                    <button key={j.label} type="button" data-go-job data-glyph={j.glyph} onClick={() => pickJob(j.label)} className="go-job">
+                      {g && (
+                        <span className="go-job-glyph">
+                          <Glyph size={24} data-go-job-glyph={j.glyph}>
+                            {g}
+                          </Glyph>
+                        </span>
+                      )}
+                      <span className="go-job-label">{j.label}</span>
                     </button>
-                  </li>
-                ))}
-              </ul>
+                  );
+                })}
+              </div>
             )}
 
-            {/* Step 2: time */}
+            {/* Step 2: time — the fast path, a day rail, a 2x2 grid per day */}
             {mode === "book" && step === "time" && (
               <div data-go-times className="mt-4">
                 {firstSlot && (
-                  <button
-                    type="button"
-                    data-go-fast
-                    data-start={firstSlot.start}
-                    onClick={() => pickSlot(firstSlot)}
-                    className="go-slot go-slot-row go-fast w-full"
-                  >
-                    <span className="text-[16px] font-medium">{copy.nextLabel}</span>
-                    <span data-figure="data" className="ml-auto text-[14px]">
-                      {firstSlot.label}
+                  <button type="button" data-go-fast data-start={firstSlot.start} onClick={() => pickSlot(firstSlot)} className="go-fast">
+                    <span className="flex flex-col items-start">
+                      <span className="go-label">{copy.nextLabel}</span>
+                      <span data-figure="data" className="go-data20 mt-0.5 text-ink">
+                        {firstSlot.label}
+                      </span>
                     </span>
-                    <span className="text-teal">{G.chevron}</span>
+                    <span className="go-chev ml-auto">
+                      <Glyph size={20}>{SLOT.chevron}</Glyph>
+                    </span>
                   </button>
                 )}
+                {/* The ARIA tabs pattern: one tab stop, arrows move it. */}
+                <div
+                  role="tablist"
+                  className="go-dayrail"
+                  onKeyDown={(e) => {
+                    const i = days.findIndex((d) => d.key === dayKey);
+                    const j =
+                      e.key === "ArrowRight" ? (i + 1) % days.length : e.key === "ArrowLeft" ? (i - 1 + days.length) % days.length : e.key === "Home" ? 0 : e.key === "End" ? days.length - 1 : -1;
+                    if (j < 0 || !days[j]) return;
+                    e.preventDefault();
+                    setDayKey(days[j].key);
+                    e.currentTarget.querySelectorAll<HTMLElement>('[role="tab"]')[j]?.focus();
+                  }}
+                >
+                  {days.map((d) => (
+                    <button
+                      key={d.key}
+                      type="button"
+                      role="tab"
+                      data-go-dayrail={d.key}
+                      aria-selected={d.key === dayKey}
+                      aria-controls={`go-day-${d.key}`}
+                      tabIndex={d.key === dayKey ? 0 : -1}
+                      onClick={() => setDayKey(d.key)}
+                      className="go-daychip"
+                    >
+                      <span className="go-caption">{d.dow}</span>
+                      <span data-figure="data" className="go-data20">
+                        {d.date}
+                      </span>
+                    </button>
+                  ))}
+                </div>
                 {days.map((d) => (
-                  <section key={d.key} data-go-day={d.key} className="mt-5">
-                    <h3 data-figure="data" className="text-[12px] uppercase tracking-[0.12em] text-muted">
-                      {d.label}
-                    </h3>
-                    <div className="mt-2 grid grid-cols-4 gap-2">
+                  <section key={d.key} id={`go-day-${d.key}`} role="tabpanel" data-go-day={d.key} hidden={d.key !== dayKey} aria-label={d.label}>
+                    <div className="go-slotgrid">
                       {d.slots.map((s) => (
-                        <button
-                          key={s.start}
-                          type="button"
-                          data-go-time
-                          data-start={s.start}
-                          onClick={() => pickSlot(s)}
-                          className="go-chip"
-                          aria-label={s.label}
-                        >
+                        <button key={s.start} type="button" data-go-time data-start={s.start} onClick={() => pickSlot(s)} className="go-chip" aria-label={s.label}>
                           <span data-figure="data">{s.time}</span>
                         </button>
                       ))}
@@ -613,7 +826,7 @@ export default function GoCard(props: Props) {
               </div>
             )}
 
-            {/* Step 3: you */}
+            {/* Step 3: you — 56px fields, floating labels */}
             {mode === "book" && step === "you" && (
               <form
                 data-go-you
@@ -625,24 +838,29 @@ export default function GoCard(props: Props) {
                 }}
               >
                 {slot && (
-                  <p className="text-[14px] text-muted">
+                  <p className="go-body text-muted">
                     {job} · <span data-figure="data">{slot.label}</span>
                   </p>
                 )}
                 <div>
-                  <input
-                    data-go-field="name"
-                    type="text"
-                    name="name"
-                    autoComplete="name"
-                    placeholder={copy.namePh}
-                    aria-label={copy.namePh}
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    aria-invalid={tried && !nameOk}
-                    aria-describedby="go-name-err"
-                    className="go-input"
-                  />
+                  <div className="go-field">
+                    <input
+                      id="go-name"
+                      data-go-field="name"
+                      type="text"
+                      name="name"
+                      autoComplete="name"
+                      placeholder=" "
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      aria-invalid={tried && !nameOk}
+                      aria-describedby="go-name-err"
+                      className="go-input"
+                    />
+                    <label htmlFor="go-name" className="go-float">
+                      {copy.namePh}
+                    </label>
+                  </div>
                   {tried && !nameOk && (
                     <p id="go-name-err" data-go-err="name" className="mt-1.5 text-[13px] text-ember">
                       {copy.nameErr}
@@ -650,21 +868,27 @@ export default function GoCard(props: Props) {
                   )}
                 </div>
                 <div>
-                  <input
-                    data-go-field="phone"
-                    type="tel"
-                    name="tel"
-                    inputMode="tel"
-                    autoComplete="tel-national"
-                    placeholder={copy.phonePh}
-                    aria-label={copy.phonePh}
-                    value={phone}
-                    onChange={(e) => setPhone(formatTyping(e.target.value))}
-                    aria-invalid={tried && !phoneOk}
-                    aria-describedby="go-phone-err"
-                    className="go-input"
-                    data-figure="data"
-                  />
+                  <div className="go-field">
+                    <input
+                      id="go-phone"
+                      data-go-field="phone"
+                      type="tel"
+                      name="tel"
+                      inputMode="tel"
+                      autoComplete="tel-national"
+                      enterKeyHint="done"
+                      placeholder=" "
+                      value={phone}
+                      onChange={(e) => setPhone(formatTyping(e.target.value))}
+                      aria-invalid={tried && !phoneOk}
+                      aria-describedby="go-phone-err"
+                      className="go-input"
+                      data-figure="data"
+                    />
+                    <label htmlFor="go-phone" className="go-float">
+                      {copy.phonePh}
+                    </label>
+                  </div>
                   {tried && !phoneOk && (
                     <p id="go-phone-err" data-go-err="phone" className="mt-1.5 text-[13px] text-ember">
                       {copy.phoneErr}
@@ -677,51 +901,41 @@ export default function GoCard(props: Props) {
               </form>
             )}
 
-            {/* Done */}
+            {/* Done: the check draws, then the booked line types in */}
             {mode === "book" && step === "done" && booking && (
               <div data-go-done className="pb-1">
                 <DrawnCheck />
-                <h2
-                  id="go-sheet-title"
-                  ref={headRef}
-                  tabIndex={-1}
-                  data-go-step="done"
-                  className="mt-3 font-display text-[30px] font-medium leading-tight text-ink outline-none"
-                >
+                <h2 id="go-sheet-title" ref={headRef} tabIndex={-1} data-go-step="done" className="go-headline mt-3 outline-none">
                   {copy.doneTitle}
                 </h2>
-                <p className="mt-1 text-[15px] text-muted">{fill(copy.doneSub, biz)}</p>
-                <div data-go-summary className="mt-4 border-y border-line py-3">
-                  <p className="text-[16px] text-ink">{booking.job}</p>
-                  <p data-figure="data" className="mt-0.5 text-[14px] text-muted">
-                    {booking.slot.label}
-                  </p>
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-2.5">
+                <p className="go-body mt-1 text-muted">{fill(copy.doneSub, biz)}</p>
+                <p data-go-summary aria-label={`${booking.job} · ${booking.slot.label}`} className="go-typed">
+                  <span aria-hidden="true">{typedLine}</span>
+                  {typedLine.length < `${booking.job} · ${booking.slot.label}`.length && <span aria-hidden="true" className="go-caret" />}
+                </p>
+                <div className="mt-4 grid grid-cols-2 gap-2.5">
                   {props.inApp ? (
-                    <a
-                      data-go-cal
-                      href={googleCalendarUrl(biz, booking)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={() => ping("calendar")}
-                      className="go-slot go-tile go-tile-sm"
-                    >
-                      <span className="go-glyph text-teal">{G.calendar}</span>
-                      <span>{copy.addCal}</span>
+                    <a data-go-cal href={googleCalendarUrl(biz, booking, schedule)} target="_blank" rel="noopener noreferrer" className="go-slot go-tile go-tile-sm">
+                      <span className="go-glyph">
+                        <Glyph size={32}>{SLOT.book}</Glyph>
+                      </span>
+                      <span className="go-label">{copy.addCal}</span>
                     </a>
                   ) : (
                     <button type="button" data-go-cal onClick={addCalendar} className="go-slot go-tile go-tile-sm">
-                      <span className="go-glyph text-teal">{G.calendar}</span>
-                      <span>{copy.addCal}</span>
+                      <span className="go-glyph">
+                        <Glyph size={32}>{SLOT.book}</Glyph>
+                      </span>
+                      <span className="go-label">{copy.addCal}</span>
                     </button>
                   )}
                   <button type="button" data-go-save onClick={saveContact} className="go-slot go-tile go-tile-sm">
-                    <span className="go-glyph text-teal">{G.save}</span>
-                    <span>{copy.save}</span>
+                    <span className="go-glyph">
+                      <Glyph size={32}>{SLOT.save}</Glyph>
+                    </span>
+                    <span className="go-label">{copy.save}</span>
                   </button>
                 </div>
-                {demo && <OwnerPhone copy={copy} booking={booking} ticket={props.ticket} />}
               </div>
             )}
 
@@ -729,24 +943,13 @@ export default function GoCard(props: Props) {
             {mode === "quote" && !quoteDone && (
               <div data-go-quote className="mt-4">
                 <label className="go-pick">
-                  <input
-                    data-go-photo
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={onPhoto}
-                    className="sr-only"
-                  />
+                  <input data-go-photo type="file" accept="image/*" capture="environment" onChange={onPhoto} className="sr-only" />
                   {photo ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img data-go-thumb src={photo} alt="" className="h-full w-full object-cover" />
                   ) : (
-                    <span className="text-teal">
-                      <Glyph size={40}>
-                        <path d="M3 8.2h4.2l1.6-2.7h6.4l1.6 2.7H21V19H3z" />
-                        <circle cx="12" cy="13.4" r="3.3" />
-                        <path d="M17.8 10.6h.01" />
-                      </Glyph>
+                    <span className="text-ink">
+                      <Glyph size={40}>{SLOT.quote}</Glyph>
                     </span>
                   )}
                   <span className="sr-only">{copy.quote}</span>
@@ -757,7 +960,7 @@ export default function GoCard(props: Props) {
                   disabled={!photo}
                   onClick={() => {
                     setQuoteDone(true);
-                    ping("quote_sent");
+                    track("go_quote_done", meta);
                   }}
                   className="go-cta mt-3"
                 >
@@ -768,19 +971,13 @@ export default function GoCard(props: Props) {
             {mode === "quote" && quoteDone && (
               <div data-go-quote-done className="pb-1">
                 <DrawnCheck />
-                <h2
-                  id="go-sheet-title"
-                  ref={headRef}
-                  tabIndex={-1}
-                  data-go-step="quote-done"
-                  className="mt-3 font-display text-[30px] font-medium leading-tight text-ink outline-none"
-                >
+                <h2 id="go-sheet-title" ref={headRef} tabIndex={-1} data-go-step="quote-done" className="go-headline mt-3 outline-none">
                   {copy.quoteDoneTitle}
                 </h2>
-                <p className="mt-1 text-[15px] text-muted">{fill(copy.quoteDoneSub, biz)}</p>
+                <p className="go-body mt-1 text-muted">{fill(copy.quoteDoneSub, biz)}</p>
                 {photo && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={photo} alt="" className="mt-4 h-20 w-20 border border-line object-cover" />
+                  <img src={photo} alt="" className="mt-4 h-20 w-20 border border-(--go-rule) object-cover" />
                 )}
               </div>
             )}
@@ -788,14 +985,7 @@ export default function GoCard(props: Props) {
             {/* Save, in-app browsers: the number and a Copy button */}
             {mode === "save" && (
               <div data-go-save-panel className="mt-4">
-                <input
-                  id="go-copy-field"
-                  readOnly
-                  value={props.telPretty}
-                  aria-label={copy.save}
-                  data-figure="data"
-                  className="go-input text-[22px]"
-                />
+                <input id="go-copy-field" readOnly value={props.telPretty} aria-label={copy.save} data-figure="data" className="go-input go-data28" />
                 <button type="button" data-go-copy onClick={copyNumber} className="go-cta mt-3">
                   {copied ? copy.copied : copy.copyNumber}
                 </button>
@@ -808,43 +998,20 @@ export default function GoCard(props: Props) {
   );
 }
 
-/* The owner's side, demo mode only: a lock screen, the Salvage entry
-   sliding in with the demo's ruled notify look, and the stored ticket
-   inking in gold beneath it. */
-function OwnerPhone({ copy, booking, ticket }: { copy: GoCopy; booking: Booking; ticket: number }) {
-  const [clock] = useState(() =>
-    new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).replace(/\s?[AP]M$/i, ""),
+/* iOS Safari, not standalone: one drawn line under the folio. The server
+   decides iOS Safari from the UA; standalone is hidden by CSS
+   (display-mode) and, for older iOS, by navigator.standalone here. */
+function InstallHint({ text }: { text: string }) {
+  const standalone = useSyncExternalStore(
+    () => () => {},
+    () => (navigator as Navigator & { standalone?: boolean }).standalone === true,
+    () => false,
   );
+  if (standalone) return null;
   return (
-    <div data-go-owner className="mt-6">
-      <p className="font-caption text-[13px] italic text-muted">{copy.ownerSide}</p>
-      <div className="go-mini-phone mt-3 font-phone">
-        <div aria-hidden="true" className="mx-auto h-1.5 w-14 rounded-full bg-line" />
-        <p data-figure="hero" className="mt-3 text-center text-[40px] leading-none text-ink">
-          {clock}
-        </p>
-        <div data-go-notify className="go-notify mt-4">
-          <div className="flex items-center gap-1.5">
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] bg-teal">
-              <span className="font-display text-[13px] font-semibold leading-none text-abyss">S</span>
-            </span>
-            <span className="text-[11px] font-medium text-muted">{copy.notify.appTag}</span>
-            <span className="ml-auto text-[11px] text-muted">{copy.notify.nowLabel}</span>
-          </div>
-          <p className="mt-1.5 text-[15px] font-medium leading-snug text-ink">
-            {copy.notify.bookedLabel} · {booking.name}
-          </p>
-          <p className="mt-0.5 text-[13px] leading-snug text-muted">
-            {booking.job} · {booking.slot.label}
-          </p>
-        </div>
-        <div data-go-ledger className="go-ledger mt-3">
-          <span className="text-[12px] text-muted">{copy.recoveredLabel}</span>
-          <span data-go-ticket data-figure="hero" className="ml-auto text-[24px] leading-none text-gold">
-            +{usd(ticket)}
-          </span>
-        </div>
-      </div>
-    </div>
+    <p data-go-install className="go-install">
+      <Glyph size={20}>{SLOT.share}</Glyph>
+      <span>{text}</span>
+    </p>
   );
 }

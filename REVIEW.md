@@ -245,3 +245,68 @@ Data note held: the owner line renders `preset.ticket` (stored). Gate 212's
 mutation renders `recovered` instead and goes red ("+$4,250" vs "+$850").
 The accent paints only the primary slot, the status dot and the trade
 label; emergency uses an ember rule, confirm is gold, focus is teal.
+
+## Change 45 — adversarial review (3 lenses)
+
+Run after gates 207–224 passed in Chromium and WebKit at 390x700, 390x844,
+844x390 and 1440x900. An independent reviewer read the full diff, DESIGN.md
+and the 19 contact sheets in review/change-45 (read-only, no browser). Every
+confirmed finding below was fixed, rebuilt, re-gated and — where a gate
+changed — proven red again before the change-45 commit.
+
+### Lens 1 — "The customer, on an iPhone, in the Facebook browser: do they act in 3 seconds, and does it work there?"
+
+| # | Finding | Verdict |
+|---|---------|---------|
+| 1 | The emergency glyph and its pulse ring drew in light ink ON the accent band (~1.8:1). The page's most urgent control had a near-invisible icon and an invisible pulse. Gate 222 checks text nodes only and missed it. | **Fixed.** Glyph and ring take the band's inverse ink (`--accent-ink`). Gate 217 now asserts every slot's SVG is drawn at full ink for its surface — ink on abyss, accent-ink on the band. Proven red (mutation M4: "emergency INK rgb(233, 238, 244)"). |
+| 2 | Slots and the band carried two writers of `transform`: the `go-in` entrance animation and the `:active` scale. The animation won the cascade, so a press in the first ~0.6s showed no 97% scale. | **Fixed.** The rise animates the independent `translate` property; the press owns `transform`. One writer each (DESIGN.md §2). |
+| 3 | `statusBarStyle: "black-translucent"` without `viewport-fit=cover`: launched from the home screen, the safe-area insets read 0 and the name sits under the status bar. | **Fixed.** `viewportFit: "cover"` on the /go viewport; the column already pads with `env(safe-area-inset-*)`. |
+| 4 | The clock refreshed only on minute boundaries, so a phone woken from sleep showed its old open/closed state for up to a minute. A sheet left open could confirm a start inside the 60-minute lead. | **Fixed.** `visibilitychange`/`pageshow` re-read the clock at once; Confirm re-checks the lead and returns to the picker if the slot slid inside it. |
+| 5 | (Mine.) The day rail is an ARIA tablist without arrow-key roving. | **Fixed.** Left/Right/Home/End move selection and focus; one tab stop. |
+| 6 | "Visible in the first viewport at 390x844" is the full screen. Safari's visible viewport on that phone is ~664px and Facebook's ~700–720px; the owner card (713–797px) is below the fold on the real device. | **Open — owner's call.** Gate 220 holds the spec as written. Fitting it at 664 needs slots under the 72px the same spec requires. |
+| 7 | In the Facebook browser, Add to calendar opens Google Calendar's template in the webview, where Google sign-in can be refused. | **Open — owner's call.** Change 42's specified fallback, unchanged here. |
+| 8 | A WebKit click timed out once at 844x390 (gate 222, one run). | **Not reproduced** in 14 consecutive isolated runs of the same flow, including the gate's exact navigation; it never recurred in a full run. Logged as load flake. |
+
+### Lens 2 — "Does the page obey DESIGN.md?"
+
+| # | Finding | Verdict |
+|---|---------|---------|
+| 1 | The sheet's step-rail dot was teal; it is a readout, not a control. | **Fixed.** Ink. |
+| 2 | The done-step tiles reuse `.go-slot`, so their press rule lit in the trade accent inside the sheet. | **Fixed.** Teal: they are controls. |
+| 3 | A closed day's arc was a 4px muted stroke and read as "open Sunday". | **Fixed.** 1.5px hairline — the usual hours, not today's. |
+| 4 | The Salvage S mark is teal on a non-control and a small second filled surface (folio, owner cards). | **Open — owner's call.** It is the Salvage app mark, drawn exactly as the demo's notify card draws it. |
+| 5 | Separators (" · ", "+", "–") are composed in code. | **Dismissed.** No words; the demo composes the same way (`name · detail · $amount`, change 11). |
+| 6 | The emergency band fill and the pressed-slot rule are trade accent outside "the active instrument only". | **Spec wins.** Change 45 mandates both; DESIGN.md §4 is the general rule. Counted below. |
+
+### Lens 3 — "Can a figure on /go be invented, stale or wrong — and can a gate pass while it is?"
+
+| # | Finding | Verdict |
+|---|---------|---------|
+| 1 | The demo's standing owner card was stamped with the live next-open slot, so the page offered as free the slot it showed as booked. A second booking of the same slot reused a React key. | **Fixed.** The sample card names its stored caller and job only. Starts booked in a visit leave the offer; cards key by a counter. |
+| 2 | Gate 212 read the ticket's colour and never asserted it. Gate 219 checked only the arc's endpoints — the same endpoints drawn the night way round still passed — and swallowed its own wait. Nothing gated analytics, the manifest, the icon or the install hint. | **Fixed.** 212 asserts the gold token; 219 asserts the sweep and large-arc flags and the arc's midpoint hour, and a missed wait is red; new gate 224 asserts the event sequence and its ref/lead/preset attribution, the manifest JSON, a 192x192 PNG icon, and the hint on iOS Safari but not in Facebook. Proven red: M4 (212 "NOT gold", 219 "via 0.50h flags 0/0", 224 events missing `go_book_done`), M5 (224 manifest theme, hint). |
+| 3 | The manifest's `start_url` dropped ref and lead, so a home-screen launch sent an unattributed `go_view`. | **Fixed.** Passed through. |
+| 4 | The icon route cached a rejected font read for the life of the server. | **Fixed.** A failed read is retried. |
+| 5 | `radius: 25` on every preset. | **Dismissed.** Andy's approved default (v2 GO), now marked so in config. |
+| 6 | "Typical reply" is the median of one stored gap per preset, and every script yields 1 min. | **Spec as written.** Computed from the stored thread, never typed; gate 221 recomputes it from config. Every preset reads "1 min" because every script says so. |
+| 7 | Live mode (biz, no demo=1) shows the preset's radius, the global hours and the reply time as facts about the named business, and confirms bookings and photos nothing receives. The dental thread says "opens at 8"; the hours say 7. | **Open — owner's call.** No per-business data source exists yet (change 42, finding 8). |
+| 8 | Job glyphs key by list index: reordering `COPY.jobs` would mismatch glyph and label silently, and gate 223 checks presence only. | **Documented risk.** |
+
+### Accent, gold and teal on /go, per section (after the fixes)
+
+| Section | Trade accent | Gold | Teal |
+|---|---|---|---|
+| Identity | dial open arc ×1 (open days) | — | — |
+| Emergency band | fill ×1 (home only) + press tint | — | focus ring |
+| Slots (5) | left rule while pressed (transient) | — | hover border, focus ring |
+| Owner phone (demo) | — | +ticket ×1 per card | S mark ×1 per card (lens 2 #4) |
+| Proof row | — | — | — |
+| Folio | — | — | S mark ×1 (lens 2 #4) |
+| Sheet | — | — | fast-path border, chosen day, CTA border, input focus, chip/job/done-tile press, focus rings |
+
+At rest on a home page: 2 accent uses (arc, band); salon, dental and other: 1 (arc).
+
+Gate notes. Gate 209 now waits for the page to re-render on the frozen
+client clock (the dial's minute) before reading the next-open line; a read
+at networkidle once saw the server's request-time line in WebKit. Gate
+222's colour parser learned the `color(srgb … / a)` form that `color-mix()`
+computes to; it threw on the first 45f mutation instead of measuring it.

@@ -8396,10 +8396,10 @@ if (!chromium) {
   }
 }
 
-/* ---------- 207-212: /go (change 42), in their own module ----------------- */
+/* ---------- 207-212 (change 42), 217-223 (change 45): /go, in their own module */
 
 {
-  const GO_GATES = [207, 208, 209, 210, 211, 212];
+  const GO_GATES = [207, 208, 209, 210, 211, 212, 217, 218, 219, 220, 221, 222, 223, 224];
   try {
     if (!chromium) throw new Error(`playwright unavailable: ${browserError}`);
     const { runGoGates } = await import("./gate-go.mjs");

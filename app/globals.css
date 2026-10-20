@@ -637,10 +637,12 @@ body {
   }
 }
 
-/* ===================== change 42: /go ===================================
+/* ===================== change 42 / change 45: /go ========================
    The customer page. Its own document scroll (the demo's pager locks html
-   and body), one column, 440 max in landscape. Every rule is scoped to
-   [data-go-root] or to a document that contains it. */
+   and body). Every rule is scoped to [data-go-root] or to a document that
+   contains it. change 45 rebuilds the surface on DESIGN.md: abyss ground,
+   one ink-14% hairline, one lifted surface (the sheet and the owner phone),
+   the emergency band as the only filled surface, the loaded faces only. */
 html:has([data-go-root]),
 html:has([data-go-root]) body {
   height: auto;
@@ -657,77 +659,261 @@ html[data-go-locked] {
   overflow: hidden;
 }
 /* Exempt from the rotate guard wherever it is mounted (change 41 moved it
-   to the layout): /go is one column and reads fine sideways. */
+   to the layout): /go reads fine sideways — identity left, slots right. */
 html:has([data-go-root]) [data-rotate-guard] {
   display: none !important;
 }
 
 [data-go-root] {
+  --go-rule: color-mix(in srgb, var(--color-ink) 14%, transparent);
+  --go-ease: cubic-bezier(0.22, 1, 0.36, 1);
   min-height: 100svh;
   background: var(--color-abyss);
   -webkit-tap-highlight-color: transparent;
 }
-.go-col {
+
+/* ---- type: DESIGN.md §1, nothing else ---- */
+[data-go-root] .go-label,
+[data-go-sheet] .go-label {
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 500;
+}
+[data-go-root] .go-body,
+[data-go-sheet] .go-body {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 400;
+}
+[data-go-root] .go-caption,
+[data-go-sheet] .go-caption {
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+[data-go-sheet] .go-headline {
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 28px;
+  line-height: 32px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+}
+.go-data20 {
+  font-size: 20px;
+  line-height: 24px;
+}
+.go-data28 {
+  font-size: 28px;
+  line-height: 32px;
+}
+
+/* ---- the column: one at 390, identity left / slots right sideways ---- */
+.go-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "ident" "act" "proof" "folio";
   max-width: 440px;
   margin: 0 auto;
-  padding: max(28px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  padding: max(24px, env(safe-area-inset-top)) 16px max(28px, env(safe-area-inset-bottom));
 }
-@media (orientation: landscape) and (max-height: 500px) {
-  .go-col {
-    padding-top: 20px;
+.go-ident {
+  grid-area: ident;
+}
+.go-actions {
+  grid-area: act;
+  margin-top: 16px;
+}
+.go-proof {
+  grid-area: proof;
+}
+.go-folio {
+  grid-area: folio;
+}
+@media (orientation: landscape) and (min-width: 720px) {
+  .go-page {
+    max-width: 960px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+    grid-template-areas: "ident act" "proof act" "folio act";
+    column-gap: 48px;
+    align-items: start;
+    padding-top: max(32px, env(safe-area-inset-top));
+    /* a tall landscape viewport (desktop) holds the two columns centred
+       on its height; a short one (a phone sideways) just scrolls */
+    min-height: 100svh;
+    align-content: safe center;
+  }
+  .go-page > .go-folio {
+    align-self: start;
+  }
+  .go-actions {
+    margin-top: 0;
   }
 }
 
+/* ---- 1. identity ---- */
 [data-go-name] {
   font-size: var(--go-name-est, 44px);
   line-height: 1.04;
-  letter-spacing: -0.012em;
+  letter-spacing: -0.01em;
   text-wrap: balance;
   overflow-wrap: normal;
 }
-
-.go-pill {
-  display: inline-flex;
+.go-dialrow {
+  display: flex;
   align-items: center;
-  gap: 7px;
-  min-height: 26px;
-  padding: 3px 10px 3px 8px;
-  border: 1px solid var(--color-line);
-  border-radius: 999px;
-  font-size: 13px;
+  gap: 14px;
+  margin-top: 12px;
+}
+.go-status {
+  margin-top: 6px;
+  font-size: 16px;
+  line-height: 24px;
   color: var(--color-ink);
 }
-.go-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
+
+/* ---- 2. the emergency band: the ONE filled surface ---- */
+.go-emergency {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  margin: 0 -16px 12px;
+  padding: 8px 16px;
   background: var(--accent);
+  color: var(--accent-ink);
+  touch-action: manipulation;
+  transition: transform 120ms ease-out, background-color 120ms ease-out;
 }
-[data-open="0"] .go-dot {
-  background: transparent;
-  box-shadow: inset 0 0 0 1.5px var(--accent);
+.go-emergency:active {
+  transform: scale(0.97);
+  background: color-mix(in srgb, var(--accent) 84%, var(--color-abyss));
+}
+/* the glyph and its ring speak the band's inverse ink, like its label */
+.go-emergency .go-glyph {
+  color: var(--accent-ink);
+}
+@media (orientation: landscape) and (min-width: 720px) {
+  .go-emergency {
+    margin: 0 0 12px;
+  }
+}
+/* The drawn ring on the emergency glyph: 1.2s, CSS; reduced motion holds
+   it still and present. */
+.go-pulse {
+  position: relative;
+}
+.go-pulse::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  opacity: 0.45;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .go-pulse::after {
+    animation: go-ring 1.2s var(--go-ease) infinite;
+  }
+}
+@keyframes go-ring {
+  from {
+    transform: scale(0.82);
+    opacity: 0.8;
+  }
+  to {
+    transform: scale(1.32);
+    opacity: 0;
+  }
 }
 
-/* ---- slots ---- */
+/* ---- 3. slots: 72px, ruled, the left rule lights on press ---- */
+.go-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.go-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
 .go-slot {
   position: relative;
   display: flex;
-  min-height: 56px;
-  border: 1px solid var(--color-line);
-  border-radius: 6px;
-  background: var(--color-surface);
+  align-items: center;
+  gap: 14px;
+  min-height: 72px;
+  padding: 12px 14px 12px 18px;
+  border: 1px solid var(--go-rule);
+  background: transparent;
   color: var(--color-ink);
   text-align: left;
   cursor: pointer;
   touch-action: manipulation;
-  transition: transform 70ms ease-out, border-color 120ms ease;
+  transition: transform 120ms ease-out, border-color 120ms ease-out;
+}
+.go-slot::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: -1px;
+  width: 3px;
+  background: var(--go-rule);
+  /* the release: the lit rule fades back — the flash */
+  transition: background-color 420ms ease-out;
 }
 .go-slot:active {
-  transform: scale(0.98);
+  transform: scale(0.97);
+}
+.go-slot:active::before {
+  background: var(--accent);
+  transition: none;
+}
+.go-glyph {
+  display: flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--color-ink);
+}
+.go-chev {
+  display: flex;
+  color: var(--color-muted);
+}
+.go-primary {
+  min-height: 88px;
+}
+.go-tile {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px 10px 16px;
+}
+.go-tile-sm {
+  min-height: 72px;
+}
+.go-tile-sm:active::before {
+  background: var(--color-teal);
+}
+@media (hover: hover) {
+  .go-slot:hover {
+    border-color: color-mix(in srgb, var(--color-teal) 45%, var(--go-rule));
+  }
 }
 .go-slot:focus-visible,
+.go-emergency:focus-visible,
+.go-job:focus-visible,
 .go-chip:focus-visible,
-.go-row:focus-visible,
+.go-daychip:focus-visible,
+.go-fast:focus-visible,
 .go-icon-btn:focus-visible,
 .go-cta:focus-visible,
 .go-input:focus-visible,
@@ -735,71 +921,133 @@ html:has([data-go-root]) [data-rotate-guard] {
   outline: 2px solid var(--color-teal);
   outline-offset: 2px;
 }
-@media (hover: hover) {
-  .go-slot:hover {
-    border-color: color-mix(in srgb, var(--color-teal) 45%, var(--color-line));
-  }
-  .go-primary:hover {
-    border-color: var(--accent);
-  }
+
+/* ---- 4. demo mode: the owner phone, pinned under the slots ---- */
+.go-owner {
+  margin-top: 16px;
 }
-.go-glyph {
+.go-mini-phone {
+  margin-top: 8px;
+  padding: 8px 12px 2px;
+  border: 1px solid var(--go-rule);
+  border-bottom: 0;
+  border-radius: 30px 30px 0 0;
+  background: var(--color-surface);
+}
+.go-island {
+  display: block;
+  width: 64px;
+  height: 14px;
+  margin: 0 auto 4px;
+  border-radius: 7px;
+  background: var(--color-abyss);
+}
+.go-cards {
   display: flex;
-  width: 24px;
-  height: 24px;
+  flex-direction: column;
+}
+.go-notify {
+  padding: 10px 2px 12px;
+  border-top: 1px solid var(--go-rule);
+}
+.go-notify:first-child {
+  border-top: 0;
+}
+.go-smark {
+  display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-}
-.go-slot-row {
-  align-items: center;
-  gap: 12px;
-  padding: 0 14px;
-}
-.go-primary {
-  min-height: 76px;
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--accent-ink);
-}
-.go-emergency {
-  border-left: 2px solid var(--color-ember);
-}
-.go-tile {
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 14px;
-  min-height: 104px;
-  padding: 14px;
-  font-size: 15px;
+  border-radius: 3px;
+  background: var(--color-teal);
+  color: var(--color-abyss);
+  font-family: var(--font-newsreader), Georgia, serif;
   font-weight: 500;
-  line-height: 1.25;
+  line-height: 1;
 }
-.go-tile-sm {
-  min-height: 88px;
+@media (prefers-reduced-motion: no-preference) {
+  .go-notify[data-fresh] {
+    animation: go-land 480ms var(--go-ease) backwards;
+  }
+  .go-notify[data-fresh] [data-go-ticket] {
+    animation: go-ink 300ms ease-out 360ms backwards;
+  }
+}
+@keyframes go-land {
+  from {
+    opacity: 0;
+    transform: translateY(-14px);
+  }
+}
+@keyframes go-ink {
+  from {
+    opacity: 0;
+  }
 }
 
-/* ---- entrance: one 420ms stagger, CSS only ----
-   `backwards` fill, never `both`: after the run the element holds no
-   animated transform, so :active's scale still lands. */
+/* ---- 5. proof row and 6. folio ---- */
+.go-proof {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--go-rule);
+  color: var(--color-ink);
+}
+.go-proof-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.go-folio {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--go-rule);
+}
+.go-folio > p:first-child {
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+[data-go-demo-note] {
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.go-install {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--color-muted);
+}
+@media (display-mode: standalone) {
+  [data-go-install] {
+    display: none;
+  }
+}
+
+/* ---- entrance: one 480ms rise, staggered, CSS only ----
+   The rise moves `translate`; the press owns `transform` — two properties,
+   one writer each (DESIGN.md §2), so a press in the first half-second
+   still scales. `backwards` fill: nothing is held after the run. */
 @keyframes go-rise {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    translate: 0 8px;
   }
 }
 @media (prefers-reduced-motion: no-preference) {
   .go-in {
-    animation: go-rise 240ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
-    animation-delay: calc(var(--i, 0) * 30ms);
-  }
-  [data-open="1"] .go-dot {
-    animation: go-blink 2.4s ease-in-out infinite;
-  }
-}
-@keyframes go-blink {
-  50% {
-    opacity: 0.35;
+    animation: go-rise 480ms var(--go-ease) backwards;
+    animation-delay: calc(var(--i, 0) * 24ms);
   }
 }
 
@@ -809,7 +1057,7 @@ html:has([data-go-root]) [data-rotate-guard] {
   inset: 0;
   z-index: 60;
   visibility: hidden;
-  transition: visibility 0s linear 260ms;
+  transition: visibility 0s linear 280ms;
 }
 .go-sheet[data-go-sheet="open"] {
   visibility: visible;
@@ -818,14 +1066,15 @@ html:has([data-go-root]) [data-rotate-guard] {
 .go-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(6, 11, 20, 0.72);
+  background: color-mix(in srgb, var(--color-abyss) 72%, transparent);
   opacity: 0;
-  transition: opacity 220ms ease;
+  transition: opacity 240ms ease;
 }
 [data-go-sheet="open"] .go-backdrop {
   opacity: 1;
 }
 .go-panel {
+  --go-rule: color-mix(in srgb, var(--color-ink) 14%, transparent);
   position: absolute;
   left: 0;
   right: 0;
@@ -835,21 +1084,19 @@ html:has([data-go-root]) [data-rotate-guard] {
   max-height: min(92svh, 760px);
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--color-line);
+  border: 1px solid var(--go-rule);
   border-bottom: 0;
-  border-radius: 14px 14px 0 0;
+  border-radius: 16px 16px 0 0;
   background: var(--color-surface);
   transform: translateY(100%);
-  transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform 280ms var(--go-ease, cubic-bezier(0.22, 1, 0.36, 1));
 }
 [data-go-sheet="open"] .go-panel {
   transform: translateY(0);
 }
 @media (prefers-reduced-motion: reduce) {
   .go-panel,
-  .go-backdrop {
-    transition: none;
-  }
+  .go-backdrop,
   .go-sheet {
     transition: none;
   }
@@ -859,6 +1106,13 @@ html:has([data-go-root]) [data-rotate-guard] {
   overscroll-behavior: contain;
   padding: 10px 16px max(20px, env(safe-area-inset-bottom));
 }
+.go-grip {
+  width: 40px;
+  height: 4px;
+  margin: 0 auto 8px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--color-muted) 40%, transparent);
+}
 .go-icon-btn {
   display: inline-flex;
   align-items: center;
@@ -867,66 +1121,178 @@ html:has([data-go-root]) [data-rotate-guard] {
   min-width: 44px;
   justify-content: center;
   color: var(--color-muted);
-  border-radius: 6px;
 }
-.go-row {
+.go-steprail {
   display: flex;
-  width: 100%;
-  min-height: 56px;
+  gap: 8px;
+  margin-left: auto;
+}
+.go-steprail > span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--go-rule);
+}
+.go-steprail > span[data-on="done"] {
+  background: color-mix(in srgb, var(--color-ink) 55%, transparent);
+}
+.go-steprail > span[data-on="1"] {
+  background: var(--color-ink);
+}
+
+/* step 1: 64px job chips, two up, a drawn glyph each */
+.go-jobgrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  margin-top: 16px;
+}
+.go-job {
+  display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 16px;
+  gap: 10px;
+  min-height: 64px;
+  padding: 10px 12px;
+  border: 1px solid var(--go-rule);
   color: var(--color-ink);
   text-align: left;
-  transition: transform 70ms ease-out;
+  touch-action: manipulation;
+  transition: transform 120ms ease-out, border-color 120ms ease-out;
 }
-.go-row:active,
-.go-chip:active,
-.go-cta:active {
-  transform: scale(0.98);
-}
-.go-fast {
+.go-job:active {
+  transform: scale(0.97);
   border-color: var(--color-teal);
+}
+.go-job-glyph {
+  display: flex;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  color: var(--color-ink);
+}
+.go-job-label {
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 500;
+}
+
+/* step 2: the fast path, a day rail, a 2x2 grid */
+.go-fast {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  min-height: 72px;
+  padding: 10px 14px;
+  border: 1.5px solid var(--color-teal);
+  color: var(--color-ink);
+  text-align: left;
+  touch-action: manipulation;
+  transition: transform 120ms ease-out;
+}
+.go-fast:active {
+  transform: scale(0.97);
+}
+.go-dayrail {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 20px;
+}
+.go-daychip {
+  display: flex;
+  min-height: 56px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 1px solid var(--go-rule);
+  color: var(--color-ink);
+  touch-action: manipulation;
+}
+.go-daychip[aria-selected="true"] {
+  border-color: var(--color-teal);
+  box-shadow: inset 0 -2px 0 var(--color-teal);
+}
+.go-slotgrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  margin-top: 12px;
 }
 .go-chip {
   min-height: 56px;
-  border: 1px solid var(--color-line);
-  border-radius: 6px;
-  background: var(--color-surface-2);
+  border: 1px solid var(--go-rule);
   color: var(--color-ink);
-  font-size: 14px;
+  font-size: 20px;
+  line-height: 24px;
   touch-action: manipulation;
-  transition: transform 70ms ease-out;
+  transition: transform 120ms ease-out, border-color 120ms ease-out;
+}
+.go-chip:active {
+  transform: scale(0.97);
+  border-color: var(--color-teal);
+}
+
+/* step 3: 56px fields, floating labels */
+.go-field {
+  position: relative;
 }
 .go-input {
   width: 100%;
   min-height: 56px;
-  padding: 0 14px;
-  border: 1px solid var(--color-line);
-  border-radius: 6px;
+  padding: 22px 14px 8px;
+  border: 1px solid var(--go-rule);
   background: var(--color-abyss);
   color: var(--color-ink);
   font-size: 16px;
+  line-height: 24px;
 }
-.go-input::placeholder {
+.go-float {
+  position: absolute;
+  top: 16px;
+  left: 15px;
+  font-size: 16px;
+  line-height: 24px;
   color: var(--color-muted);
+  pointer-events: none;
+  transform-origin: left top;
+  transition: transform 120ms ease-out;
+}
+.go-input:focus + .go-float,
+.go-input:not(:placeholder-shown) + .go-float {
+  transform: translateY(-11px) scale(0.8125);
+}
+.go-input:focus {
+  border-color: var(--color-teal);
 }
 .go-input[aria-invalid="true"] {
   border-color: var(--color-ember);
 }
+[data-go-save-panel] .go-input {
+  padding: 8px 14px;
+}
+[data-go-err] {
+  font-size: 16px;
+  line-height: 24px;
+}
 .go-cta {
   width: 100%;
   min-height: 56px;
-  border-radius: 6px;
-  background: var(--color-gold);
-  color: var(--color-abyss);
-  font-size: 16px;
+  border: 1.5px solid var(--color-teal);
+  color: var(--color-ink);
+  font-size: 17px;
+  line-height: 22px;
   font-weight: 500;
   touch-action: manipulation;
-  transition: transform 70ms ease-out;
+  transition: transform 120ms ease-out, background-color 120ms ease-out;
+}
+.go-cta:active {
+  transform: scale(0.97);
+  background: color-mix(in srgb, var(--color-teal) 12%, transparent);
 }
 .go-cta:disabled {
-  background: var(--color-surface-3);
+  border-color: var(--go-rule);
   color: var(--color-muted);
 }
 .go-pick {
@@ -935,70 +1301,44 @@ html:has([data-go-root]) [data-rotate-guard] {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border: 1px solid var(--color-line);
-  border-radius: 6px;
+  border: 1px solid var(--go-rule);
   background: var(--color-abyss);
   cursor: pointer;
 }
 
-/* ---- done: the drawn check ---- */
+/* ---- done: the check draws, then the booked line types in ---- */
+.go-typed {
+  min-height: 24px;
+  margin-top: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--go-rule);
+  border-bottom: 1px solid var(--go-rule);
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--color-ink);
+}
+.go-caret {
+  display: inline-block;
+  width: 2px;
+  height: 18px;
+  margin-left: 2px;
+  vertical-align: -3px;
+  background: var(--color-ink);
+}
 .go-draw {
   stroke-dasharray: 1;
   stroke-dashoffset: 0;
 }
 @media (prefers-reduced-motion: no-preference) {
   .go-draw-ring {
-    animation: go-stroke 300ms ease-out backwards;
+    animation: go-stroke 320ms ease-out backwards;
   }
   .go-draw-tick {
-    animation: go-stroke 220ms ease-out 240ms backwards;
+    animation: go-stroke 220ms ease-out 260ms backwards;
   }
 }
 @keyframes go-stroke {
   from {
     stroke-dashoffset: 1;
-  }
-}
-
-/* ---- demo done: the owner's lock screen ---- */
-.go-mini-phone {
-  width: 232px;
-  margin-left: auto;
-  margin-right: auto;
-  padding: 12px 12px 18px;
-  border: 1px solid var(--color-line);
-  border-radius: 30px;
-  background: var(--color-abyss);
-  overflow: hidden;
-}
-.go-notify {
-  border-top: 1px solid var(--color-line);
-  border-bottom: 1px solid var(--color-line);
-  border-left: 2px solid var(--color-teal);
-  padding: 10px 0 10px 12px;
-}
-.go-ledger {
-  display: flex;
-  align-items: baseline;
-  border-bottom: 1px solid var(--color-line);
-  padding: 4px 0 8px;
-}
-@media (prefers-reduced-motion: no-preference) {
-  .go-notify {
-    animation: go-notify-in 420ms cubic-bezier(0.2, 0.8, 0.2, 1) 500ms backwards;
-  }
-  .go-ledger {
-    animation: go-ink 300ms ease-out 1000ms backwards;
-  }
-}
-@keyframes go-notify-in {
-  from {
-    opacity: 0;
-    transform: translateY(-140%);
-  }
-}
-@keyframes go-ink {
-  from {
-    opacity: 0;
   }
 }

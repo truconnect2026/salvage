@@ -1,5 +1,5 @@
 /*
- * change 42: the /go gates, 207-212.  Run by scripts/gate.mjs after its own
+ * change 42: the /go gates, 207-212; change 45: 217-223.  Run by scripts/gate.mjs after its own
  * browser block, or alone:
  *
  *   NODE_PATH=<playwright>/node_modules node scripts/gate-go.mjs <baseUrl>
@@ -21,6 +21,18 @@ const VIEWPORTS = [
   { width: 390, height: 844 },
   { width: 844, height: 390 },
 ];
+/* change 45 (v2): the change-45 gates run at the v2 set — 390x700,
+   390x844, 844x390, 1440x900 — in both engines. */
+const V2 = [
+  { width: 390, height: 700 },
+  { width: 390, height: 844 },
+  { width: 844, height: 390 },
+  { width: 1440, height: 900 },
+];
+/* The hours Andy approved (v2 change 45, gate 45c). Held HERE as well as
+   read from config: a gate that only read GO_SCHEDULE would move with an
+   off-by-one there and never catch it. */
+const APPROVED_HOURS = { days: [1, 2, 3, 4, 5, 6], open: 7, close: 18 };
 const BIZ = "Robinson's Heating & Air";
 const IOS_UA =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1";
@@ -45,12 +57,66 @@ function expectations(src) {
     homeRecovered: +need(/id: "home"[\s\S]*?recovered:\s*(\d+)/, "home recovered"),
     maxName: +need(/export const MAX_NAME_LEN = (\d+)/, "MAX_NAME_LEN"),
     hvacJob0: (go.match(/hvac:\s*\["([^"]+)"/) ?? [])[1],
+    /* change 45 */
+    goOpen: (go.match(/\bopen:\s*"([^"]+)"/) ?? [])[1],
+    goClosed: (go.match(/\bclosed:\s*"([^"]+)"/) ?? [])[1],
+    proofReply: (go.match(/proofReply:\s*"([^"]+)"/) ?? [])[1],
+    proofRadius: (go.match(/proofRadius:\s*"([^"]+)"/) ?? [])[1],
+    installHint: (go.match(/installHint:\s*"([^"]+)"/) ?? [])[1],
+    jobs: (() => {
+      const block = src.slice(src.indexOf("  jobs: {"), src.indexOf("  tradeLabels:"));
+      const out = {};
+      for (const m of block.matchAll(/(\w+):\s*\[([^\]]*)\]/g)) out[m[1]] = [...m[2].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
+      return out;
+    })(),
+    schedule: (() => {
+      const block = src.slice(src.indexOf("export const GO_SCHEDULE"));
+      return {
+        days: JSON.parse(need(/days:\s*(\[[\d,\s]+\])/, "GO_SCHEDULE.days")),
+        open: +need(/export const GO_SCHEDULE[\s\S]*?\bopen:\s*(\d+)/, "GO_SCHEDULE.open"),
+        close: +need(/export const GO_SCHEDULE[\s\S]*?\bclose:\s*(\d+)/, "GO_SCHEDULE.close"),
+        block: block.length,
+      };
+    })(),
+    presets: (() => {
+      const marks = [...src.matchAll(/id: "([a-z]+)"/g)].map((m) => ({ id: m[1], at: m.index }));
+      return marks.map((mk, i) => {
+        const b = src.slice(mk.at, i + 1 < marks.length ? marks[i + 1].at : src.length);
+        return {
+          id: mk.id,
+          accent: (b.match(/accent:\s*"(#[0-9A-Fa-f]{6})"/) ?? [])[1],
+          accentInk: (b.match(/accentInk:\s*"(#[0-9A-Fa-f]{6})"/) ?? [])[1],
+          radius: +((b.match(/radius:\s*(\d+)/) ?? [])[1] ?? NaN),
+          thread: [...b.matchAll(/\{\s*from:\s*"(business|customer)",\s*time:\s*"([^"]+)"/g)].map((m) => ({ from: m[1], time: m[2] })),
+        };
+      });
+    })(),
   };
 }
+
+/* Independent of lib/go.ts: the typical reply from the stored thread —
+   every customer -> business gap, median, rounded. */
+const replyMinutes = (thread) => {
+  const mins = (t) => {
+    const m = t.match(/^(\d{1,2}):(\d{2})\s*([AP]M)$/i);
+    return ((+m[1] % 12) + (/p/i.test(m[3]) ? 12 : 0)) * 60 + +m[2];
+  };
+  const gaps = [];
+  for (let i = 0; i + 1 < thread.length; i++) if (thread[i].from === "customer" && thread[i + 1].from === "business") gaps.push(mins(thread[i + 1].time) - mins(thread[i].time));
+  gaps.sort((a, b) => a - b);
+  const mid = gaps.length >> 1;
+  return gaps.length ? Math.round(gaps.length % 2 ? gaps[mid] : (gaps[mid - 1] + gaps[mid]) / 2) : null;
+};
+const hexRgb = (hex) => `rgb(${parseInt(hex.slice(1, 3), 16)}, ${parseInt(hex.slice(3, 5), 16)}, ${parseInt(hex.slice(5, 7), 16)})`;
 
 const usd = (n) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
 const etWeekday = (ms) => new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short" }).format(ms);
 const etTime = (ms) => new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" }).format(ms);
+const etMinute = (ms) => {
+  const p = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "numeric", hourCycle: "h23" }).formatToParts(ms);
+  const get = (t) => +(p.find((x) => x.type === t)?.value ?? NaN);
+  return (get("hour") % 24) * 60 + get("minute");
+};
 const icsStamp = (ms) => new Date(ms).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 
 export async function runGoGates({ base, pw, check }) {
@@ -77,7 +143,12 @@ export async function runGoGates({ base, pw, check }) {
 
   /* Runs fn per engine (x viewport); green only if every run is green and
      WebKit ran (or the container waiver is set). */
+  /* GO_ONLY=217,212 runs just those gates — for mutation proofs from the
+     standalone entry point only. scripts/gate.mjs never sets it, so the full
+     suite always runs every gate, and a filtered run says so in its output. */
+  const only = (process.env.GO_ONLY ?? "").split(",").map(Number).filter(Boolean);
   const gate = async (n, name, fn, { viewports = VIEWPORTS } = {}) => {
+    if (only.length && !only.includes(n)) return;
     const notes = [];
     let ok = true;
     for (const { name: eng, browser } of engines) {
@@ -241,6 +312,10 @@ export async function runGoGates({ base, pw, check }) {
         const page = await ctx.newPage();
         await page.clock.install({ time: c.now });
         await page.goto(url(bizQ), { waitUntil: "networkidle" });
+        /* change 45: read only once the page has re-rendered on the frozen
+           client clock — the dial's minute is that signal. A read at
+           networkidle could still see the server's request-time line. */
+        await page.waitForFunction((m) => document.querySelector("[data-go-dial]")?.getAttribute("data-minute") === String(m), etMinute(c.now), { timeout: 8000 });
         const sub = await page.textContent("[data-go-next]");
         await page.click("[data-go-slot=book]");
         await page.click("[data-go-job] >> nth=0");
@@ -338,37 +413,469 @@ export async function runGoGates({ base, pw, check }) {
     { viewports: [VIEWPORTS[1]] },
   );
 
-  /* --- 212: demo done = owner card + the STORED ticket --- */
-  await gate(212, "go: demo done shows owner card and +ticket", async (browser, vp) => {
+  /* --- 212 (amended, change 45 F10): the owner's phone is PINNED on the
+         page in demo mode — on load with the stored caller, and the
+         visitor's booking lands on top when the sheet closes. The ticket is
+         the preset's STORED value. Live mode has no owner phone. --- */
+  await gate(212, "go: demo owner phone shows the booking and +ticket", async (browser, vp) => {
     const ctx = await ctxFor(browser, vp);
     const page = await ctx.newPage();
     await page.goto(url(bizQ), { waitUntil: "networkidle" });
+    const onLoad = await page.evaluate(() => !!document.querySelector("[data-go-owner] [data-go-notify]"));
     await book(page);
-    await page.waitForTimeout(1700);
+    await page.click("[data-go-close]");
+    await page.waitForFunction(() => document.querySelector("[data-go-sheet]")?.getAttribute("data-go-sheet") === "closed");
+    await page.waitForTimeout(1100);
     const demo = await page.evaluate(() => {
       const owner = document.querySelector("[data-go-owner]");
       const n = document.querySelector("[data-go-notify]");
-      const t = document.querySelector("[data-go-ticket]");
+      const t = n?.querySelector("[data-go-ticket]");
       const cs = n ? getComputedStyle(n) : null;
       return {
         owner: !!owner && owner.getClientRects().length > 0,
+        cards: document.querySelectorAll("[data-go-notify]").length,
         notify: n?.textContent ?? "",
-        landed: !!cs && cs.opacity === "1" && cs.transform === "none",
+        landed: !!cs && cs.opacity === "1" && (cs.transform === "none" || cs.transform === "matrix(1, 0, 0, 1, 0, 0)"),
         ticket: t?.textContent.trim() ?? null,
         tColor: t ? getComputedStyle(t).color : null,
+        gold: getComputedStyle(document.documentElement).getPropertyValue("--color-gold").trim(),
       };
     });
     await page.goto(url(`biz=${encodeURIComponent(BIZ)}&trade=hvac`), { waitUntil: "networkidle" });
-    await book(page);
     const live = await page.evaluate(() => !!document.querySelector("[data-go-owner]"));
     await ctx.close();
     const want = `+${usd(X.homeTicket)}`;
-    const ok = demo.owner && demo.notify.includes(X.bookedLabel) && demo.landed && demo.ticket === want && !live;
+    /* The ticket's ink must BE the gold token (Tailwind writes the @theme
+       tokens onto :root), not merely some warm colour. */
+    const goldOk = /^#[0-9A-Fa-f]{6}$/.test(demo.gold) && demo.tColor === hexRgb(demo.gold);
+    const ok = onLoad && demo.owner && demo.cards === 2 && demo.notify.includes(X.bookedLabel) && demo.notify.includes("Pat Doe") && demo.landed && demo.ticket === want && goldOk && !live;
     return {
       ok,
-      detail: `owner ${demo.owner}, "${X.bookedLabel}" ${demo.notify.includes(X.bookedLabel)}, landed ${demo.landed}, ticket ${JSON.stringify(demo.ticket)} want ${want} (stored; recovered is ${X.homeRecovered}); live mode owner ${live}`,
+      detail: `on load ${onLoad}; after booking ${demo.cards} card(s), top "${X.bookedLabel} · Pat Doe" ${demo.notify.includes("Pat Doe")}, landed ${demo.landed}, ticket ${JSON.stringify(demo.ticket)} want ${want} (stored; recovered is ${X.homeRecovered}), ink ${demo.tColor} ${goldOk ? "= gold" : "NOT gold " + demo.gold}; live mode owner ${live}`,
     };
   });
+
+  /* ======================= change 45: the door, rebuilt ================== */
+
+  /* --- 217 (45a): every slot >= 72px, its glyph box >= 32px, its label
+         >= 17px; the emergency band is 64px with the same glyph and label. --- */
+  await gate(
+    217,
+    "go 45a: slots >= 72px, glyph box >= 32px, labels >= 17px",
+    async (browser, vp) => {
+      const ctx = await ctxFor(browser, vp);
+      const page = await ctx.newPage();
+      await page.goto(url(bizQ), { waitUntil: "networkidle" });
+      await page.waitForTimeout(700);
+      const m = await page.evaluate(() =>
+        [...document.querySelectorAll("[data-go-slot]")].map((el) => {
+          const svg = el.querySelector("[data-go-glyph] svg");
+          const g = svg?.getBoundingClientRect();
+          const l = el.querySelector("[data-go-label]");
+          return {
+            k: el.getAttribute("data-go-slot"),
+            h: +el.getBoundingClientRect().height.toFixed(2),
+            g: g ? [+g.width.toFixed(2), +g.height.toFixed(2)] : null,
+            ink: svg ? getComputedStyle(svg).color : null,
+            fs: l ? parseFloat(getComputedStyle(l).fontSize) : null,
+          };
+        }),
+      );
+      await ctx.close();
+      /* "at full ink": ink on the abyss slots, the preset's inverse ink on
+         the accent band — never a light glyph on the fill. */
+      const home = X.presets.find((x) => x.id === "home");
+      const inkOf = (k) => (k === "emergency" ? hexRgb(home.accentInk) : "rgb(233, 238, 244)");
+      const bad = m.filter((x) => {
+        const floor = x.k === "emergency" ? 63.99 : 71.99;
+        return x.h < floor || !x.g || x.g[0] < 31.99 || x.g[1] < 31.99 || x.fs == null || x.fs < 17 || x.ink !== inkOf(x.k);
+      });
+      return { ok: m.length === 6 && bad.length === 0, detail: `${m.length}/6 slots; ${m.map((x) => `${x.k} ${x.h}px glyph ${x.g?.join("x")} ${x.ink === inkOf(x.k) ? "full ink" : "INK " + x.ink} label ${x.fs}px`).join(", ")}${bad.length ? "; UNDER: " + bad.map((x) => x.k).join(",") : ""}` };
+    },
+    { viewports: V2 },
+  );
+
+  /* --- 218 (45b): the emergency band is the ONLY accent-filled surface on
+         /go — every element's computed background (and ::before / ::after)
+         and every filled SVG shape is scanned. A preset without the band has
+         none at all. --- */
+  await gate(
+    218,
+    "go 45b: the emergency band is the only accent-filled surface",
+    async (browser, vp) => {
+      const out = [];
+      let ok = true;
+      for (const [q, id, want] of [
+        [bizQ, "home", 1],
+        ["preset=salon&demo=1", "salon", 0],
+      ]) {
+        const ctx = await ctxFor(browser, vp);
+        const page = await ctx.newPage();
+        await page.goto(url(q), { waitUntil: "networkidle" });
+        await page.waitForTimeout(700);
+        const accent = hexRgb(X.presets.find((x) => x.id === id).accent);
+        const fills = await page.evaluate((acc) => {
+          const hits = [];
+          const solid = (c) => c && c.startsWith("rgb(") ? c : c && c.startsWith("rgba(") && parseFloat(c.split(",")[3]) > 0.5 ? c.replace(/^rgba\((\d+), (\d+), (\d+), [\d.]+\)$/, "rgb($1, $2, $3)") : null;
+          for (const el of document.querySelectorAll("body *")) {
+            const r = el.getBoundingClientRect();
+            if (r.width * r.height < 40) continue;
+            for (const pseudo of [null, "::before", "::after"]) {
+              const cs = getComputedStyle(el, pseudo);
+              if (pseudo && cs.content === "none") continue;
+              if (solid(cs.backgroundColor) === acc) hits.push((el.getAttribute("data-go-slot") ?? el.tagName.toLowerCase() + (el.className?.baseVal ?? el.className ?? "").toString().slice(0, 24)) + (pseudo ?? ""));
+            }
+            if (el instanceof SVGGeometryElement && getComputedStyle(el).fill && solid(getComputedStyle(el).fill) === acc) hits.push("svg-fill");
+          }
+          return hits;
+        }, accent);
+        await ctx.close();
+        const good = fills.length === want && (want === 0 || fills[0] === "emergency");
+        ok &&= good;
+        out.push(`${id}: ${fills.length} accent fill(s) ${JSON.stringify(fills.slice(0, 4))} (want ${want ? "only the emergency band" : "none"})`);
+      }
+      return { ok, detail: out.join("; ") };
+    },
+    { viewports: V2 },
+  );
+
+  /* --- 219 (45c): the dial — its arc spans the approved hours (the gate
+         holds 07-18 itself AND config must equal it); closed at Sun 12:05
+         and Mon 06:59, open at Mon 07:00, ET; the hand at the frozen minute;
+         the arc in accent on an open day and muted on Sunday. --- */
+  await gate(
+    219,
+    "go 45c: the dial matches Mon-Sat 07-18 ET under frozen clocks",
+    async (browser, vp) => {
+      const cfgOk =
+        JSON.stringify(X.schedule.days) === JSON.stringify(APPROVED_HOURS.days) && X.schedule.open === APPROVED_HOURS.open && X.schedule.close === APPROVED_HOURS.close;
+      const clocks = [
+        { label: "Sun 12:05", now: Date.parse("2026-10-18T16:05:00Z"), open: false, minute: 12 * 60 + 5, day: false },
+        { label: "Mon 06:59", now: Date.parse("2026-10-19T10:59:00Z"), open: false, minute: 6 * 60 + 59, day: true },
+        { label: "Mon 07:00", now: Date.parse("2026-10-19T11:00:00Z"), open: true, minute: 7 * 60, day: true },
+      ];
+      const out = [`config ${cfgOk ? "== approved" : "DIFFERS " + JSON.stringify(X.schedule)}`];
+      let ok = cfgOk;
+      const accent = hexRgb(X.presets.find((x) => x.id === "home").accent);
+      for (const c of clocks) {
+        const ctx = await ctxFor(browser, vp);
+        const page = await ctx.newPage();
+        await page.clock.install({ time: c.now });
+        await page.goto(url(bizQ), { waitUntil: "networkidle" });
+        await page.waitForFunction((m) => document.querySelector("[data-go-dial]")?.getAttribute("data-minute") === String(m), c.minute, { timeout: 8000 });
+        const d = await page.evaluate(() => {
+          const dial = document.querySelector("[data-go-dial]");
+          const arc = dial?.querySelector("[data-go-arc]");
+          const hand = dial?.querySelector("[data-go-hand]");
+          const box = dial?.viewBox.baseVal;
+          return {
+            open: dial?.getAttribute("data-open"),
+            minute: dial?.getAttribute("data-minute"),
+            d: arc?.getAttribute("d"),
+            stroke: arc ? getComputedStyle(arc).stroke : null,
+            hand: hand ? [+hand.getAttribute("x2"), +hand.getAttribute("y2")] : null,
+            c: box ? box.width / 2 : null,
+            status: document.querySelector("[data-go-status]")?.textContent.trim(),
+            mid: arc ? (() => {
+              const pt = arc.getPointAtLength(arc.getTotalLength() / 2);
+              return [pt.x, pt.y];
+            })() : null,
+          };
+        });
+        await ctx.close();
+        /* Angles back to hours, noon at the top: h = 12 + atan2(dx, -dy)/2pi*24. */
+        const hourOf = (x, y) => (((12 + (Math.atan2(x - d.c, d.c - y) / (2 * Math.PI)) * 24) % 24) + 24) % 24;
+        const nums = (d.d ?? "").match(/-?[\d.]+/g)?.map(Number) ?? [];
+        const from = nums.length >= 9 ? hourOf(nums[0], nums[1]) : NaN;
+        const to = nums.length >= 9 ? hourOf(nums[7], nums[8]) : NaN;
+        const hand = d.hand ? hourOf(d.hand[0], d.hand[1]) : NaN;
+        /* The endpoints alone cannot tell the day's arc from the night's:
+           the flags must draw it clockwise the short way, and its middle
+           must sit at the window's middle hour. */
+        const largeWant = APPROVED_HOURS.close - APPROVED_HOURS.open > 12 ? 1 : 0;
+        const mid = d.mid ? hourOf(d.mid[0], d.mid[1]) : NaN;
+        const checks = {
+          sweep: nums[6] === 1 && nums[5] === largeWant,
+          mid: Math.abs(mid - (APPROVED_HOURS.open + APPROVED_HOURS.close) / 2) < 0.1,
+          arcFrom: Math.abs(from - APPROVED_HOURS.open) < 0.05,
+          arcTo: Math.abs(to - APPROVED_HOURS.close) < 0.05,
+          open: d.open === (c.open ? "1" : "0"),
+          status: d.status === (c.open ? X.goOpen : X.goClosed),
+          hand: Math.abs(hand - c.minute / 60) < 0.05,
+          arcInk: c.day ? d.stroke === accent : d.stroke !== accent,
+        };
+        const bad = Object.entries(checks).filter(([, v]) => !v).map(([k]) => k);
+        ok &&= bad.length === 0;
+        out.push(`${c.label}: arc ${from.toFixed(2)}-${to.toFixed(2)}h via ${mid.toFixed(2)}h (flags ${nums[5]}/${nums[6]}), hand ${hand.toFixed(2)}h, ${JSON.stringify(d.status)}${bad.length ? " RED " + bad.join(",") : " ok"}`);
+      }
+      return { ok, detail: out.join("; ") };
+    },
+    { viewports: V2 },
+  );
+
+  /* --- 220 (45d): demo mode, 390x844, on load — the owner card and its
+         gold +ticket sit wholly inside the first viewport, at full opacity,
+         with no scroll. --- */
+  await gate(
+    220,
+    "go 45d: the demo owner card is in the first viewport at 390x844",
+    async (browser, vp) => {
+      const ctx = await ctxFor(browser, vp);
+      const page = await ctx.newPage();
+      await page.goto(url(bizQ), { waitUntil: "networkidle" });
+      await page.waitForTimeout(900);
+      const m = await page.evaluate(() => {
+        const n = document.querySelector("[data-go-owner] [data-go-notify]");
+        const t = n?.querySelector("[data-go-ticket]");
+        const eff = (el) => {
+          let o = 1;
+          for (let x = el; x && x.nodeType === 1; x = x.parentElement) o *= parseFloat(getComputedStyle(x).opacity);
+          return o;
+        };
+        if (!n || !t) return null;
+        const r = n.getBoundingClientRect();
+        const tr = t.getBoundingClientRect();
+        return { top: Math.round(r.top), bottom: Math.round(r.bottom), tBottom: Math.round(tr.bottom), vh: innerHeight, scroll: scrollY, o: +eff(n).toFixed(2) };
+      });
+      await ctx.close();
+      const ok = !!m && m.top >= 0 && m.bottom <= m.vh && m.tBottom <= m.vh && m.scroll === 0 && m.o >= 0.99;
+      return { ok, detail: m ? `card ${m.top}-${m.bottom}px, ticket bottom ${m.tBottom}px, viewport ${m.vh}, scrollY ${m.scroll}, opacity ${m.o}` : "no owner card" };
+    },
+    { viewports: [{ width: 390, height: 844 }] },
+  );
+
+  /* --- 221 (45e): "typical reply" is the STORED thread's gap, per preset —
+         recomputed here from config, never read off the page's own math. --- */
+  await gate(
+    221,
+    "go 45e: typical reply equals the stored thread gap, every preset",
+    async (browser, vp) => {
+      const out = [];
+      let ok = true;
+      const ctx = await ctxFor(browser, vp);
+      const page = await ctx.newPage();
+      for (const pr of X.presets) {
+        const n = replyMinutes(pr.thread);
+        const want = n == null ? null : X.proofReply.replace("{n}", String(n));
+        const wantRadius = X.proofRadius.replace("{n}", String(pr.radius));
+        await page.goto(url(`preset=${pr.id}&demo=1`), { waitUntil: "networkidle" });
+        const got = await page.evaluate(() => ({ reply: document.querySelector("[data-go-reply]")?.textContent.trim() ?? null, radius: document.querySelector("[data-go-radius]")?.textContent.trim() ?? null }));
+        const good = got.reply === want && got.radius === wantRadius;
+        ok &&= good;
+        out.push(`${pr.id}: ${JSON.stringify(got.reply)} want ${JSON.stringify(want)}${got.radius === wantRadius ? "" : " radius " + JSON.stringify(got.radius)}`);
+      }
+      await ctx.close();
+      return { ok, detail: out.join("; ") };
+    },
+    { viewports: V2 },
+  );
+
+  /* --- 222 (45f): every rendered text node on /go clears 4.5:1, computed —
+         the foreground composited over the real stack of backgrounds under
+         it. Idle in both modes, each sheet step (inside the panel), done. --- */
+  const CONTRAST = () => {
+    /* rgb()/rgba(), and the color(srgb r g b / a) form that color-mix()
+       computes to. Anything else is reported, never silently skipped. */
+    const parse = (c) => {
+      const m = c.match(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/);
+      if (m) return [+m[1], +m[2], +m[3], m[4] == null ? 1 : +m[4]];
+      const k = c.match(/color\(srgb\s+([\d.e-]+)\s+([\d.e-]+)\s+([\d.e-]+)(?:\s*\/\s*([\d.e-]+))?\)/);
+      if (k) return [k[1] * 255, k[2] * 255, k[3] * 255, k[4] == null ? 1 : +k[4]];
+      throw new Error("unparsed colour " + c);
+    };
+    const over = (top, bot) => [0, 1, 2].map((i) => top[i] * top[3] + bot[i] * (1 - top[3])).concat(1);
+    const lum = ([r, g, b]) => {
+      const f = (v) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
+    const bgOf = (el) => {
+      const stack = [];
+      for (let n = el; n; n = n.parentElement) {
+        const c = parse(getComputedStyle(n).backgroundColor);
+        if (c && c[3] > 0) {
+          stack.push(c);
+          if (c[3] >= 1) break;
+        }
+      }
+      let base = parse(getComputedStyle(document.body).backgroundColor);
+      if (base[3] < 1) base = [6, 11, 20, 1];
+      for (let i = stack.length - 1; i >= 0; i--) base = over(stack[i], base);
+      return base;
+    };
+    const scope = document.querySelector('[data-go-sheet="open"]') ? document.querySelector("[data-go-panel]") : document.querySelector("[data-go]");
+    const bad = [];
+    let n = 0;
+    const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
+    for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+      if (!t.textContent.trim()) continue;
+      const el = t.parentElement;
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      if (r.width === 0 || r.height === 0 || cs.visibility === "hidden" || el.closest(".sr-only")) continue;
+      if (cs.clip === "rect(0px, 0px, 0px, 0px)" || (cs.position === "absolute" && r.width <= 1)) continue;
+      const bg = bgOf(el);
+      const fg = over(parse(cs.color), bg);
+      const L1 = lum(fg);
+      const L2 = lum(bg);
+      const ratio = (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
+      n++;
+      if (ratio < 4.5) bad.push(`${t.textContent.trim().slice(0, 18)} ${ratio.toFixed(2)}`);
+    }
+    return { n, bad };
+  };
+  await gate(
+    222,
+    "go 45f: every text node >= 4.5:1, computed",
+    async (browser, vp) => {
+      const out = [];
+      let ok = true;
+      const ctx = await ctxFor(browser, vp);
+      const page = await ctx.newPage();
+      const take = async (label) => {
+        await page.waitForTimeout(650);
+        const r = await page.evaluate(CONTRAST);
+        ok &&= r.bad.length === 0 && r.n > 0;
+        out.push(`${label} ${r.n} nodes${r.bad.length ? " LOW " + JSON.stringify(r.bad.slice(0, 3)) : ""}`);
+      };
+      await page.goto(url(`biz=${encodeURIComponent(BIZ)}&trade=hvac`), { waitUntil: "networkidle" });
+      await take("live");
+      await page.goto(url(bizQ), { waitUntil: "networkidle" });
+      await take("demo");
+      await page.click("[data-go-slot=book]");
+      await page.waitForSelector("[data-go-job]");
+      await take("job");
+      await page.click("[data-go-job] >> nth=0");
+      await page.waitForSelector("[data-go-time]");
+      await take("time");
+      await page.click("[data-go-fast]");
+      await page.click("[data-go-confirm]");
+      await take("you+errors");
+      await page.fill("[data-go-field=name]", "Pat Doe");
+      await page.fill("[data-go-field=phone]", "8045550142");
+      await page.click("[data-go-confirm]");
+      await page.waitForSelector("[data-go-done]");
+      await page.waitForTimeout(1600);
+      await take("done");
+      await ctx.close();
+      return { ok, detail: out.join("; ") };
+    },
+    { viewports: V2 },
+  );
+
+  /* --- 223 (45g): one drawn glyph per job, every job set (the five home
+         trades, salon, dental, other): each chip carries an SVG whose
+         shapes have real geometry. A key with no drawing renders nothing,
+         so a missing glyph is red here. --- */
+  await gate(
+    223,
+    "go 45g: a drawn glyph on every job of every preset",
+    async (browser, vp) => {
+      const sets = [
+        ["plumbing", "preset=home&trade=plumbing&demo=1"],
+        ["hvac", "preset=home&trade=hvac&demo=1"],
+        ["electrical", "preset=home&trade=electrical&demo=1"],
+        ["roofing", "preset=home&trade=roofing&demo=1"],
+        ["garage", "preset=home&trade=garage&demo=1"],
+        ["salon", "preset=salon&demo=1"],
+        ["dental", "preset=dental&demo=1"],
+        ["other", "preset=other&demo=1"],
+      ];
+      const out = [];
+      let ok = true;
+      const ctx = await ctxFor(browser, vp);
+      const page = await ctx.newPage();
+      for (const [set, q] of sets) {
+        await page.goto(url(q), { waitUntil: "networkidle" });
+        await page.click("[data-go-slot=book]");
+        await page.waitForSelector("[data-go-job]");
+        const chips = await page.evaluate(() =>
+          [...document.querySelectorAll("[data-go-job]")].map((b) => {
+            const svg = b.querySelector("svg[data-go-job-glyph]");
+            const shapes = svg ? [...svg.querySelectorAll("path, circle, rect, line")] : [];
+            const drawn = shapes.filter((sh) => {
+              const bb = sh.getBBox();
+              return bb.width + bb.height > 1;
+            }).length;
+            return { label: b.textContent.trim(), key: svg?.getAttribute("data-go-job-glyph") ?? null, drawn };
+          }),
+        );
+        const want = X.jobs[set] ?? [];
+        const missing = chips.filter((c) => !c.key || c.drawn === 0).map((c) => c.label);
+        const keys = chips.map((c) => c.key).filter((k) => k && k !== "else");
+        const good = chips.length === want.length && chips.every((c, i) => c.label === want[i]) && missing.length === 0 && new Set(keys).size === keys.length;
+        ok &&= good;
+        out.push(`${set} ${chips.length}/${want.length}${missing.length ? " MISSING " + JSON.stringify(missing) : ""}`);
+      }
+      await ctx.close();
+      return { ok, detail: out.join("; ") };
+    },
+    { viewports: V2 },
+  );
+
+  /* --- 224 (change 45 review): the plumbing nobody sees — the analytics
+         events and their attribution, the per-business manifest and its
+         icon, and the install hint on iOS Safari only. --- */
+  await gate(
+    224,
+    "go: analytics events, manifest, icon, install hint",
+    async (browser, vp) => {
+      const out = [];
+      let ok = true;
+      const q = `${bizQ}&ref=lead&lead=17`;
+      const ctx = await ctxFor(browser, vp, { userAgent: IOS_UA });
+      const page = await ctx.newPage();
+      await page.addInitScript(() => {
+        window.__goEvents = [];
+        window.__track = (name, data) => window.__goEvents.push([name, data]);
+      });
+      await page.goto(url(q), { waitUntil: "networkidle" });
+      const hint = await page.evaluate(() => {
+        const h = document.querySelector("[data-go-install]");
+        return h && h.getClientRects().length > 0 ? h.textContent.trim() : null;
+      });
+      await book(page);
+      await page.click("[data-go-close]");
+      await page.waitForFunction(() => document.querySelector("[data-go-sheet]")?.getAttribute("data-go-sheet") === "closed");
+      await page.click("[data-go-slot=quote]");
+      await page.setInputFiles("[data-go-photo]", { name: "p.png", mimeType: "image/png", buffer: Buffer.from("89504e470d0a1a0a", "hex") });
+      await page.click("[data-go-send]");
+      await page.waitForSelector("[data-go-quote-done]");
+      const ev = await page.evaluate(() => window.__goEvents);
+      const seq = ev.map(([n, d]) => (n === "go_tap" ? `go_tap:${d.slot}` : n));
+      const want = ["go_view", "go_tap:book", "go_book_done", "go_tap:quote", "go_quote_done"];
+      const attributed = ev.every(([, d]) => d.preset === "home" && d.ref === "lead" && d.lead === "17");
+      const evOk = JSON.stringify(seq) === JSON.stringify(want) && attributed;
+      ok &&= evOk;
+      out.push(`events ${evOk ? "ok" : JSON.stringify(seq) + " attributed " + attributed}`);
+
+      const href = await page.getAttribute('link[rel="manifest"]', "href");
+      const man = href ? await (await fetch(new URL(href, base))).json() : null;
+      const manOk =
+        !!man && man.name === BIZ && man.theme_color === "#060B14" && man.background_color === "#060B14" && man.display === "standalone" &&
+        /[?&]ref=lead\b/.test(man.start_url) && /[?&]lead=17\b/.test(man.start_url) && man.icons?.length === 2;
+      ok &&= manOk;
+      out.push(`manifest ${manOk ? "ok" : JSON.stringify(man).slice(0, 160)}`);
+      const icon = man?.icons?.[0] ? await fetch(new URL(man.icons[0].src, base)) : null;
+      const buf = icon ? Buffer.from(await icon.arrayBuffer()) : Buffer.alloc(0);
+      const iconOk = !!icon && icon.headers.get("content-type") === "image/png" && buf.readUInt32BE(16) === 192 && buf.readUInt32BE(20) === 192;
+      ok &&= iconOk;
+      out.push(`icon ${iconOk ? "192x192 png" : "RED"}`);
+      const hintOk = hint === X.installHint;
+      ok &&= hintOk;
+      out.push(`ios hint ${hintOk ? "ok" : JSON.stringify(hint)}`);
+      await ctx.close();
+      /* No hint inside the Facebook browser: only Safari can add to the home screen. */
+      const fb = await ctxFor(browser, vp, { userAgent: FB_UA });
+      const fp = await fb.newPage();
+      await fp.goto(url(q), { waitUntil: "networkidle" });
+      const fbHint = await fp.evaluate(() => !!document.querySelector("[data-go-install]"));
+      await fb.close();
+      ok &&= !fbHint;
+      out.push(`fb hint ${fbHint ? "SHOWN" : "absent"}`);
+      return { ok, detail: out.join("; ") };
+    },
+    { viewports: [{ width: 390, height: 844 }] },
+  );
 
   for (const { browser } of engines) await browser.close();
 }
@@ -379,6 +886,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const pw = createRequire(import.meta.url)("playwright");
   const results = [];
   await runGoGates({ base, pw, check: (n, name, pass, detail) => results.push({ n, name, pass, detail }) });
+  if (process.env.GO_ONLY) console.log(`  (filtered: GO_ONLY=${process.env.GO_ONLY})`);
   for (const r of results) console.log(`  ${r.pass ? "PASS" : "FAIL"}  ${r.n}. ${r.name} — ${r.detail}`);
   const failed = results.filter((r) => !r.pass);
   console.log(failed.length ? `\n${failed.length} GO GATE(S) RED: ${failed.map((r) => r.n).join(", ")}` : `\nALL ${results.length} GO GATES PASS`);

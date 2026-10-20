@@ -16,6 +16,9 @@ export type Preset = {
   accentSoft: string;
   accentInk: string;
   ticket: number; missedPerMonth: number; callsCaught: number; recovered: number; lost: number;
+  /* change 45: the /go proof row's service radius, miles. Data — 25 is
+     Andy's approved default (v2 GO). */
+  radius: number;
   sinceCalls: number; sinceRecovered: number;
   caught: CaughtEntry[];
   thread: Bubble[];
@@ -111,6 +114,9 @@ export const COPY = {
     ringingLabel: "ringing…",
     endedLabel: "Call Ended",
     endLabel: "End",
+    // v2 GO (APPROVED, verbatim): the owner's incoming-call controls.
+    decline: "Decline",
+    slideToAnswer: "slide to answer",
     // change 17 (A1, APPROVED): the six-button iOS in-call grid, in iOS's
     // own casing. Non-interactive scenery.
     grid: ["mute", "keypad", "speaker", "add call", "FaceTime", "contacts"],
@@ -245,6 +251,19 @@ export const COPY = {
     ownerSide: "On the owner's phone, right now:",
     demoNote: "Demo. Nothing is sent.",
     poweredBy: "Missed-call recovery by Salvage",
+    // v2 GO (APPROVED, verbatim). {n} is filled from data.
+    seeTheirSide: "See what your customer sees",
+    proofRadius: "Serves {n} miles",
+    proofHours: "Hours",
+    proofReply: "Typical reply: {n} min",
+    installHint: "Tap Share, then Add to Home Screen.",
+    qrTitle: "Your front door",
+    qrSub: "Scan it. This is what your customers see.",
+    qrCaption: "Put it on the truck, the door, and every invoice.",
+    kitTitle: "Your print kit",
+    kitPieces: ["Truck decal","Yard sign","Invoice footer","Sticker"],
+    downloadPng: "Download PNG",
+    downloadSvg: "Download SVG",
   },
   jobs: {
     plumbing: ["Leak or burst pipe","Water heater","Drain clog","Toilet or fixture","Something else"],
@@ -260,6 +279,30 @@ export const COPY = {
   // change 42: Andy's real voice line for /go demo mode. Texts use
   // contact.smsHref above; calls ring this one.
   goTel: "tel:+18044953492",
+  // v2 GO (APPROVED, verbatim): the lead text. {go_url} is filled per row.
+  lead: {
+    sms: "Hi, Andy here, a Richmond web developer. This is what your customers would see when you miss their call: {go_url}",
+  },
+};
+
+/* change 45: the front door's hours and bookable starts are DATA. The
+   server reads them here and hands them to the client island as props,
+   so lib/go.ts never imports this file. Mon-Sat 07:00-18:00 ET; Sunday
+   is never open. Four starts a day, each at least leadMinutes out. */
+export const GO_SCHEDULE = {
+  tz: "America/New_York",
+  days: [1, 2, 3, 4, 5, 6],
+  open: 7,
+  close: 18,
+  starts: [
+    [8, 0],
+    [10, 0],
+    [13, 0],
+    [15, 0],
+  ] as [number, number][],
+  slotMinutes: 60,
+  leadMinutes: 60,
+  openDays: 3,
 };
 
 export const PRESETS: Preset[] = [
@@ -268,6 +311,7 @@ export const PRESETS: Preset[] = [
     customerName: "Danielle R.",
     accent: "#E8A0B4", accentSoft: "#4A2838", accentInk: "#1A0C12",
     ticket: 340, missedPerMonth: 12, callsCaught: 4, recovered: 1360, lost: 4080,
+    radius: 25,
     sinceCalls: 31, sinceRecovered: 9240,
     // Entry [0] is this thread's own booking. Sum of all 4 amounts === recovered.
     caught: [
@@ -288,6 +332,7 @@ export const PRESETS: Preset[] = [
     customerName: "Mark T.",
     accent: "#F0A044", accentSoft: "#4A3418", accentInk: "#1A1206",
     ticket: 850, missedPerMonth: 15, callsCaught: 5, recovered: 4250, lost: 12750,
+    radius: 25,
     sinceCalls: 24, sinceRecovered: 18700,
     caught: [
       { name: "Mark T.", number: "(804) 555-0197", detail: "Tue 8:00 · water heater", amount: 850, date: "Mar 13" },
@@ -308,6 +353,7 @@ export const PRESETS: Preset[] = [
     customerName: "Priya S.",
     accent: "#7CC4E8", accentSoft: "#1C3E5C", accentInk: "#08161F",
     ticket: 600, missedPerMonth: 9, callsCaught: 3, recovered: 1800, lost: 5400,
+    radius: 25,
     sinceCalls: 19, sinceRecovered: 9800,
     caught: [
       // change 27 (C1, APPROVED): the three Nakamura rows shortened to the
@@ -332,6 +378,7 @@ export const PRESETS: Preset[] = [
     accent: "#9BB0C4", accentSoft: "#253546", accentInk: "#0B131B",
     tagline: "Any business that takes calls.",
     ticket: 250, missedPerMonth: 10, callsCaught: 3, recovered: 750, lost: 2500,
+    radius: 25,
     sinceCalls: 22, sinceRecovered: 5500,
     caught: [
       { name: "Jordan M.", number: "(804) 555-0151", detail: "Fri 3:30 · appointment", amount: 250, date: "Sep 2" },

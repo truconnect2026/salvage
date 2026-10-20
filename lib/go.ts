@@ -7,49 +7,58 @@
  * Every clock read is America/New_York and DST-correct: wall times are
  * turned into instants with the zone's offset AT THAT INSTANT, never the
  * offset of "now" (gate 209 freezes the clock on 2026-11-01 01:30 ET, the
- * fall-back hour, to hold this).
+ * fall-back hour, to hold this). change 45: the zone, hours and starts are
+ * config data (GO_SCHEDULE), passed in.
  */
-/* No config import: this module ships in the client bundle, and the copy
-   travels as props from the server (lib/go-params.ts) instead. */
-export const TZ = "America/New_York";
+/* No config import: this module ships in the client bundle. The copy AND
+   the schedule (change 45: hours are config data — GO_SCHEDULE) travel as
+   props from the server instead. */
+export type Schedule = {
+  tz: string;
+  /** Open weekdays, 0 = Sunday. Sunday is never open whatever this says. */
+  days: number[];
+  open: number;
+  close: number;
+  starts: [number, number][];
+  slotMinutes: number;
+  /** A start must be at least this far out — "never a past slot" includes
+      the one that begins while the customer is still typing. */
+  leadMinutes: number;
+  openDays: number;
+};
 
-/* Open Mon-Sat 07:00-18:00 ET. Four bookable starts a day, all inside it. */
-export const OPEN_HOUR = 7;
-export const CLOSE_HOUR = 18;
-export const SLOT_STARTS: [number, number][] = [
-  [8, 0],
-  [10, 0],
-  [13, 0],
-  [15, 0],
-];
-export const SLOT_MINUTES = 60;
-/* A slot must start at least this far out to be offered — "never a past
-   slot" includes the one that starts while the customer is still typing. */
-export const LEAD_MINUTES = 60;
-export const OPEN_DAYS = 3;
+export const fill = (s: string, biz: string) => s.replace(/\{biz\}/g, () => biz);
+/** Fills {n} — a figure from data, never a hand-typed number. */
+export const fillN = (s: string, n: number | string) => s.replace(/\{n\}/g, () => String(n));
 
-export const fill = (s: string, biz: string) => s.replace(/\{biz\}/g, biz);
+/* ---------- clock: the schedule's zone ---------------------------------- */
 
-/* ---------- clock: America/New_York ------------------------------------- */
+const fmtCache = new Map<string, Intl.DateTimeFormat>();
+function fmt(tz: string, key: string, opts: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const k = tz + "|" + key;
+  let f = fmtCache.get(k);
+  if (!f) {
+    f = new Intl.DateTimeFormat("en-US", { timeZone: tz, ...opts });
+    fmtCache.set(k, f);
+  }
+  return f;
+}
 
-const partsFmt = new Intl.DateTimeFormat("en-US", {
-  timeZone: TZ,
-  hourCycle: "h23",
-  year: "numeric",
-  month: "numeric",
-  day: "numeric",
-  hour: "numeric",
-  minute: "numeric",
-  second: "numeric",
-  weekday: "short",
-});
-
-export type EtParts = { y: number; m: number; d: number; h: number; min: number; s: number; dow: number };
+export type ZonedParts = { y: number; m: number; d: number; h: number; min: number; s: number; dow: number };
 
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-export function etParts(ms: number): EtParts {
-  const parts = partsFmt.formatToParts(new Date(ms));
+export function zonedParts(ms: number, tz: string): ZonedParts {
+  const parts = fmt(tz, "parts", {
+    hourCycle: "h23",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+    weekday: "short",
+  }).formatToParts(new Date(ms));
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
   return {
     y: +get("year"),
@@ -62,65 +71,121 @@ export function etParts(ms: number): EtParts {
   };
 }
 
-/** The zone's offset (ms, local minus UTC) at instant `ms`. */
-function offsetAt(ms: number): number {
-  const p = etParts(ms);
+/** The offset of `tz` (ms, local minus UTC) at instant `ms`. */
+function offsetAt(ms: number, tz: string): number {
+  const p = zonedParts(ms, tz);
   return Date.UTC(p.y, p.m - 1, p.d, p.h, p.min, p.s) - Math.floor(ms / 1000) * 1000;
 }
 
-/** The instant an ET wall time names. Two passes settle the offset across a
-    transition; a wall time inside the spring-forward gap lands an hour late,
-    the fall-back hour resolves to its first (EDT) occurrence. No slot start
-    sits in either hour. */
-export function etToUtc(y: number, m: number, d: number, h: number, min: number): number {
+/** The instant a wall time in `tz` names. Two passes settle the offset
+    across a transition (the offset is read AT the answer, never at "now");
+    a wall time inside the spring-forward gap lands an hour late, the
+    fall-back hour resolves to its first occurrence. No start sits in
+    either hour. */
+export function wallToUtc(y: number, m: number, d: number, h: number, min: number, tz: string): number {
   const wall = Date.UTC(y, m - 1, d, h, min);
-  let t = wall - offsetAt(wall);
-  t = wall - offsetAt(t);
+  let t = wall - offsetAt(wall, tz);
+  t = wall - offsetAt(t, tz);
   return t;
 }
 
-export function isOpenAt(ms: number): boolean {
-  const p = etParts(ms);
-  if (p.dow === 0) return false;
+export function isOpenAt(ms: number, sch: Schedule): boolean {
+  const p = zonedParts(ms, sch.tz);
+  if (p.dow === 0 || !sch.days.includes(p.dow)) return false;
   const mins = p.h * 60 + p.min;
-  return mins >= OPEN_HOUR * 60 && mins < CLOSE_HOUR * 60;
+  return mins >= sch.open * 60 && mins < sch.close * 60;
+}
+
+/** Minutes past midnight in the schedule's zone — the dial's hand. */
+export function minuteOfDay(ms: number, tz: string): number {
+  const p = zonedParts(ms, tz);
+  return p.h * 60 + p.min;
+}
+
+/** Is today, in the zone, an open day at all — the dial's arc ink. */
+export function openToday(ms: number, sch: Schedule): boolean {
+  const dow = zonedParts(ms, sch.tz).dow;
+  return dow !== 0 && sch.days.includes(dow);
 }
 
 export type Slot = { start: number; label: string; time: string };
-export type SlotDay = { key: string; label: string; slots: Slot[] };
+export type SlotDay = { key: string; label: string; dow: string; date: string; slots: Slot[] };
 
-const timeFmt = new Intl.DateTimeFormat("en-US", { timeZone: TZ, hour: "numeric", minute: "2-digit" });
-const dayFmt = new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "short", month: "short", day: "numeric" });
-const dowFmt = new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "short" });
-
-/** The next OPEN_DAYS days with at least one bookable start, ET, Sundays
+/** The next openDays days with at least one bookable start, Sundays
     skipped, past and inside-the-lead starts dropped. */
-export function openDays(nowMs: number, days = OPEN_DAYS): SlotDay[] {
-  const today = etParts(nowMs);
+export function openDays(nowMs: number, sch: Schedule, days = sch.openDays): SlotDay[] {
+  const today = zonedParts(nowMs, sch.tz);
+  const timeFmt = fmt(sch.tz, "time", { hour: "numeric", minute: "2-digit" });
+  const dayFmt = fmt(sch.tz, "day", { weekday: "short", month: "short", day: "numeric" });
+  const dowFmt = fmt(sch.tz, "dow", { weekday: "short" });
+  const dateFmt = fmt(sch.tz, "date", { month: "short", day: "numeric" });
   const out: SlotDay[] = [];
   for (let i = 0; out.length < days && i < 14; i++) {
     /* Calendar arithmetic on a bare date — no zone, so no offset can move
        the day. */
     const cal = new Date(Date.UTC(today.y, today.m - 1, today.d + i));
-    if (cal.getUTCDay() === 0) continue;
+    const wd = cal.getUTCDay();
+    if (wd === 0 || !sch.days.includes(wd)) continue;
     const y = cal.getUTCFullYear();
     const m = cal.getUTCMonth() + 1;
     const d = cal.getUTCDate();
     const slots: Slot[] = [];
-    for (const [h, min] of SLOT_STARTS) {
-      const start = etToUtc(y, m, d, h, min);
-      if (start < nowMs + LEAD_MINUTES * 60_000) continue;
+    for (const [h, min] of sch.starts) {
+      const start = wallToUtc(y, m, d, h, min, sch.tz);
+      if (start < nowMs + sch.leadMinutes * 60_000) continue;
       const time = timeFmt.format(start);
       slots.push({ start, time, label: `${dowFmt.format(start)} ${time}` });
     }
     if (slots.length === 0) continue;
-    out.push({ key: `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`, label: dayFmt.format(slots[0].start), slots });
+    out.push({
+      key: `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`,
+      label: dayFmt.format(slots[0].start),
+      dow: dowFmt.format(slots[0].start),
+      date: dateFmt.format(slots[0].start),
+      slots,
+    });
   }
   return out;
 }
 
-export function nextSlot(nowMs: number): Slot | null {
-  return openDays(nowMs, 1)[0]?.slots[0] ?? null;
+export function nextSlot(nowMs: number, sch: Schedule): Slot | null {
+  return openDays(nowMs, sch, 1)[0]?.slots[0] ?? null;
+}
+
+/** "Mon–Sat · 7 AM–6 PM" — the schedule, formatted. Data, not copy: Intl
+    writes every word. A non-contiguous day set lists its days. */
+export function hoursLine(sch: Schedule): string {
+  const ref = (dow: number) => Date.UTC(2026, 0, 4 + dow, 17); // 2026-01-04 is a Sunday
+  const dow = fmt("UTC", "dowU", { weekday: "short" });
+  const days = [...sch.days].filter((d) => d !== 0).sort((a, b) => a - b);
+  const run = days.every((d, i) => i === 0 || d === days[i - 1] + 1);
+  const dayPart =
+    run && days.length > 1 ? `${dow.format(ref(days[0]))}–${dow.format(ref(days[days.length - 1]))}` : days.map((d) => dow.format(ref(d))).join(", ");
+  const hr = fmt("UTC", "hrU", { hour: "numeric" });
+  const at = (h: number) => hr.format(Date.UTC(2026, 0, 5, h));
+  return `${dayPart} · ${at(sch.open)}–${at(sch.close)}`;
+}
+
+/** The typical reply, in minutes, from STORED thread timestamps: every gap
+    between a customer message and the business message that answers it,
+    median, rounded. Nothing hand-typed. */
+export function typicalReply(thread: { from: string; time: string }[]): number | null {
+  const mins = (t: string) => {
+    const m = t.match(/^(\d{1,2}):(\d{2})\s*([AP]M)$/i);
+    if (!m) return NaN;
+    return ((+m[1] % 12) + (/p/i.test(m[3]) ? 12 : 0)) * 60 + +m[2];
+  };
+  const gaps: number[] = [];
+  for (let i = 0; i + 1 < thread.length; i++) {
+    if (thread[i].from === "customer" && thread[i + 1].from === "business") {
+      const g = mins(thread[i + 1].time) - mins(thread[i].time);
+      if (Number.isFinite(g) && g >= 0) gaps.push(g);
+    }
+  }
+  if (gaps.length === 0) return null;
+  gaps.sort((a, b) => a - b);
+  const mid = gaps.length >> 1;
+  return Math.round(gaps.length % 2 ? gaps[mid] : (gaps[mid - 1] + gaps[mid]) / 2);
 }
 
 /* ---------- real functions: tel, sms, ics, vcf --------------------------- */
@@ -186,7 +251,7 @@ function fold(line: string): string {
 
 export type Booking = { job: string; slot: Slot; name: string; phone: string };
 
-export function buildIcs(biz: string, b: Booking, nowMs: number): string {
+export function buildIcs(biz: string, b: Booking, nowMs: number, slotMinutes: number): string {
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -197,7 +262,7 @@ export function buildIcs(biz: string, b: Booking, nowMs: number): string {
     `UID:${b.slot.start}-${phoneDigits(b.phone) || "0"}@salvage.davyjoneslocker.app`,
     `DTSTAMP:${icsStamp(nowMs)}`,
     `DTSTART:${icsStamp(b.slot.start)}`,
-    `DTEND:${icsStamp(b.slot.start + SLOT_MINUTES * 60_000)}`,
+    `DTEND:${icsStamp(b.slot.start + slotMinutes * 60_000)}`,
     `SUMMARY:${icsText(`${b.job} · ${biz}`)}`,
     "END:VEVENT",
     "END:VCALENDAR",
@@ -225,12 +290,12 @@ export function buildVcf(biz: string, tel: string): string {
 
 const gcalStamp = icsStamp;
 
-export function googleCalendarUrl(biz: string, b: Booking): string {
+export function googleCalendarUrl(biz: string, b: Booking, sch: Schedule): string {
   const q = new URLSearchParams({
     action: "TEMPLATE",
     text: `${b.job} · ${biz}`,
-    dates: `${gcalStamp(b.slot.start)}/${gcalStamp(b.slot.start + SLOT_MINUTES * 60_000)}`,
-    ctz: TZ,
+    dates: `${gcalStamp(b.slot.start)}/${gcalStamp(b.slot.start + sch.slotMinutes * 60_000)}`,
+    ctz: sch.tz,
   });
   return `https://calendar.google.com/calendar/render?${q.toString()}`;
 }
