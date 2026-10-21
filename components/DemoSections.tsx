@@ -507,10 +507,10 @@ export function CloseSection(props: SectionProps) {
 
       {/* change 30 (F1/F2): flowed from the folio — folio bottom + 16 ->
           the 2px rule; mobile left-aligns on the spine like desktop. */}
-      <div data-section-content className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col items-start justify-start gap-4 pb-[calc(24px+env(safe-area-inset-bottom))] pl-6 pr-6 pt-[44px] text-left min-[1100px]:max-w-[1240px] min-[1100px]:items-stretch min-[1100px]:gap-14 min-[1100px]:px-12 min-[1100px]:pb-16 min-[1100px]:pt-[68px]">
+      <div data-section-content className="relative z-10 mx-auto flex h-full w-full max-w-[1200px] flex-col items-start justify-start gap-4 [@media(max-height:720px)]:gap-3 pb-[calc(24px+env(safe-area-inset-bottom))] pl-6 pr-6 pt-[44px] text-left min-[1100px]:max-w-[1240px] min-[1100px]:items-stretch min-[1100px]:gap-14 min-[1100px]:px-12 min-[1100px]:pb-16 min-[1100px]:pt-[68px]">
         {/* change 18 (C5): the math line is the ledger's TOTAL — a 2px
             rule above, 1px below, numerals in mono at display size. */}
-        <div data-total className="w-full border-b border-t-2 border-line py-4">
+        <div data-total className="w-full border-b border-t-2 border-line py-4 [@media(max-height:720px)]:py-3">
           {name ? (
             /* change 19 (B8): the personal line — the approved template
                split on its placeholders, the typed name in ink, numerals
@@ -563,8 +563,8 @@ export function CloseSection(props: SectionProps) {
             of a two-row section — CTA block left, builtBy/loop/wordmark/
             stack right-aligned right. The ?ref=djl variant runs the same
             grid. */}
-        <div className="flex w-full max-w-md flex-col items-start gap-2 text-left min-[1100px]:grid min-[1100px]:max-w-none min-[1100px]:grid-cols-[55fr_45fr] min-[1100px]:items-start min-[1100px]:gap-x-16">
-          <div data-close-left className="flex w-full flex-col items-start gap-2">
+        <div className="flex w-full max-w-md flex-col items-start gap-2 text-left [@media(max-height:720px)]:gap-1 min-[1100px]:grid min-[1100px]:max-w-none min-[1100px]:grid-cols-[55fr_45fr] min-[1100px]:items-start min-[1100px]:gap-x-16">
+          <div data-close-left className="flex w-full flex-col items-start gap-2 [@media(max-height:720px)]:gap-1.5">
           {refDjl ? (
             <>
               <a
@@ -612,9 +612,14 @@ export function CloseSection(props: SectionProps) {
               </a>
               {/* change 30 (F4): figures mono, words sans — the approved
                   string split on its dollar figures. */}
-              {/* change 33 (E1): two lines; figures mono, words sans. */}
-              {[COPY.close.priceLine, COPY.close.priceLine2].map((line, li) => (
-                <p key={li} data-price-line className="text-[14px] text-ink min-[1100px]:text-[18px]">
+              {/* change 33 (E1): figures mono, words sans. change 50: the
+                  four approved price lines (COPY.price). */}
+              {/* change 50: at short viewports (<= 720 tall) the four lines
+                  sit as one tight block, so the close still clears the
+                  next-section chevron (gate 215). */}
+              <div data-price-block className="flex flex-col gap-2 [@media(max-height:720px)]:gap-0.5">
+              {[COPY.price.line, COPY.price.monthly, COPY.price.guarantee, COPY.price.founding].map((line, li) => (
+                <p key={li} data-price-line className="text-[14px] text-ink min-[1100px]:text-[18px] [@media(max-height:720px)]:leading-5">
                   {line.split(/(\$[\d,]+)/).map((part, i) =>
                     /^\$[\d,]+$/.test(part) ? (
                       <span key={i} data-figure="data">{part}</span>
@@ -624,6 +629,7 @@ export function CloseSection(props: SectionProps) {
                   )}
                 </p>
               ))}
+              </div>
             </>
           )}
           </div>

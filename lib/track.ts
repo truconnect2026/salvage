@@ -10,10 +10,13 @@
 declare global {
   interface Window {
     __track?: (name: string, data?: Record<string, string | number | boolean>) => void;
+    /* Vercel Web Analytics' queue (the official snippet, app/layout.tsx). */
+    va?: (event: "beforeSend" | "event" | "pageview", properties?: unknown) => void;
+    vaq?: [string, unknown?][];
   }
 }
 
-/* change 48: the analytics script loads after idle (IdleAnalytics). Until it
+/* change 48: the analytics script loads after idle (app/layout.tsx). Until it
    does, events wait in the queue the official snippet itself creates — the
    script drains window.vaq when it lands — instead of being dropped. */
 function ensureQueue() {

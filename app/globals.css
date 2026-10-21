@@ -1403,3 +1403,25 @@ html:has([data-go-root]) [data-rotate-guard] {
     stroke-dashoffset: 1;
   }
 }
+
+/* ---- change 50: /start ------------------------------------------------- */
+
+/* The pay link is inert until "I agree" is checked — React does the same
+   with JS; this holds it without. */
+[data-start-agree] .start-pay {
+  pointer-events: none;
+  opacity: 0.4;
+  transition: opacity 120ms ease-out;
+}
+[data-start-agree]:has([data-agree]:checked) .start-pay {
+  pointer-events: auto;
+  opacity: 1;
+}
+/* "Check the fields marked in red": a field the server sent back is marked
+   with an ember underline; the EIN question with its legend. */
+[data-start-form] [aria-invalid="true"] {
+  border-bottom-color: var(--color-ember);
+}
+[data-start-form] fieldset[aria-invalid="true"] legend {
+  color: var(--color-ember);
+}

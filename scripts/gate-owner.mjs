@@ -208,49 +208,59 @@ export async function runOwnerGates({ base, pw, check }) {
   await gate(226, "43a: the owner's slide-to-answer — a 40% release springs home still ringing; >= 80% answers", async (browser, vp, eng) => {
     const { ctx, page } = await open(browser, vp, eng);
     await waitReal(page, 0.6);
-    const a = await drag(page, 0.4);
-    /* Every frame for 400ms after the release: the knob's x and the real
-       clock it was painted on. */
-    const trace = await page.evaluate(
-      () =>
-        new Promise((resolve) => {
-          const out = [];
-          const t0 = performance.now();
-          const step = () => {
-            const d = document.querySelector("[data-demo]").dataset;
-            const m = /translateX\((-?[\d.]+)px\)/.exec(document.querySelector("[data-owner-knob]").style.transform);
-            out.push({ x: m ? +m[1] : NaN, real: +d.tReal });
-            if (performance.now() - t0 < 400) requestAnimationFrame(step);
-            else resolve(out);
-          };
-          requestAnimationFrame(step);
-        }),
-    );
-    const after90 = { x: (trace.find((s) => s.real >= trace[0].real + 0.09) ?? trace[trace.length - 1]).x };
-    await page.waitForTimeout(400);
-    const after790 = await call(page);
     /* Fit the release time from the first sample still in flight, then
        every later in-flight sample must sit on the closed form (±2.5 design
        px — the engine integrates in 4ms steps). At least one predicted
        sample: headless WebKit paints a 1440 page at ~90ms a frame, so only
-       two frames can land inside the ~250ms the spring takes to settle. */
-    const x0 = a.held.x;
-    const inFlight = trace.filter((s) => s.x > 0.5 && s.x < x0 - 0.5);
-    let fit = { ok: false, worst: NaN, n: inFlight.length };
-    if (inFlight.length >= 2) {
-      const first = inFlight[0];
-      let lo = 0;
-      let hi = 0.25;
-      for (let k = 0; k < 40; k++) {
-        const mid = (lo + hi) / 2;
-        if (springX(x0, mid) > first.x) lo = mid;
-        else hi = mid;
+       two frames can land inside the ~250ms the spring takes to settle.
+       Amended (change 50): on a loaded host that can drop to ONE frame — a
+       trace that proves nothing either way — so an under-sampled release is
+       measured again (at most 3 tries, while the phone still rings). A
+       sampled trace is judged exactly as before. */
+    let a, trace, after90, after790;
+    let fit = { ok: false, worst: NaN, n: 0 };
+    let tries = 0;
+    do {
+      tries++;
+      a = await drag(page, 0.4);
+      /* Every frame for 400ms after the release: the knob's x and the real
+         clock it was painted on. */
+      trace = await page.evaluate(
+        () =>
+          new Promise((resolve) => {
+            const out = [];
+            const t0 = performance.now();
+            const step = () => {
+              const d = document.querySelector("[data-demo]").dataset;
+              const m = /translateX\((-?[\d.]+)px\)/.exec(document.querySelector("[data-owner-knob]").style.transform);
+              out.push({ x: m ? +m[1] : NaN, real: +d.tReal });
+              if (performance.now() - t0 < 400) requestAnimationFrame(step);
+              else resolve(out);
+            };
+            requestAnimationFrame(step);
+          }),
+      );
+      after90 = { x: (trace.find((s) => s.real >= trace[0].real + 0.09) ?? trace[trace.length - 1]).x };
+      await page.waitForTimeout(400);
+      after790 = await call(page);
+      const x0 = a.held.x;
+      const inFlight = trace.filter((s) => s.x > 0.5 && s.x < x0 - 0.5);
+      fit = { ok: false, worst: NaN, n: inFlight.length };
+      if (inFlight.length >= 2) {
+        const first = inFlight[0];
+        let lo = 0;
+        let hi = 0.25;
+        for (let k = 0; k < 40; k++) {
+          const mid = (lo + hi) / 2;
+          if (springX(x0, mid) > first.x) lo = mid;
+          else hi = mid;
+        }
+        const release = first.real - lo;
+        const errs = inFlight.slice(1).map((s) => Math.abs(springX(x0, s.real - release) - s.x));
+        const worst = Math.max(...errs);
+        fit = { ok: worst <= 2.5, worst, n: inFlight.length };
       }
-      const release = first.real - lo;
-      const errs = inFlight.slice(1).map((s) => Math.abs(springX(x0, s.real - release) - s.x));
-      const worst = Math.max(...errs);
-      fit = { ok: worst <= 2.5, worst, n: inFlight.length };
-    }
+    } while (fit.n < 2 && tries < 3 && after790.path === "ringing");
     const b = await drag(page, 0.9);
     await page.waitForTimeout(450);
     const ans = await call(page);
@@ -303,7 +313,7 @@ export async function runOwnerGates({ base, pw, check }) {
       ok,
       detail:
         `40% hold x=${a.held.x.toFixed(1)}/${a.g.maxDesign} (${(heldShare * 100).toFixed(0)}%) ${a.held.path}; ` +
-        `+90ms x=${after90.x.toFixed(1)}; spring fit ${fit.n} in-flight frames, worst ${Number.isFinite(fit.worst) ? fit.worst.toFixed(2) : "?"}px vs k420/c34 (need <= 2.5); ` +
+        `+90ms x=${after90.x.toFixed(1)}; spring fit ${fit.n} in-flight frames${tries > 1 ? ` (${tries} tries)` : ""}, worst ${Number.isFinite(fit.worst) ? fit.worst.toFixed(2) : "?"}px vs k420/c34 (need <= 2.5); ` +
         `+800ms x=${after790.x} ${after790.path} (need 0, ringing); ` +
         `90% release -> ${ans.path}/${ans.how}, in-call opacity ${layers.incall}, incoming ${layers.incoming}` +
         (touch.ran ? `; TOUCH from the track -> ${touch.path}/${touch.how}, pager moved ${touch.pagerMoved}px (need 0)` : ""),
@@ -638,6 +648,17 @@ export async function runOwnerGates({ base, pw, check }) {
     const runChoice = async (choice) => {
       const { ctx, page } = await open(browser, vp, eng, { reducedMotion: "reduce" }, SPY);
       await page.waitForTimeout(1200);
+      /* Amended (change 50): the still call is up once the page has
+         hydrated — on a loaded host that can be later than 1.2s, and a tap
+         sent before it waits on a hidden control. Wait for the call itself. */
+      await page.waitForFunction(
+        () => {
+          const el = document.querySelector("[data-owner-incoming]");
+          return document.querySelector("[data-demo]")?.dataset.callPath === "ringing" && !!el && getComputedStyle(el).visibility !== "hidden";
+        },
+        null,
+        { timeout: 30000 },
+      );
       const pre = await frame(page);
       if (choice === "answer") await page.click("[data-owner-track]");
       else await page.click("[data-owner-decline]");

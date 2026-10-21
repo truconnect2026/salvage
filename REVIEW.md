@@ -495,3 +495,61 @@ change-43a.1 sheets: worst 0.493% (06-booked: notes mid-slide, capture timing).
 /go against the committed change-45 sheets: 13 of 19 within 0.5%; the six over
 (01-05, 08; worst 10.9%) carry 45.1's fold banner, which those sheets predate —
 a clean pre-48 /go baseline needs a build of 842aa6f, not done in the time box.
+
+## Change 50 — Salvage Live (built locally; not pushed; copy awaiting Andy)
+
+The real product beside the demo, on the same Next.js app.
+
+| Piece | What it does |
+|-------|--------------|
+| `POST /api/voice` | Twilio's voice webhook. Validates `X-Twilio-Signature` (403 otherwise), looks the client up by `To`, answers with one second of silence and hangs up, then texts the caller once from the client's number: COPY.live.missedText (APPROVED). One text per caller per 12h (an atomic `SET NX EX`); never to an opted-out caller; never to the owner's own cell; an unknown `To` is logged, never texted. |
+| `POST /api/sms` | Signature-checked. STOP/STOPALL/UNSUBSCRIBE/CANCEL/END/QUIT/REVOKE/OPTOUT opt the sender out of that number; START/UNSTOP/YES opt back in (a bare "Yes" from anyone not opted out is a reply). Twilio's Advanced Opt-Out stays on and sends the standard replies. A caller's text goes to the owner's cell prefixed with their number; the owner's text routes back — to the number it starts with, else the last caller. |
+| Clients | Upstash Redis over REST (the Kickin' Chicken pattern): `salvage:client:<E.164>` = `{twilioNumber, biz, trade, ownerCell, goUrl}`. `scripts/seed-clients.mjs` seeds client #0 — the demo line +1 804 495 3492, owner 757-807-3318, the caller-agnostic demo door — and adds clients. |
+| `/start?biz=&trade=` | The business name, the four price lines and the agreement (APPROVED), "I agree", then "Pay $250 and start" -> `STRIPE_START_URL` with `client_reference_id`. Inert until agreed — in React and, without JS, by a `:has()` rule. Below it the onboarding form -> `/api/start`: validated, stored (`salvage:starts`), texted to Andy from the demo line; honeypot and a per-IP hourly cap; the EIN is a yes/no. |
+| Pricing | COPY.price (APPROVED) replaces the two old price lines on "The math". |
+| `/privacy`, `/terms` | Linked from every /go door and /start. Copy PROPOSED. |
+| `ONBOARDING.md` | Env, per-client Twilio setup, forwarding codes, the test call, A2P 10DLC. |
+| `lead_links.py` | A `start_url` column (dry-run: 362 rows; the Desktop file was NOT rewritten — it carries a `line_type` column this script never wrote). |
+
+Gates 250-259 (`scripts/gate-live.mjs`) run a `next start` of the current
+build on its own port against a mock Twilio REST API and an Upstash stub;
+the child's environment holds only gate credentials. Each proven red on its
+own mutation, in two batches — A: 250 (any signature passes), 252 (no NX),
+254 (no caller prefix), 256 (pay live before agreement), 258 (/go's links
+hidden — this one first passed, because the gate read HTML; it now checks
+the rendered links); B: 251 (wrong business named), 253 (opt-outs
+ignored), 255 (unknown To falls back to the demo client), 257 (no
+validation), 259 (old price lines).
+
+Found by the full suite and fixed: (1) the live copy first went into COPY,
+and a client component that reads COPY ships all of it — `/` went to
+151.2 KB (gate 232). It is its own export now, `LIVE_COPY`, read only by
+server routes and pages; `/` is back to 149.8. (2) Four price lines
+pushed section 4's foot past the next-section chevron at 390x700 in
+WebKit (gate 215): at viewports 720px tall or less the close tightens its
+spacing (no copy or type size changed); its last line ends at 648, 8px
+clear. (3) Gate 226 re-measures an under-sampled spring release (one
+frame on a loaded WebKit-1440 host proves nothing either way); a sampled
+trace is judged as before. (4) 48 shipped at 150.002 KB on production —
+2 bytes over / 's budget (Vercel's build runs ~0.2 KB heavier than the
+local one, which read 149.8). The analytics island (IdleAnalytics) is gone:
+the layout carries the official snippet's queue and injects Vercel's
+script after load + idle, which is what the island did, without a React
+boundary in the root layout. `/` is 149.31 KB locally (707 bytes under).
+A split of the section-only copy into its own export was tried and
+reverted: one module ships whole to the chunk that needs it, so it saved
+nothing.
+
+Andy approved every string (change 50), with one edit: /start asks "Do you
+have an EIN?" (yes/no) in place of an EIN field — only the answer is
+stored or texted; no EIN anywhere in Upstash, logs or alerts. Gate 257
+posts a stray EIN alongside and requires it to land nowhere; proven red
+by a mutation that keeps it (batch C).
+
+Last pass before shipping: the invalid /start fields are now actually
+marked (ember underline, ember question) — the approved error line says
+"marked in red" and nothing was. Gate 231 waits for the still call to be
+up instead of a fixed 1.2s (a loaded host hydrated later; one click timed
+out in-suite). The suite prints progress to stderr, so a stall says where
+(one full run hung idle after its browsers closed and was stopped; the
+rerun finished in 38 minutes).

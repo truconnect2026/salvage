@@ -63,9 +63,8 @@ export const COPY = {
     ctaLabel: "Text me — I'll show you yours",
     ctaSub: "I'll plug in your business and run it with your name.",
     bookLabel: "or book 20 minutes",
-    // change 36 (F5, APPROVED): the total first, then the split.
-    priceLine: "$1,000 once · $500 to start, $500 at delivery",
-    priceLine2: "$100 a month after",
+    // change 36 (F5): priceLine / priceLine2 retired by change 50's pricing
+    // (COPY.price below).
     builtBy: "Built by Andy Jones · Chesterfield, VA",
     // change 29 (APPROVED): one replay label page-wide — matches replayLabel.
     loopLabel: "Watch again",
@@ -215,6 +214,15 @@ export const COPY = {
     hint: "Your name lands on the phone.",
   },
 
+  // change 50 (APPROVED, verbatim — Andy): the pricing, on / ("The math"),
+  // on /start, and anywhere else a price shows.
+  price: {
+    line: "$250 to start. Includes your first month.",
+    monthly: "Then $100 a month. Cancel anytime.",
+    guarantee: "No missed call caught in 30 days? You get the $250 back.",
+    founding: "Founding 5: only five Richmond shops at this price.",
+  },
+
   // Phone / OG chrome. Same human veto as everything else in this file.
   chrome: {
     // change 17 (C3, APPROVED): prefixes thread[0].time only.
@@ -295,6 +303,82 @@ export const GO_COPY = {
   // v2 GO (APPROVED, verbatim): the lead text. {go_url} is filled per row.
   lead: {
     sms: "Hi, Andy here, a Richmond web developer. This is what your customers would see when you miss their call: {go_url}",
+  },
+};
+
+/* change 50: Salvage Live's copy — the texts, /start, and the legal pages.
+   Its own export, like GO_COPY: only server routes and pages read it, so
+   the demo's first load never ships it. Same human veto as COPY. */
+export const LIVE_COPY = {
+  // change 50 (APPROVED, Andy): Salvage Live's texts. {biz} and {go_url}
+  // are filled per client; forward shows the owner the caller's number,
+  // then their words.
+  live: {
+    missedText: "{biz}: sorry we missed you. Book or text us here: {go_url} Reply STOP to opt out.",
+    forward: "{from}: {body}",
+  },
+
+  // change 50: /start — the link Andy texts after a "yes".
+  start: {
+    // APPROVED (Andy, verbatim).
+    agreement:
+      "Davy Jones' Locker sets up Salvage for your business: when you miss a call, the caller gets a text with a link to book or text you. $250 at signing includes setup and your first month; then $100 per month, month to month; cancel anytime with 30 days notice. If Salvage does not catch a missed call in your first 30 days, your $250 is refunded. You agree to set call forwarding on your phone (we walk you through it) and to give accurate business details for carrier text registration. Go-live usually takes 3–7 days after registration is approved. Davy Jones' Locker does not guarantee a number of jobs.",
+    agree: "I agree",
+    pay: "Pay $250 and start",
+    // APPROVED (Andy's field list; sentence-cased as labels).
+    fields: {
+      legalName: "Legal business name",
+      ownerCell: "Owner cell",
+      carrier: "Cell carrier",
+      businessPhone: "Business phone",
+      website: "Website",
+    },
+    carriers: ["Verizon", "AT&T", "T-Mobile", "Other"],
+    // APPROVED (Andy, verbatim): a yes/no question in place of an EIN field —
+    // only the answer is ever stored or sent, never an EIN.
+    einQuestion: "Do you have an EIN?",
+    einAnswers: ["Yes", "No"],
+    // APPROVED (Andy).
+    formTitle: "Your details",
+    submit: "Send my details",
+    sent: "Got it. Andy will text you to set up call forwarding.",
+    error: "Check the fields marked in red and send again.",
+    // APPROVED (Andy): the text Andy gets for each submission.
+    alert: "Salvage start: {legalName} ({biz}). Owner {ownerCell}, {carrier}. Business {businessPhone}. Web {website}. EIN: {ein}.",
+  },
+
+  // change 50 (APPROVED, Andy, as written): the privacy policy and the
+  // texting terms carriers ask for, linked from every /go page and from
+  // /start.
+  legal: {
+    privacyLabel: "Privacy",
+    termsLabel: "Terms",
+    privacy: {
+      title: "Privacy",
+      updated: "Last updated October 20, 2026",
+      sections: [
+        { h: "Who we are", p: "Davy Jones' Locker runs Salvage for local businesses in and around Richmond, Virginia. When you call a business that uses Salvage and the call is missed, Salvage sends one text to the number you called from with a link to book or to text the business." },
+        { h: "What we collect", p: "Your phone number, the time of the call, and any text you send in reply. If you book through the link, the name, phone number and details you enter." },
+        { h: "How we use it", p: "To send that one text, to pass your replies to the business you called, to send the business's replies back to you, and to keep a record so you never get more than one missed-call text from a business in 12 hours." },
+        { h: "What we never do", p: "We do not sell, rent or share your phone number, your consent to receive texts, or your messages with anyone for their marketing. Text opt-in data and consent are never shared with third parties or affiliates." },
+        { h: "Who helps us", p: "Texts are carried by Twilio, and our records are kept with our hosting and database providers, only to run Salvage." },
+        { h: "Your choices", p: "Reply STOP to any Salvage text to stop texts from that business; reply START to opt back in; reply HELP for help. Message and data rates may apply." },
+        { h: "Questions", p: "Call or text (757) 807-3318." },
+      ],
+    },
+    terms: {
+      title: "Terms",
+      updated: "Last updated October 20, 2026",
+      sections: [
+        { h: "Salvage texts", p: "When a business that uses Salvage misses your call, you get one text from that business's number with a link to book or to text them. Your replies go to the business, and theirs come back to you." },
+        { h: "How often", p: "One text per missed call, and never more than one missed-call text from a business in 12 hours, plus any replies in a conversation you start." },
+        { h: "Costs", p: "Message and data rates may apply." },
+        { h: "Stopping", p: "Reply STOP at any time and you will get no more texts from that business's number. Reply START to opt back in. Reply HELP for help." },
+        { h: "Delivery", p: "Carriers are not liable for delayed or undelivered messages." },
+        { h: "Businesses", p: "A business that uses Salvage signs the Salvage agreement at signup and is responsible for its own replies." },
+        { h: "Contact", p: "Davy Jones' Locker, Chesterfield, Virginia. Call or text (757) 807-3318." },
+      ],
+    },
   },
 };
 
@@ -474,5 +558,10 @@ export function resolveName(raw: string | string[] | undefined): string {
 /* change 21 (A): the canonical domain — share links and OG urls come from
    HERE, never from location.origin and never the vercel.app host. */
 export const SITE = { domain: "https://salvage.davyjoneslocker.app" };
+
+/* change 50: client #0's number — Andy's demo line (the /go demo's own
+   voice line, GO_COPY.goTel). The live product texts /start submissions to
+   Andy from it. Data, E.164. */
+export const DEMO_LINE = "+18044953492";
 
 export const SHARE_ORIGIN = SITE.domain;

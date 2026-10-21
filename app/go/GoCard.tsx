@@ -52,6 +52,8 @@ export type GoCopy = {
   doneTitle: string; doneSub: string; quoteDoneTitle: string; quoteDoneSub: string;
   addCal: string; copyNumber: string; copied: string; ownerSide: string;
   demoNote: string; poweredBy: string; installHint: string;
+  /** change 50: the privacy + terms links every client's door carries (A2P). */
+  privacyLabel: string; termsLabel: string;
   recoveredLabel: string;
   /** The Salvage mark's letter — COPY.productName's first. */
   mark: string;
@@ -756,6 +758,14 @@ export default function GoCard(props: Props) {
             </p>
           )}
           {props.installHint && <InstallHint text={copy.installHint} />}
+          <p data-go-legal className="mt-3 flex gap-5 text-[13px]">
+            <a href="/privacy" className="text-muted underline decoration-(--go-rule) underline-offset-2 outline-none focus-visible:outline-2 focus-visible:outline-teal">
+              {copy.privacyLabel}
+            </a>
+            <a href="/terms" className="text-muted underline decoration-(--go-rule) underline-offset-2 outline-none focus-visible:outline-2 focus-visible:outline-teal">
+              {copy.termsLabel}
+            </a>
+          </p>
         </footer>
       </main>
 

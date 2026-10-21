@@ -1,11 +1,16 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import IdleAnalytics from "@/components/IdleAnalytics";
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Newsreader } from "next/font/google";
 import { COPY, META, SITE } from "@/lib/client.config";
 import "./globals.css";
+
+/* change 50 (48's means, cheaper): Vercel Web Analytics after the page is
+   idle, with no React island — the official snippet's queue (window.va /
+   window.vaq, which lib/track.ts feeds) and its script, injected after load
+   + idle. The island cost every first load half a kilobyte of JS. */
+const ANALYTICS_IDLE = `window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments)};(function(){function l(){var s=document.createElement("script");s.src="/_vercel/insights/script.js";s.defer=true;document.head.appendChild(s)}function i(){"requestIdleCallback"in window?requestIdleCallback(l,{timeout:4000}):l()}document.readyState==="complete"?i():addEventListener("load",i,{once:true})})();`;
 
 /* change 22: this Next build emits NO font preload links of its own (the
    change-17 finding), so the layout reads next/font's OWN manifest — never
@@ -138,7 +143,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             {COPY.rotate.folio}
           </p>
         </div>
-        <IdleAnalytics />
+        <script dangerouslySetInnerHTML={{ __html: ANALYTICS_IDLE }} />
       </body>
     </html>
   );

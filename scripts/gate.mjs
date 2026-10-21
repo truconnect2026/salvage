@@ -174,6 +174,10 @@ async function getPage(path) {
 
 /* ---------- results ------------------------------------------------------ */
 
+/* change 50: progress to stderr (the report stays the last thing on stdout)
+   — a run that stalls says where. */
+const progress = (what) => console.error(`[gate ${new Date().toISOString().slice(11, 19)}] ${what}`);
+
 const results = [];
 const check = (n, name, pass, detail) => results.push({ n, name, pass, detail });
 /* A retired gate keeps its number and prints RETIRED with the reason; it can
@@ -436,7 +440,7 @@ retired(36, "change 19 gave every caught row an initialed name ('Danielle R. · 
 {
   const PERF_GATES = [232, 233];
   try {
-    const { runPerfGates } = await import("./gate-perf.mjs");
+    const { runPerfGates } = (progress("module gate-perf.mjs"), await import("./gate-perf.mjs"));
     await runPerfGates({ base, check });
   } catch (err) {
     for (const n of PERF_GATES) {
@@ -655,6 +659,7 @@ if (!chromium) {
   /* A page that never produces a demo must report red, not throw: an uncaught
      timeout would hide which assertions were never reached. */
   const block = async (label, fn) => {
+    progress(`block ${label}`);
     try {
       await fn();
     } catch (err) {
@@ -4973,6 +4978,9 @@ if (!chromium) {
           "[data-cta]",
           "[data-cta-sub]",
           "[data-cta-book]",
+          /* Amended (change 50): the four approved price lines. */
+          "[data-price-line]",
+          "[data-price-line]",
           "[data-price-line]",
           "[data-price-line]",
           "[data-close-rule]",
@@ -8424,13 +8432,28 @@ if (!chromium) {
   }
 }
 
+/* ---------- 250-259 (change 50): Salvage Live, in its own module — its own
+   `next start` against a mock Twilio and a store stub */
+
+{
+  const LIVE_GATES = [250, 251, 252, 253, 254, 255, 256, 257, 258, 259];
+  try {
+    const { runLiveGates } = (progress("module gate-live.mjs"), await import("./gate-live.mjs"));
+    await runLiveGates({ pw: chromium ? { chromium, webkit } : null, check });
+  } catch (err) {
+    for (const n of LIVE_GATES) {
+      if (!results.some((r) => r.n === n)) check(n, "live gate", false, `not reached — ${String(err.message).slice(0, 160)}`);
+    }
+  }
+}
+
 /* ---------- 226-231 (change 43a / 43a.1): the owner's phone, in its own module */
 
 {
   const OWNER_GATES = [226, 227, 228, 229, 230, 231];
   try {
     if (!chromium) throw new Error(`playwright unavailable: ${browserError}`);
-    const { runOwnerGates } = await import("./gate-owner.mjs");
+    const { runOwnerGates } = (progress("module gate-owner.mjs"), await import("./gate-owner.mjs"));
     await runOwnerGates({ base, pw: { chromium, webkit }, check });
   } catch (err) {
     for (const n of OWNER_GATES) {
@@ -8445,7 +8468,7 @@ if (!chromium) {
   const GO_GATES = [207, 208, 209, 210, 211, 212, 217, 218, 219, 220, 221, 222, 223, 224, 225];
   try {
     if (!chromium) throw new Error(`playwright unavailable: ${browserError}`);
-    const { runGoGates } = await import("./gate-go.mjs");
+    const { runGoGates } = (progress("module gate-go.mjs"), await import("./gate-go.mjs"));
     await runGoGates({ base, pw: { chromium, webkit }, check });
   } catch (err) {
     for (const n of GO_GATES) {
@@ -8455,6 +8478,7 @@ if (!chromium) {
 }
 
 /* ---------- report ------------------------------------------------------- */
+progress("report");
 
 results.sort((a, b) => a.n - b.n);
 console.log(`gate: ${base}  (preset "${defaultId}")`);

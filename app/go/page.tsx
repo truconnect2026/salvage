@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 
 import FitName from "@/app/go/FitName";
 import GoCard, { type GoCopy } from "@/app/go/GoCard";
-import { COPY, GO_COPY } from "@/lib/client.config";
+import { COPY, GO_COPY, LIVE_COPY } from "@/lib/client.config";
 import { isInApp, isIOS, prettyPhone, telNumber } from "@/lib/go";
 import { jobsFor, ogQuery, proofFor, resolveGoParams, sampleFor, scheduleFor, tradeLabel } from "@/lib/go-params";
 
@@ -68,6 +68,8 @@ export default async function GoPage({ searchParams }: { searchParams: SP }) {
     recoveredLabel: COPY.ledger.recoveredLabel,
     mark: COPY.productName.charAt(0),
     notify: COPY.notify,
+    privacyLabel: LIVE_COPY.legal.privacyLabel,
+    termsLabel: LIVE_COPY.legal.termsLabel,
   };
 
   return (

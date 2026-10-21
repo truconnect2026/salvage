@@ -7,7 +7,7 @@ Reads <Desktop>/salvage_leads_100mi.csv (the same Desktop lookup as
 lookup_lines.py, OneDrive redirection included) and writes
 <Desktop>/salvage_lead_links.csv with columns exactly
 
-    business_name,phone,city,trade,go_url
+    business_name,phone,city,trade,go_url,start_url
 
 go_url = https://salvage.davyjoneslocker.app/go?biz=<name>&preset=home
          &trade=<trade>&demo=1&ref=lead&lead=<row>
@@ -17,6 +17,10 @@ go_url = https://salvage.davyjoneslocker.app/go?biz=<name>&preset=home
   - hvac, plumbing, electrical, roofing map to themselves; "garage door"
     maps to garage.  Any other trade gets preset=other and no trade param.
   - <row> is the 1-based data row in the input file.
+
+start_url = https://salvage.davyjoneslocker.app/start?biz=<name>&trade=<trade>
+            (change 50: the link Andy texts after a "yes"; same <name>; the
+            trade only for the five home trades)
 
 Standard library only, no subprocesses, so it opens no console windows.
 """
@@ -33,8 +37,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lookup_lines import INPUT_NAME, desktop_dir  # noqa: E402
 
 OUTPUT_NAME = "salvage_lead_links.csv"
-OUTPUT_COLUMNS = ["business_name", "phone", "city", "trade", "go_url"]
+OUTPUT_COLUMNS = ["business_name", "phone", "city", "trade", "go_url", "start_url"]
 GO_BASE = "https://salvage.davyjoneslocker.app/go"
+START_BASE = "https://salvage.davyjoneslocker.app/start"
 
 TRADES = {
     "hvac": "hvac",
@@ -70,6 +75,14 @@ def go_url(name: str, trade_raw: str, row: int) -> str:
     return GO_BASE + "?" + urllib.parse.urlencode(parts, quote_via=urllib.parse.quote)
 
 
+def start_url(name: str, trade_raw: str) -> str:
+    trade = TRADES.get(" ".join(trade_raw.lower().split()))
+    parts = [("biz", clean_name(name))]
+    if trade:
+        parts.append(("trade", trade))
+    return START_BASE + "?" + urllib.parse.urlencode(parts, quote_via=urllib.parse.quote)
+
+
 def main() -> int:
     desk = desktop_dir()
     source = desk / INPUT_NAME
@@ -97,6 +110,7 @@ def main() -> int:
                 r["city"],
                 r["trade"],
                 go_url(r["business_name"], r["trade"], i),
+                start_url(r["business_name"], r["trade"]),
             ])
     tmp.replace(out)
     print(f"Wrote {len(rows)} rows to {out}")
