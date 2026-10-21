@@ -11,14 +11,15 @@
  *       the voices on the first sound, analytics at idle) are not first-load
  *       JS and are not counted.
  * 233 — Lighthouse mobile (simulated throttling), the median of 3 runs per
- *       route: performance >= 94 on /, >= 95 on /go; accessibility = 100 on
+ *       route: performance >= 93 on /, >= 95 on /go; accessibility = 100 on
  *       both.
  *
  * The floors are Andy's (change 48 veto).  /go's budget was 110 KB; the App
  * Router's framework floor alone is 130.9 KB gz (no page code), so the
  * budget is 145 KB — the route measured 142.1 at the veto.  /'s perf floor
- * was 95; it measured 93-95 on this host (median 94), and the remaining
- * lever, a lighter phone mockup, folds into change 43b.
+ * was 95, then 94; under a consistent calibration it reads 93 (x1.7 on a
+ * slow host, benchmarkIndex / 500 on any), so Andy set it to 93. The
+ * remaining lever, a lighter phone mockup, folds into change 43b.
  *
  * The CPU multiplier.  Lighthouse's default 4x assumes a host fast enough
  * that 4x slower is a mid-range phone; it warns below benchmarkIndex 1000.
@@ -43,7 +44,7 @@ import { pathToFileURL } from "node:url";
 import zlib from "node:zlib";
 
 export const ROUTES = [
-  { name: "/", path: "/", jsBudgetKb: 150, perfFloor: 94 },
+  { name: "/", path: "/", jsBudgetKb: 150, perfFloor: 93 },
   { name: "/go", path: "/go?biz=Short%20Pump%20Heating%20%26%20Air&trade=hvac&demo=1", jsBudgetKb: 145, perfFloor: 95 },
 ];
 const A11Y_FLOOR = 100;
