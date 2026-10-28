@@ -25,8 +25,13 @@ const refId = (biz: string) =>
     .replace(/^-|-$/g, "")
     .slice(0, 200);
 
+/* change 52: the live Payment Link ($150 setup + the first $100 month = $250
+   today, then $100/mo). A public URL, not a secret; STRIPE_START_URL in the
+   environment still wins (the gates point it at their stub). */
+const START_LINK = "https://buy.stripe.com/4gM6oGdBGayzf5f4jvdMI07";
+
 function payHref(biz: string): string | null {
-  const base = process.env.STRIPE_START_URL;
+  const base = process.env.STRIPE_START_URL || START_LINK;
   if (!base) return null;
   try {
     const u = new URL(base);
