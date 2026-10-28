@@ -553,3 +553,35 @@ up instead of a fixed 1.2s (a loaded host hydrated later; one click timed
 out in-suite). The suite prints progress to stderr, so a stall says where
 (one full run hung idle after its browsers closed and was stopped; the
 rerun finished in 38 minutes).
+
+---
+
+## Change 51 — /go and /start rebuilt for depth; /start scrolls
+
+Andy, Oct 28: "beef the visuals ... Attractive, presentable, something worth
+spending money on." No string changed (every word is still
+`lib/client.config.ts`'s). DESIGN.md §7 records the revised surface rules
+(lifted cards, ground light, gold Pay) for /go and /start; / is untouched.
+
+**Defect found while doing it (shipped since change 50):** /start could not
+scroll. Change 12's `html, body { height: 100%; overflow: hidden }` (the
+pager owns the axis on /) also held /start, /privacy and /terms to one
+screen: at 390x844 "Pay $250 and start" sat at y=876 and the form below it,
+neither reachable on a phone. Measured on production before the fix:
+document 844px tall, `scrollY` stays 0 after a 900px wheel. Fixed by
+unlocking `html:has([data-start])` and `html:has([data-legal])`.
+**Gate 260** (gate-live): the document is taller than the screen and Pay and
+the submit scroll into view at 390x844 and 390x700; `GATE_PROBE=startlock`
+re-imposes the lock and it goes RED (doc 844/700px, nothing reachable).
+
+Gates (Chromium; this container has no WebKit or Lighthouse):
+gate-go 207–225 all green; gate-live 250–259 green, 256 and 260 green in
+Chromium-only runs. Full `gate.mjs`: 204 pass / 17 red on this change;
+HEAD (326946d) on the same host: 203 pass / 17 red. The reds are the same
+set — WebKit not installed (46, 91, 93, 95, 194, 196, 197, 201, 205, 206,
+256, and 260 here), 213–216 not reached after it, 233 no Lighthouse — plus
+138 (/ sound toast timing) red on HEAD only. Nothing red is this change's.
+Not measured here: WebKit, Lighthouse perf on /go (the cards add shadows
+and gradients; worth a look on the next WebKit host).
+
+Screens: review/change-51/before-*.png and after-*.png (390 and 800 wide).
