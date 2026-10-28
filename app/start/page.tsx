@@ -38,23 +38,31 @@ function payHref(biz: string): string | null {
 }
 
 /* The figures in mono, the words in sans — the price-line rule on /. */
-function Line({ text }: { text: string }) {
+function Line({ text, lead }: { text: string; lead?: boolean }) {
   return (
-    <p data-start-price className="text-[17px] text-ink">
-      {text.split(/(\$[\d,]+)/).map((part, i) =>
-        /^\$[\d,]+$/.test(part) ? (
-          <span key={i} data-figure="data">
-            {part}
-          </span>
-        ) : (
-          <span key={i}>{part}</span>
-        ),
+    <p data-start-price className={lead ? "start-line start-lead" : "start-line"}>
+      {!lead && (
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 20 20" fill="none" className="start-tick">
+          <circle cx="10" cy="10" r="9" stroke="currentColor" strokeOpacity="0.35" />
+          <path d="M6 10.4l2.6 2.6L14 7.4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       )}
+      <span>
+        {text.split(/(\$[\d,]+)/).map((part, i) =>
+          /^\$[\d,]+$/.test(part) ? (
+            <span key={i} data-figure="data" className="text-gold">
+              {part}
+            </span>
+          ) : (
+            <span key={i}>{part}</span>
+          ),
+        )}
+      </span>
     </p>
   );
 }
 
-const field = "mt-1.5 block h-14 w-full border-x-0 border-b border-t-0 border-solid border-muted bg-transparent text-[17px] text-ink outline-none focus:border-teal";
+const field = "start-field mt-2 block h-14 w-full px-4 text-[17px] text-ink outline-none";
 
 export default async function StartPage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
@@ -67,26 +75,30 @@ export default async function StartPage({ searchParams }: { searchParams: SP }) 
   const err = (k: string) => errors.includes(k);
 
   return (
-    <main data-start className="min-h-svh bg-abyss px-6 pb-16 pt-12 text-ink">
+    <main data-start className="start-page min-h-svh px-5 pb-16 pt-12 text-ink">
       <div className="mx-auto w-full max-w-[560px]">
-        <h1 data-start-biz className="font-display text-[44px] font-medium leading-[1.04] tracking-[-0.01em] text-ink">
+        {trade && <p className="start-eyebrow">{GO_COPY.tradeLabels[trade as keyof typeof GO_COPY.tradeLabels]}</p>}
+        <h1 data-start-biz className="mt-2 font-display text-[44px] font-medium leading-[1.04] tracking-[-0.01em] text-ink">
           {biz || COPY.productName}
         </h1>
-        {trade && <p className="mt-2 text-[13px] font-medium uppercase tracking-[0.04em] text-muted">{GO_COPY.tradeLabels[trade as keyof typeof GO_COPY.tradeLabels]}</p>}
 
-        <div className="mt-8 flex flex-col gap-1.5 border-y border-line py-4">
-          {[COPY.price.line, COPY.price.monthly, COPY.price.guarantee, COPY.price.founding].map((l) => (
-            <Line key={l} text={l} />
-          ))}
+        <div className="start-offer mt-7">
+          <Line text={COPY.price.line} lead />
+          <div className="start-rule" />
+          <div className="flex flex-col gap-3">
+            {[COPY.price.monthly, COPY.price.guarantee, COPY.price.founding].map((l) => (
+              <Line key={l} text={l} />
+            ))}
+          </div>
         </div>
 
-        <p data-start-agreement className="mt-6 text-[16px] leading-relaxed text-ink">
+        <p data-start-agreement className="start-terms mt-5">
           {S.agreement}
         </p>
 
         <AgreePay agree={S.agree} pay={S.pay} href={payHref(biz)} />
 
-        <div className="mt-12 border-t border-line pt-8">
+        <div className="start-card mt-10">
           {sent ? (
             <p data-start-sent className="text-[17px] font-medium text-ink">
               {S.sent}
@@ -106,15 +118,15 @@ export default async function StartPage({ searchParams }: { searchParams: SP }) 
                 </p>
               )}
               <label className="block">
-                <span className="text-[17px] font-medium text-muted">{S.fields.legalName}</span>
+                <span className="text-[15px] font-medium text-muted">{S.fields.legalName}</span>
                 <input name="legalName" required autoComplete="organization" aria-invalid={err("legalName")} className={field} />
               </label>
               <label className="block">
-                <span className="text-[17px] font-medium text-muted">{S.fields.ownerCell}</span>
+                <span className="text-[15px] font-medium text-muted">{S.fields.ownerCell}</span>
                 <input name="ownerCell" type="tel" inputMode="tel" required autoComplete="tel-national" aria-invalid={err("ownerCell")} className={field} />
               </label>
               <label className="block">
-                <span className="text-[17px] font-medium text-muted">{S.fields.carrier}</span>
+                <span className="text-[15px] font-medium text-muted">{S.fields.carrier}</span>
                 <select name="carrier" required defaultValue="" aria-invalid={err("carrier")} className={`${field} appearance-none`}>
                   <option value="" disabled>
                     {S.fields.carrier}
@@ -127,26 +139,26 @@ export default async function StartPage({ searchParams }: { searchParams: SP }) 
                 </select>
               </label>
               <label className="block">
-                <span className="text-[17px] font-medium text-muted">{S.fields.businessPhone}</span>
+                <span className="text-[15px] font-medium text-muted">{S.fields.businessPhone}</span>
                 <input name="businessPhone" type="tel" inputMode="tel" required autoComplete="tel" aria-invalid={err("businessPhone")} className={field} />
               </label>
               <label className="block">
-                <span className="text-[17px] font-medium text-muted">{S.fields.website}</span>
+                <span className="text-[15px] font-medium text-muted">{S.fields.website}</span>
                 <input name="website" type="url" inputMode="url" autoComplete="url" aria-invalid={err("website")} className={field} />
               </label>
               {/* Andy's veto: a yes/no, never the number itself. */}
               <fieldset data-start-ein aria-invalid={err("hasEin")} className="block border-0 p-0">
-                <legend className="text-[17px] font-medium text-muted">{S.einQuestion}</legend>
-                <div className="mt-2 flex gap-6">
+                <legend className="text-[15px] font-medium text-muted">{S.einQuestion}</legend>
+                <div className="mt-2 grid grid-cols-2 gap-3">
                   {(["yes", "no"] as const).map((v, i) => (
-                    <label key={v} className="flex min-h-11 cursor-pointer items-center gap-2 text-[17px] text-ink">
+                    <label key={v} className="start-choice">
                       <input type="radio" name="hasEin" value={v} required className="h-5 w-5 accent-[var(--color-teal)]" />
                       {S.einAnswers[i]}
                     </label>
                   ))}
                 </div>
               </fieldset>
-              <button type="submit" data-start-submit className="mt-2 self-start rounded-full border border-teal px-7 py-3 text-[17px] font-medium text-teal outline-none focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2">
+              <button type="submit" data-start-submit className="start-submit mt-2 outline-none focus-visible:outline-2 focus-visible:outline-teal focus-visible:outline-offset-2">
                 {S.submit}
               </button>
             </form>

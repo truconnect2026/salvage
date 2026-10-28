@@ -1,4 +1,4 @@
-# DESIGN.md — Salvage design system (changes 43–48)
+# DESIGN.md — Salvage design system (changes 43–48, depth revised in 51)
 
 The bar: a Richmond HVAC owner, on an iPhone, in the Facebook browser, **does
 something within 3 seconds**. Watching is failure. Touching is success. Every
@@ -68,3 +68,26 @@ its review.
    screen ground and the glass streak with gradients.
 4. **Default radii.** Shipped code uses Tailwind's `rounded-full`,
    `rounded-2xl` and friends.
+
+## 7. Change 51: depth (Andy, Oct 28: "attractive, presentable, something worth spending money on")
+
+The flat, hairline-only /go and /start read as a wireframe on the Fire and on
+a phone. §3 and §5 are revised for **/go and /start only** (/ is unchanged):
+
+- **Lifted cards.** Every /go slot, the proof row, the /start offer and form
+  are one surface recipe: `--go-card` (surface-2 → surface, top to bottom),
+  an ink-10% edge, a 1px inner top highlight, a soft drop shadow. Radius 20
+  (slots), 22 (the band), 24 (/start cards).
+- **Ground light.** The page ground carries two faint radial washes: the
+  preset's accent at the top, teal at the bottom right. Nothing else glows.
+- **The band stays the one accent fill** (gate 218): `background-color` is
+  the accent; a white-to-clear sheen sits on top as `background-image`.
+- **Glyphs** sit in a teal-tinted rounded tile; the stroke stays full ink
+  (gate 217).
+- **Status** is a pill with a live dot (teal-bright when open).
+- **/start:** the first price line is the headline (Newsreader 28), the rest
+  carry a drawn tick; dollar figures are gold; the agreement is muted 14px;
+  "I agree" is a full-width row; Pay is a full-width gold button; fields are
+  filled, rounded, with a teal focus ring; the EIN answer is two choice tiles.
+- Still forbidden: particles, blur cards outside the device, emoji, icon
+  libraries, new copy.

@@ -676,6 +676,25 @@ html[data-go-locked] {
 }
 /* Exempt from the rotate guard wherever it is mounted (change 41 moved it
    to the layout): /go reads fine sideways — identity left, slots right. */
+/* change 51: /start, /privacy and /terms are ordinary documents. Change 12's
+   lock (the pager owns the one axis) left them one screen tall: on a phone the
+   pay button and the form sat below the fold, unreachable. */
+html:has([data-start]),
+html:has([data-start]) body,
+html:has([data-legal]),
+html:has([data-legal]) body {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+html:has([data-start]),
+html:has([data-legal]) {
+  overflow-y: auto;
+}
+html:has([data-start]) [data-rotate-guard],
+html:has([data-legal]) [data-rotate-guard] {
+  display: none !important;
+}
 html:has([data-go-root]) [data-rotate-guard] {
   display: none !important;
 }
@@ -683,8 +702,14 @@ html:has([data-go-root]) [data-rotate-guard] {
 [data-go-root] {
   --go-rule: color-mix(in srgb, var(--color-ink) 14%, transparent);
   --go-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --go-card: linear-gradient(180deg, color-mix(in srgb, var(--color-surface-2) 92%, var(--color-ink)) 0%, var(--color-surface) 100%);
+  --go-edge: color-mix(in srgb, var(--color-ink) 10%, transparent);
+  --go-lift: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 14px 32px -22px rgba(0, 0, 0, 0.9);
   min-height: 100svh;
-  background: var(--color-abyss);
+  background:
+    radial-gradient(130% 55% at 50% -8%, color-mix(in srgb, var(--accent, var(--color-teal)) 20%, transparent) 0%, transparent 62%),
+    radial-gradient(90% 45% at 100% 105%, color-mix(in srgb, var(--color-teal) 9%, transparent) 0%, transparent 70%),
+    var(--color-abyss);
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -731,22 +756,28 @@ html:has([data-go-root]) [data-rotate-guard] {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-areas: "ident" "act" "proof" "folio";
-  max-width: 440px;
+  max-width: 460px;
   margin: 0 auto;
-  padding: max(24px, env(safe-area-inset-top)) 16px max(28px, env(safe-area-inset-bottom));
+  padding: max(32px, env(safe-area-inset-top)) 18px max(32px, env(safe-area-inset-bottom));
 }
 .go-ident {
   grid-area: ident;
 }
 .go-actions {
   grid-area: act;
-  margin-top: 16px;
+  margin-top: 24px;
 }
 .go-proof {
   grid-area: proof;
 }
 .go-folio {
   grid-area: folio;
+}
+@media (orientation: portrait) and (min-width: 700px) {
+  .go-page {
+    max-width: 580px;
+    padding-top: max(56px, env(safe-area-inset-top));
+  }
 }
 @media (orientation: landscape) and (min-width: 720px) {
   .go-page {
@@ -785,10 +816,28 @@ html:has([data-go-root]) [data-rotate-guard] {
   margin-top: 12px;
 }
 .go-status {
-  margin-top: 6px;
-  font-size: 16px;
-  line-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 5px 14px 5px 12px;
+  border: 1px solid var(--go-edge);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-ink) 5%, transparent);
+  font-size: 15px;
+  line-height: 22px;
   color: var(--color-ink);
+}
+.go-status::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-muted);
+}
+.go-status[data-open="1"]::before {
+  background: var(--color-teal-bright);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-teal-bright) 18%, transparent);
 }
 
 /* ---- 2. the emergency band: the ONE filled surface ---- */
@@ -796,20 +845,37 @@ html:has([data-go-root]) [data-rotate-guard] {
   display: flex;
   align-items: center;
   gap: 14px;
-  min-height: 64px;
-  margin: 0 -16px 12px;
-  padding: 8px 16px;
-  background: var(--accent);
+  min-height: 80px;
+  margin: 0 0 14px;
+  padding: 12px 20px 12px 14px;
+  border-radius: 22px;
+  background-color: var(--accent);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.08) 100%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35) inset, 0 -1px 0 rgba(0, 0, 0, 0.18) inset,
+    0 18px 38px -16px color-mix(in srgb, var(--accent) 70%, transparent);
   color: var(--accent-ink);
   touch-action: manipulation;
-  transition: transform 120ms ease-out, background-color 120ms ease-out;
+  transition: transform 120ms ease-out, filter 120ms ease-out;
+}
+.go-emergency .go-label {
+  font-size: 18px;
+  font-weight: 600;
+}
+.go-emergency .go-data20 {
+  font-size: 22px;
+  line-height: 28px;
+  letter-spacing: 0.01em;
 }
 .go-emergency:active {
-  transform: scale(0.97);
-  background: color-mix(in srgb, var(--accent) 84%, var(--color-abyss));
+  transform: scale(0.98);
+  filter: brightness(0.92);
 }
 /* the glyph and its ring speak the band's inverse ink, like its label */
 .go-emergency .go-glyph {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent-ink) 12%, transparent);
   color: var(--accent-ink);
 }
 @media (orientation: landscape) and (min-width: 720px) {
@@ -862,10 +928,12 @@ html:has([data-go-root]) [data-rotate-guard] {
   display: flex;
   align-items: center;
   gap: 14px;
-  min-height: 72px;
-  padding: 12px 14px 12px 18px;
-  border: 1px solid var(--go-rule);
-  background: transparent;
+  min-height: 76px;
+  padding: 14px 16px;
+  border: 1px solid var(--go-edge);
+  border-radius: 20px;
+  background: var(--go-card);
+  box-shadow: var(--go-lift);
   color: var(--color-ink);
   text-align: left;
   cursor: pointer;
@@ -875,11 +943,10 @@ html:has([data-go-root]) [data-rotate-guard] {
 .go-slot::before {
   content: "";
   position: absolute;
-  top: -1px;
-  bottom: -1px;
-  left: -1px;
-  width: 3px;
-  background: var(--go-rule);
+  inset: -1px;
+  border-radius: inherit;
+  border: 1.5px solid transparent;
+  pointer-events: none;
   /* the release: the lit rule fades back — the flash */
   transition: background-color 420ms ease-out;
 }
@@ -887,7 +954,7 @@ html:has([data-go-root]) [data-rotate-guard] {
   transform: scale(0.97);
 }
 .go-slot:active::before {
-  background: var(--accent);
+  border-color: var(--color-teal);
   transition: none;
 }
 .go-glyph {
@@ -899,25 +966,55 @@ html:has([data-go-root]) [data-rotate-guard] {
   flex-shrink: 0;
   color: var(--color-ink);
 }
+.go-slot .go-glyph {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--color-teal) 13%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-teal) 22%, transparent) inset;
+  color: var(--color-ink);
+}
 .go-chev {
   display: flex;
   color: var(--color-muted);
 }
 .go-primary {
-  min-height: 88px;
+  min-height: 100px;
+  padding: 16px 18px 16px 16px;
+  border-color: color-mix(in srgb, var(--color-teal) 34%, transparent);
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--color-teal) 14%, transparent) 0%, transparent 60%),
+    var(--go-card);
+}
+.go-primary .go-glyph {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+}
+.go-primary .go-label {
+  font-size: 19px;
+}
+.go-primary [data-go-next] {
+  font-size: 24px;
+  line-height: 30px;
+  color: var(--color-teal-bright);
+}
+.go-primary .go-chev {
+  color: var(--color-teal);
 }
 .go-tile {
   flex-direction: column;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
-  padding: 10px 12px 10px 16px;
+  gap: 14px;
+  min-height: 112px;
+  padding: 14px 14px 16px;
 }
 .go-tile-sm {
   min-height: 72px;
 }
 .go-tile-sm:active::before {
-  background: var(--color-teal);
+  border-color: var(--color-teal);
 }
 @media (hover: hover) {
   .go-slot:hover {
@@ -940,15 +1037,18 @@ html:has([data-go-root]) [data-rotate-guard] {
 
 /* ---- 4. demo mode: the owner phone, pinned under the slots ---- */
 .go-owner {
-  margin-top: 16px;
+  margin-top: 28px;
 }
 .go-mini-phone {
-  margin-top: 8px;
-  padding: 8px 12px 2px;
-  border: 1px solid var(--go-rule);
+  margin-top: 10px;
+  padding: 10px 12px 6px;
+  border: 1px solid color-mix(in srgb, var(--color-ink) 18%, transparent);
   border-bottom: 0;
-  border-radius: 30px 30px 0 0;
-  background: var(--color-surface);
+  border-radius: 36px 36px 0 0;
+  background: linear-gradient(180deg, #13284A 0%, var(--color-surface) 70%);
+  box-shadow: 0 -18px 50px -30px color-mix(in srgb, var(--color-teal) 60%, transparent);
+  -webkit-mask-image: linear-gradient(180deg, #000 72%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 72%, transparent 100%);
 }
 .go-island {
   display: block;
@@ -963,11 +1063,11 @@ html:has([data-go-root]) [data-rotate-guard] {
   flex-direction: column;
 }
 .go-notify {
-  padding: 10px 2px 12px;
-  border-top: 1px solid var(--go-rule);
-}
-.go-notify:first-child {
-  border-top: 0;
+  margin: 0 0 8px;
+  padding: 11px 14px 12px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--color-ink) 7%, transparent);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset;
 }
 .go-smark {
   display: inline-flex;
@@ -1004,9 +1104,10 @@ html:has([data-go-root]) [data-rotate-guard] {
   max-width: 424px;
   margin: 0 auto;
   padding: 10px 12px 12px;
-  border: 1px solid var(--go-rule);
-  border-radius: 16px;
-  background: var(--color-surface);
+  border: 1px solid var(--go-edge);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--color-surface-2) 94%, var(--color-ink));
+  box-shadow: 0 18px 40px -18px rgba(0, 0, 0, 0.85);
   pointer-events: none;
   transform-origin: 0 0;
 }
@@ -1051,9 +1152,11 @@ html:has([data-go-root]) [data-rotate-guard] {
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-top: 28px;
-  padding-top: 20px;
-  border-top: 1px solid var(--go-rule);
+  margin-top: 24px;
+  padding: 18px 18px;
+  border: 1px solid var(--go-edge);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--color-surface) 70%, transparent);
   color: var(--color-ink);
 }
 .go-proof-list {
@@ -1062,9 +1165,8 @@ html:has([data-go-root]) [data-rotate-guard] {
   gap: 2px;
 }
 .go-folio {
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid var(--go-rule);
+  margin-top: 28px;
+  padding: 0 4px;
 }
 .go-folio > p:first-child {
   font-size: 13px;
@@ -1420,8 +1522,150 @@ html:has([data-go-root]) [data-rotate-guard] {
 /* "Check the fields marked in red": a field the server sent back is marked
    with an ember underline; the EIN question with its legend. */
 [data-start-form] [aria-invalid="true"] {
-  border-bottom-color: var(--color-ember);
+  border-color: var(--color-ember);
 }
 [data-start-form] fieldset[aria-invalid="true"] legend {
   color: var(--color-ember);
+}
+
+/* ---- change 51: /start, worth paying on ---- */
+.start-page {
+  background:
+    radial-gradient(120% 50% at 50% -10%, color-mix(in srgb, var(--color-gold) 13%, transparent) 0%, transparent 60%),
+    radial-gradient(90% 40% at 100% 100%, color-mix(in srgb, var(--color-teal) 8%, transparent) 0%, transparent 70%),
+    var(--color-abyss);
+}
+.start-eyebrow {
+  display: inline-block;
+  padding: 4px 12px;
+  border: 1px solid color-mix(in srgb, var(--color-ink) 12%, transparent);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+.start-offer,
+.start-card {
+  padding: 22px 20px;
+  border: 1px solid color-mix(in srgb, var(--color-ink) 10%, transparent);
+  border-radius: 24px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-surface-2) 92%, var(--color-ink)) 0%, var(--color-surface) 100%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 22px 48px -30px rgba(0, 0, 0, 0.95);
+}
+.start-offer {
+  border-color: color-mix(in srgb, var(--color-gold) 30%, transparent);
+  background:
+    radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--color-gold) 12%, transparent) 0%, transparent 60%),
+    linear-gradient(180deg, color-mix(in srgb, var(--color-surface-2) 92%, var(--color-ink)) 0%, var(--color-surface) 100%);
+}
+.start-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 17px;
+  line-height: 24px;
+  color: var(--color-ink);
+}
+.start-lead {
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 28px;
+  line-height: 34px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.start-lead [data-figure="data"] {
+  font-family: inherit;
+}
+.start-tick {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--color-teal-bright);
+}
+.start-rule {
+  height: 1px;
+  margin: 18px 0;
+  background: color-mix(in srgb, var(--color-ink) 12%, transparent);
+}
+.start-terms {
+  padding: 0 4px;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--color-muted);
+}
+.start-agree-row {
+  display: flex;
+  min-height: 60px;
+  cursor: pointer;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border: 1px solid color-mix(in srgb, var(--color-ink) 12%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--color-surface) 80%, transparent);
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--color-ink);
+  transition: border-color 120ms ease-out;
+}
+[data-start-agree]:has([data-agree]:checked) .start-agree-row {
+  border-color: color-mix(in srgb, var(--color-teal) 55%, transparent);
+}
+.start-pay {
+  display: flex;
+  min-height: 60px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 18px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-gold) 86%, #fff) 0%, var(--color-gold) 60%, color-mix(in srgb, var(--color-gold) 88%, #000) 100%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35) inset, 0 18px 36px -18px color-mix(in srgb, var(--color-gold) 75%, transparent);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-abyss);
+  text-decoration: none;
+}
+.start-field {
+  border: 1px solid color-mix(in srgb, var(--color-ink) 14%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--color-abyss) 55%, transparent);
+  transition: border-color 120ms ease-out, box-shadow 120ms ease-out;
+}
+.start-field:focus {
+  border-color: var(--color-teal);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-teal) 22%, transparent);
+}
+.start-choice {
+  display: flex;
+  min-height: 52px;
+  cursor: pointer;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  border: 1px solid color-mix(in srgb, var(--color-ink) 14%, transparent);
+  border-radius: 14px;
+  font-size: 17px;
+  color: var(--color-ink);
+}
+.start-choice:has(input:checked) {
+  border-color: var(--color-teal);
+  background: color-mix(in srgb, var(--color-teal) 10%, transparent);
+}
+.start-submit {
+  display: flex;
+  width: 100%;
+  min-height: 56px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  background: var(--color-teal);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--color-abyss);
+}
+select.start-field {
+  padding-right: 44px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14' fill='none'%3E%3Cpath d='M3 5.5l4 4 4-4' stroke='%238AA0B4' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
 }

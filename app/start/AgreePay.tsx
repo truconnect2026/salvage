@@ -12,14 +12,14 @@ export default function AgreePay({ agree, pay, href }: { agree: string; pay: str
   const [ok, setOk] = useState(false);
   const live = ok && !!href;
   return (
-    <div data-start-agree className="mt-6 flex flex-col items-start gap-4">
-      <label className="flex min-h-11 cursor-pointer items-center gap-3 text-[17px] font-medium text-ink">
+    <div data-start-agree className="mt-5 flex flex-col gap-4">
+      <label className="start-agree-row">
         <input
           type="checkbox"
           data-agree
           checked={ok}
           onChange={(e) => setOk(e.target.checked)}
-          className="start-check h-5 w-5 shrink-0 accent-[var(--color-teal)]"
+          className="start-check h-6 w-6 shrink-0 accent-[var(--color-teal)]"
         />
         {agree}
       </label>
@@ -31,7 +31,7 @@ export default function AgreePay({ agree, pay, href }: { agree: string; pay: str
         onClick={(e) => {
           if (!live) e.preventDefault();
         }}
-        className="start-pay inline-block rounded-full bg-gold px-8 py-3.5 text-[17px] font-semibold text-abyss outline-none focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2"
+        className="start-pay outline-none focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2"
       >
         {pay}
       </a>

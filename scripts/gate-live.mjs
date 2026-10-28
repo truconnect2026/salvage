@@ -28,6 +28,10 @@
  *       one stores nothing and texts nothing; the honeypot stores nothing
  *   258 /privacy and /terms answer 200, and /go and /start link to both
  *   259 / shows the four approved price lines; no old price anywhere
+ *   260 (change 51) /start scrolls: the document is taller than the screen and
+ *       the pay button and the form's submit can be scrolled into view at
+ *       390x844 and 390x700. GATE_PROBE=startlock re-imposes change 12's
+ *       html/body lock on the page and the gate must go RED.
  */
 import { spawn } from "node:child_process";
 import { createHmac } from "node:crypto";
@@ -454,6 +458,47 @@ export async function runLiveGates({ pw, check }) {
         check(259, "50: / (\"The math\") shows the four approved price lines; no old price anywhere on the page", ok, `lines ${JSON.stringify(lines)} (need ${JSON.stringify(X.price)}); stale ${JSON.stringify(stale)}`);
       } catch (err) {
         threw([259], err);
+      }
+    }
+
+    if (want(260) && pw) {
+      try {
+        progress("gate 260");
+        const notes = [];
+        let ok = true;
+        const probe = process.env.GATE_PROBE === "startlock";
+        for (const eng of ["chromium", "webkit"]) {
+          const browser = await pw[eng].launch();
+          for (const vp of [{ width: 390, height: 844 }, { width: 390, height: 700 }]) {
+            const ctx = await browser.newContext({ viewport: vp });
+            const page = await ctx.newPage();
+            await page.goto(BASE + `/start?biz=${encodeURIComponent(CLIENT.biz)}&trade=hvac`, { waitUntil: "load" });
+            if (probe) await page.addStyleTag({ content: "html,body{height:100%!important;overflow:hidden!important}" });
+            const m = await page.evaluate(async () => {
+              const se = document.scrollingElement;
+              const reach = async (sel) => {
+                const el = document.querySelector(sel);
+                if (!el) return null;
+                window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 80);
+                await new Promise((r) => setTimeout(r, 120));
+                const r = el.getBoundingClientRect();
+                return r.top >= 0 && r.bottom <= window.innerHeight;
+              };
+              const tall = se.scrollHeight;
+              const pay = await reach("[data-pay]");
+              const submit = await reach("[data-start-submit]");
+              return { tall, inner: window.innerHeight, pay, submit, y: Math.round(window.scrollY) };
+            });
+            await ctx.close();
+            const pass = m.tall > m.inner && m.pay === true && m.submit === true && m.y > 0;
+            ok &&= pass;
+            notes.push(`${eng}@${vp.width}x${vp.height}${probe ? " PROBE startlock" : ""} ${pass ? "ok" : "RED"}: doc ${m.tall}px / screen ${m.inner}px, pay reachable ${m.pay}, submit reachable ${m.submit}, scrolled to ${m.y}`);
+          }
+          await browser.close();
+        }
+        check(260, "51: /start scrolls; the pay button and the form submit can be reached on a phone", ok, notes.join(" | "));
+      } catch (err) {
+        threw([260], err);
       }
     }
   } finally {
