@@ -17,8 +17,9 @@ export type Preset = {
   accentInk: string;
   ticket: number; missedPerMonth: number; callsCaught: number; recovered: number; lost: number;
   /* change 45: the /go proof row's service radius, miles. Data — 25 is
-     Andy's approved default (v2 GO). */
-  radius: number;
+     Andy's approved default (v2 GO). change 53: null for a business people
+     come TO (the salon preset) — the proof row then shows no service area. */
+  radius: number | null;
   /* change 45.1: the front door's hours are per preset. Weekdays 0 = Sunday
      (never open), whole hours, America/New_York (GO_SCHEDULE.tz). */
   hours: { days: number[]; open: number; close: number };
@@ -292,7 +293,9 @@ export const GO_COPY = {
     electrical: ["Power out in part of the house","Breaker keeps tripping","Outlet or switch","Panel upgrade","Something else"],
     roofing: ["Active leak","Storm damage","Inspection","New roof quote","Something else"],
     garage: ["Door won't open","Broken spring","Opener","New door quote","Something else"],
-    salon: ["Filler","Color","Facial","Lash fill","Something else"],
+    // change 53 (APPROVED, David): hair, brow and lash, nail and med-spa
+    // doors alike — no injectable as the first job.
+    salon: ["Color","Cut and style","Brows and lashes","Facial or skin","Something else"],
     dental: ["Toothache or chip","Cleaning","Filling","Crown","Something else"],
     other: ["New appointment","Quote","Question","Something else"],
   },
@@ -425,10 +428,10 @@ export const JOB_GLYPH: Record<string, string> = {
   "Broken spring": "spring",
   "Opener": "opener",
   "New door quote": "garage-new",
-  "Filler": "syringe",
   "Color": "dye",
-  "Facial": "face",
-  "Lash fill": "lash",
+  "Cut and style": "scissors",
+  "Brows and lashes": "lash",
+  "Facial or skin": "face",
   "Toothache or chip": "tooth-chip",
   "Cleaning": "toothbrush",
   "Filling": "filling",
@@ -444,20 +447,24 @@ export const PRESETS: Preset[] = [
     id: "salon", label: "Salon and Spa", bizName: "Harbor Row Aesthetics",
     customerName: "Danielle R.",
     accent: "#E8A0B4", accentSoft: "#4A2838", accentInk: "#1A0C12",
-    ticket: 340, missedPerMonth: 12, callsCaught: 4, recovered: 1360, lost: 4080,
-    radius: 25,
+    // change 53 (APPROVED, David): salon-sized figures — a color at $140,
+    // not a filler at $340. Stored, never derived.
+    ticket: 140, missedPerMonth: 12, callsCaught: 4, recovered: 410, lost: 1680,
+    // change 53: customers come to a salon — no service radius.
+    radius: null,
     hours: { days: [1, 2, 3, 4, 5, 6], open: 7, close: 18 },
-    sinceCalls: 31, sinceRecovered: 9240,
+    sinceCalls: 31, sinceRecovered: 3720,
     // Entry [0] is this thread's own booking. Sum of all 4 amounts === recovered.
     caught: [
-      { name: "Danielle R.", number: "(804) 555-0142", detail: "Thu 2:00 with Marisa · filler", amount: 340, date: "Mar 14" },
-      { name: "Renee K.", number: "(804) 555-0119", detail: "Tue 11:00 with Marisa · color", amount: 260, date: "Mar 11" },
-      { name: "Alyssa P.", number: "(804) 555-0176", detail: "Sat 9:30 with Priya · facial", amount: 380, date: "Mar 8" },
-      { name: "Tara W.", number: "(804) 555-0133", detail: "Wed 4:15 with Marisa · lash fill", amount: 380, date: "Mar 4" },
+      // change 53 (APPROVED, David): salon bookings. Sum 410 === recovered.
+      { name: "Danielle R.", number: "(804) 555-0142", detail: "Thu 2:00 with Marisa · color", amount: 140, date: "Mar 14" },
+      { name: "Renee K.", number: "(804) 555-0119", detail: "Tue 11:00 with Marisa · haircut", amount: 85, date: "Mar 11" },
+      { name: "Alyssa P.", number: "(804) 555-0176", detail: "Sat 9:30 with Priya · brows", amount: 65, date: "Mar 8" },
+      { name: "Tara W.", number: "(804) 555-0133", detail: "Wed 4:15 with Marisa · facial", amount: 120, date: "Mar 4" },
     ],
     thread: [
       { from: "business", time: "8:47 PM", text: "This is Harbor Row Aesthetics, sorry we missed you. We're closed for the night, but I can get you on the book right now if you want." },
-      { from: "customer", time: "8:52 PM", text: "Yes please. Looking for filler, sometime next week." },
+      { from: "customer", time: "8:52 PM", text: "Yes please. Looking for color, sometime next week." },
       { from: "business", time: "8:53 PM", text: "Tuesday 10:30 or Thursday 2:00 with Marisa. Which works?" },
       { from: "customer", time: "8:56 PM", text: "Thursday 2:00." },
     ],

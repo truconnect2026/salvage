@@ -91,7 +91,8 @@ export function proofFor(p: GoParams) {
   if (!p.demo) return null;
   const reply = typicalReply(p.preset.thread);
   return {
-    radius: fillN(GO_COPY.go.proofRadius, p.preset.radius),
+    /* change 53: a preset with no service radius (salon) shows no line. */
+    radius: p.preset.radius == null ? null : fillN(GO_COPY.go.proofRadius, p.preset.radius),
     hoursLabel: GO_COPY.go.proofHours,
     hours: hoursLine(scheduleFor(p)),
     reply: reply == null ? null : fillN(GO_COPY.go.proofReply, reply),

@@ -1157,11 +1157,16 @@ if (!chromium) {
    * caught[0].amount = 4250 - 850 = 3400) exceeds salon's final (1360), so ANY
    * correct switch salon->home necessarily climbs — that is real data, not an
    * artifact. dental's opening value (1800 - 600 = 1200) is genuinely below
-   * salon's final, so this pair actually exercises the no-overshoot guarantee. */
+   * salon's final, so this pair actually exercises the no-overshoot guarantee.
+   * change 53: salon's final is 410 now (salon-sized bookings), below EVERY
+   * other preset's opening value (home 3400, dental 1200, other 500), so no
+   * switch out of salon can exercise the guarantee. The gate starts from
+   * home instead (?biz=home, final 4250) and still switches to dental
+   * (opening 1200 < 4250): a pair whose correct path never climbs. */
   await block("switch-transition-panel", async () => {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const page = await ctx.newPage();
-    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.goto(`${base}/?biz=home`, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
     await waitT(page, 5.6 + INTRO); // settled: panel recovered shows the OLD preset's full total
 

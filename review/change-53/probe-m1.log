@@ -1,0 +1,15 @@
+build t-o6RyC6Skqv8XJXtXYog served: 1
+discriminator (salon /go): Filler=4 miles=0 accent=#E8A0B4 
+  (filtered: GO_ONLY=221,223,261)
+  PASS  221. go 45e: typical reply equals the stored thread gap, every preset — chromium@390x700 ok: salon: "Typical reply: 1 min" want "Typical reply: 1 min"; home: "Typical reply: 1 min" want "Typical reply: 1 min"; dental: "Typical reply: 1 min" want "Typical reply: 1 min"; other: "Typical reply: 1 min" want "Typical reply: 1 min" | chromium@390x844 ok: salon: "Typical reply: 1 min" want "Typical reply: 1 min"; 
+  FAIL  261. go 53: salon door shows salon jobs, a salon sample and no service radius — chromium@390x700 RED: chips 5/5 (config 5); jobs ["Filler","Color","Facial","Lash fill","Something else"] want ["Color","Cut and style","Brows and lashes","Facial or skin","Something else"]; FORBIDDEN /\bfiller\b/i; no radius line; sample "Filler" "+$140" want "Color" +$140 | chromium@390x844 RED: chips 5/5 (config 5); jobs ["Fi
+  FAIL  223. go 45g: every job of every preset carries the drawn glyph its own string maps to — chromium@390x700 RED: plumbing 5/5; hvac 5/5; electrical 5/5; roofing 5/5; garage 5/5; salon 5/5 MISSING ["Filler","Facial","Lash fill"]; dental 5/5; other 4/4 | chromium@390x844 RED: plumbing 5/5; hvac 5/5; electrical 5/5; roofing 5/5; garage 5/5; salon 5/5 MISSING ["Filler","Facial","Lash fill"]; dental 5/5; other 4/4 
+
+2 GO GATE(S) RED: 261, 223
+ app/go/GoCard.tsx    | 10 +++++----
+ app/go/glyphs.tsx    |  8 ++++++++
+ lib/client.config.ts | 35 +++++++++++++++++++-------------
+ lib/go-params.ts     |  3 ++-
+ scripts/gate-go.mjs  | 57 ++++++++++++++++++++++++++++++++++++++++++++++++++--
+ scripts/gate.mjs     |  9 +++++++--
+ 6 files changed, 99 insertions(+), 23 deletions(-)

@@ -88,9 +88,15 @@ function expectations(src) {
         const b = src.slice(mk.at, i + 1 < marks.length ? marks[i + 1].at : src.length);
         return {
           id: mk.id,
+          block: b,
           accent: (b.match(/accent:\s*"(#[0-9A-Fa-f]{6})"/) ?? [])[1],
           accentInk: (b.match(/accentInk:\s*"(#[0-9A-Fa-f]{6})"/) ?? [])[1],
-          radius: +((b.match(/radius:\s*(\d+)/) ?? [])[1] ?? NaN),
+          /* change 53: null is a stored value (salon: no service area);
+             a missing field stays NaN and holds 221 red. */
+          radius: (() => {
+            const m = b.match(/radius:\s*(\d+|null)\b/);
+            return !m ? NaN : m[1] === "null" ? null : +m[1];
+          })(),
           hours: (() => {
             const m = b.match(/hours:\s*\{\s*days:\s*(\[[\d,\s]+\]),\s*open:\s*(\d+),\s*close:\s*(\d+)\s*\}/);
             return m ? { days: JSON.parse(m[1]), open: +m[2], close: +m[3] } : null;
@@ -685,7 +691,7 @@ export async function runGoGates({ base, pw, check }) {
       for (const pr of X.presets) {
         const n = replyMinutes(pr.thread);
         const want = n == null ? null : X.proofReply.replace("{n}", String(n));
-        const wantRadius = X.proofRadius.replace("{n}", String(pr.radius));
+        const wantRadius = pr.radius === null ? null : X.proofRadius.replace("{n}", String(pr.radius));
         await page.goto(url(`preset=${pr.id}&demo=1`), { waitUntil: "networkidle" });
         const got = await page.evaluate(() => ({ reply: document.querySelector("[data-go-reply]")?.textContent.trim() ?? null, radius: document.querySelector("[data-go-radius]")?.textContent.trim() ?? null }));
         const good = got.reply === want && got.radius === wantRadius;
@@ -694,6 +700,53 @@ export async function runGoGates({ base, pw, check }) {
       }
       await ctx.close();
       return { ok, detail: out.join("; ") };
+    },
+    { viewports: V2 },
+  );
+
+  /* --- 261 (change 53): the salon door reads as a salon — for a threading,
+         hair, lash or nail shop as much as a med spa. Expectations from
+         config (jobs.salon, the salon ticket); the rendered text from the
+         DOM. FORBIDDEN is pre-registered: the med-spa injectable and the
+         service-area unit a walk-in shop never claims. Count guard first:
+         the chip list must hold SALON_JOB_COUNT chips, so a selector that
+         stops matching can never read as "nothing forbidden". --- */
+  const SALON_JOB_COUNT = 5;
+  const FORBIDDEN = [/\bfiller\b/i, /\bmiles?\b/i];
+  await gate(
+    261,
+    "go 53: salon door shows salon jobs, a salon sample and no service radius",
+    async (browser, vp) => {
+      const out = [];
+      const ctx = await ctxFor(browser, vp);
+      const page = await ctx.newPage();
+      await page.goto(url(`biz=${encodeURIComponent("Shortpump Threading")}&preset=salon&demo=1`), { waitUntil: "networkidle" });
+      const want = X.jobs.salon ?? [];
+      const ticket = +((X.presets.find((p) => p.id === "salon")?.block ?? "").match(/ticket:\s*(\d+)/) ?? [])[1];
+      const idle = await page.evaluate(() => {
+        const vis = (el) => !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden";
+        const sample = document.querySelector("[data-go-sample]");
+        return {
+          text: document.querySelector("[data-go]")?.innerText ?? "",
+          radius: vis(document.querySelector("[data-go-radius]")),
+          sampleJob: sample?.querySelector("p + p")?.textContent.trim() ?? null,
+          sampleTicket: sample?.querySelector("[data-go-ticket]")?.textContent.trim() ?? null,
+        };
+      });
+      await page.click("[data-go-slot=book]");
+      await page.waitForSelector("[data-go-job]");
+      const chips = await page.$$eval("[data-go-job]", (els) => els.filter((e) => e.getClientRects().length > 0).map((e) => e.textContent.trim()));
+      await ctx.close();
+      const countOk = want.length === SALON_JOB_COUNT && chips.length === SALON_JOB_COUNT;
+      out.push(`chips ${chips.length}/${SALON_JOB_COUNT} (config ${want.length})`);
+      const listOk = chips.every((c, i) => c === want[i]);
+      if (!listOk) out.push(`jobs ${JSON.stringify(chips)} want ${JSON.stringify(want)}`);
+      const hits = FORBIDDEN.filter((re) => re.test(idle.text) || chips.some((c) => re.test(c)) || want.some((c) => re.test(c))).map(String);
+      out.push(hits.length ? `FORBIDDEN ${hits.join(",")}` : "no forbidden terms");
+      out.push(idle.radius ? "radius line SHOWN" : "no radius line");
+      const sampleOk = idle.sampleJob === want[0] && idle.sampleTicket === `+${usd(ticket)}` && Number.isFinite(ticket);
+      out.push(`sample ${JSON.stringify(idle.sampleJob)} ${JSON.stringify(idle.sampleTicket)}${sampleOk ? "" : ` want ${JSON.stringify(want[0])} +${usd(ticket)}`}`);
+      return { ok: countOk && listOk && hits.length === 0 && !idle.radius && sampleOk, detail: out.join("; ") };
     },
     { viewports: V2 },
   );

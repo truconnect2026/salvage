@@ -1,0 +1,5 @@
+/tmp/claude-0/-home-claude/59909b21-ffb5-50aa-a56f-e21ac09e5f4a/scratchpad/mutate.sh: line 21: /proc/3970/cmdline: No such file or directory
+build QkzPrGQA7eb9XYWFlMBEx served: 1
+discriminator (salon /go): Filler=0 miles=0 accent=#E8A0B4 
+  (filtered: GO_ONLY=261)
+  FAIL  261. go 53: salon door shows salon jobs, a salon sample and no service radius — chromium@390x700 RED: chips 5/5 (config 5); no forbidden terms; no radius line; sample "Color" "+$340" want "Color" +$140 | chromium@390x844 RED: chips 5/5 (config 5); no forbidden terms; no radius line; sample "Color" "+$340" want "Color" +$140 | chromium@844x390 RED: chips 5/5 (config 5); no forbidden terms; no radius line; sa

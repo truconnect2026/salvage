@@ -1,0 +1,7 @@
+/tmp/claude-0/-home-claude/59909b21-ffb5-50aa-a56f-e21ac09e5f4a/scratchpad/mutate.sh: line 21: /proc/4901/cmdline: No such file or directory
+build Nm1xP_HLAfQn7pSQOovru served: 1
+discriminator (salon /go): Filler=0 miles=0 accent=#00FF00 
+  (filtered: GO_ONLY=221,223,261)
+  PASS  221. go 45e: typical reply equals the stored thread gap, every preset — chromium@390x700 ok: salon: "Typical reply: 1 min" want "Typical reply: 1 min"; home: "Typical reply: 1 min" want "Typical reply: 1 min"; dental: "Typical reply: 1 min" want "Typical reply: 1 min"; other: "Typical reply: 1 min" want "Typical reply: 1 min" | chromium@390x844 ok: salon: "Typical reply: 1 min" want "Typical reply: 1 min"; 
+  PASS  261. go 53: salon door shows salon jobs, a salon sample and no service radius — chromium@390x700 ok: chips 5/5 (config 5); no forbidden terms; no radius line; sample "Color" "+$140" | chromium@390x844 ok: chips 5/5 (config 5); no forbidden terms; no radius line; sample "Color" "+$140" | chromium@844x390 ok: chips 5/5 (config 5); no forbidden terms; no radius line; sample "Color" "+$140" | chromium@1440x900 
+  PASS  223. go 45g: every job of every preset carries the drawn glyph its own string maps to — chromium@390x700 ok: plumbing 5/5; hvac 5/5; electrical 5/5; roofing 5/5; garage 5/5; salon 5/5; dental 5/5; other 4/4 | chromium@390x844 ok: plumbing 5/5; hvac 5/5; electrical 5/5; roofing 5/5; garage 5/5; salon 5/5; dental 5/5; other 4/4 | chromium@844x390 ok: plumbing 5/5; hvac 5/5; electrical 5/5; roofing 5/5; garage

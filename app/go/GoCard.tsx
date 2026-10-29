@@ -61,7 +61,7 @@ export type GoCopy = {
 };
 
 export type GoJob = { label: string; glyph: string };
-export type GoProof = { radius: string; hoursLabel: string; hours: string; reply: string | null };
+export type GoProof = { radius: string | null; hoursLabel: string; hours: string; reply: string | null };
 
 type Props = {
   biz: string;
@@ -728,9 +728,11 @@ export default function GoCard(props: Props) {
             <CompassRose />
           </span>
           <div className="go-proof-list">
-            <p data-go-radius className="go-body">
-              {props.proof.radius}
-            </p>
+            {props.proof.radius && (
+              <p data-go-radius className="go-body">
+                {props.proof.radius}
+              </p>
+            )}
             <p className="flex items-baseline gap-2">
               <span className="go-caption text-muted">{props.proof.hoursLabel}</span>
               <span data-go-hours className="go-body">

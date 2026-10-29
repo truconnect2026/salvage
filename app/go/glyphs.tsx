@@ -192,6 +192,14 @@ const JOB: Record<string, ReactNode> = {
       <path d="M10 14.8c1.2.9 2.8.9 4 0" />
     </>
   ),
+  /* change 53: Cut and style. */
+  "scissors": (
+    <>
+      <circle cx="6.5" cy="17" r="2.6" />
+      <circle cx="17.5" cy="17" r="2.6" />
+      <path d="M8.4 15.2L16.5 4M15.6 15.2L7.5 4" />
+    </>
+  ),
   "lash": (
     <>
       <path d="M3 12.5c2.5-4 5.5-6 9-6s6.5 2 9 6c-2.5 4-5.5 6-9 6s-6.5-2-9-6z" />
