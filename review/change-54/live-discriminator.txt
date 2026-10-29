@@ -1,0 +1,5 @@
+live discriminator 2026-10-29T20:06:27Z:
+  salon photo label: Send a photo of the look you want
+  hvac no-name h1: Ridgeline Heating and Air
+  /start brand line: start-brand
+  /start Stripe link intact: https://buy.stripe.com/4gM6oGdBGayzf5f4jvdMI07?client_reference_id=x
