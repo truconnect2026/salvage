@@ -1,0 +1,5 @@
+probe p2-hvacname build T3z2Ze7E1nYUJDrrO1sR0
+  (filtered: GO_ONLY=262)
+  FAIL  262. go 54: every door words its own shop — photo slot, pre-filled text, default name; no trade words off the home door — chromium@390x844 RED: doors 4/4; home ok: photo "Send a photo for a quote", sms ok; salon ok: photo "Send a photo of the look you want", sms ok; dental ok: photo "Send your insurance card", sms ok; other ok: photo "Send a photo", sms ok; no-name preset=salon "Harbor Row Salon"; no-name preset=home&trade=hvac "Ridgeline Plumbing" want "Ridgeline Heating and Air"; no-name preset=home&trade=plumbing "Ridgeline Plumbing"; no-name preset=dental "Fairfield Dental" [WebKit NOT RUN: GATE_ALLOW_NO_WEBKIT=1]
+
+1 GO GATE(S) RED: 262

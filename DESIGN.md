@@ -91,3 +91,20 @@ a phone. §3 and §5 are revised for **/go and /start only** (/ is unchanged):
   filled, rounded, with a teal focus ring; the EIN answer is two choice tiles.
 - Still forbidden: particles, blur cards outside the device, emoji, icon
   libraries, new copy.
+
+## 8. Change 54: the shop owner's side (David, Oct 29: "make their side look as good as you can")
+
+- **/go identity** is two rows: the name, then the dial with the trade and the
+  status pill stacked beside it.
+- **/go actions:** Book (primary), Text and Call as a tile pair, then the photo
+  slot and Save our number as two 76px rows in one lifted surface — a
+  shop-specific photo label gets a full line.
+- **The sheet** speaks §7: 24px top radius; job, day and time chips, fields
+  and the fast path are rounded and faintly filled; an odd last job spans the
+  row; the one action is a filled teal control.
+- **/start:** the Salvage mark and the /go folio line over the name; the
+  agreement in a hairline frame; drawn checkbox and radios; Pay waits as a
+  gold outline until "I agree", then fills; a 480ms staggered rise.
+- **Tap targets:** every link, button, field and choice row on /go and /start
+  is at least 44x44 (gate 263), the legal links included.
+- Column: /go is 520 wide below 700px (was 460), 580 above.

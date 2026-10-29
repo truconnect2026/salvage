@@ -261,14 +261,15 @@ export const GO_COPY = {
     open: "Open now", closed: "Closed now. You can still book.",
     book: "Book a time", nextLabel: "Next available",
     text: "Text us", call: "Call", emergency: "Emergency? Call now",
-    quote: "Send a photo for a quote", save: "Save our number",
-    smsBody: "Hi {biz}, I need help with a job.",
+    // change 54: quote, smsBody and quoteDoneSub moved to GO_COPY.doors —
+    // each door's own wording (home's verbatim).
+    save: "Save our number",
     stepJob: "What do you need?", stepTime: "Pick a time", stepYou: "Your name and number",
     namePh: "Your name", phonePh: "Phone number",
     nameErr: "Add your name.", phoneErr: "Add a 10-digit phone number.",
     confirm: "Confirm booking", sendQuote: "Send photo", back: "Back", close: "Close",
     doneTitle: "You're booked.", doneSub: "{biz} will text you to confirm.",
-    quoteDoneTitle: "Photo sent.", quoteDoneSub: "{biz} will text you a quote.",
+    quoteDoneTitle: "Photo sent.",
     addCal: "Add to calendar", copyNumber: "Copy number", copied: "Copied",
     ownerSide: "On the owner's phone, right now:",
     demoNote: "Demo. Nothing is sent.",
@@ -281,9 +282,8 @@ export const GO_COPY = {
     installHint: "Tap Share, then Add to Home Screen.",
     qrTitle: "Your front door",
     qrSub: "Scan it. This is what your customers see.",
-    qrCaption: "Put it on the truck, the door, and every invoice.",
+    // change 54: qrCaption and kitPieces moved to GO_COPY.doors.
     kitTitle: "Your print kit",
-    kitPieces: ["Truck decal","Yard sign","Invoice footer","Sticker"],
     downloadPng: "Download PNG",
     downloadSvg: "Download SVG",
   },
@@ -300,6 +300,52 @@ export const GO_COPY = {
     other: ["New appointment","Quote","Question","Something else"],
   },
   tradeLabels: { plumbing: "Plumbing", hvac: "Heating and air", electrical: "Electrical", roofing: "Roofing", garage: "Garage doors" },
+  // change 54 (APPROVED, David: "fix copy so it reads right for each kind of
+  // shop"): the strings every door shared that read like a trade, per door.
+  // home keeps the change-42 wording verbatim. qrCaption and kitPieces are
+  // the print kit's — no page renders the kit today (REVIEW change 54).
+  doors: {
+    home: {
+      quote: "Send a photo for a quote",
+      quoteDoneSub: "{biz} will text you a quote.",
+      smsBody: "Hi {biz}, I need help with a job.",
+      qrCaption: "Put it on the truck, the door, and every invoice.",
+      kitPieces: ["Truck decal", "Yard sign", "Invoice footer", "Sticker"],
+    },
+    salon: {
+      quote: "Send a photo of the look you want",
+      quoteDoneSub: "{biz} will text you back.",
+      smsBody: "Hi {biz}, I'd like to book an appointment.",
+      qrCaption: "Put it on the door, the mirror, and every receipt.",
+      kitPieces: ["Window sticker", "Counter card", "Mirror cling", "Receipt footer"],
+    },
+    dental: {
+      quote: "Send your insurance card",
+      quoteDoneSub: "{biz} will text you back.",
+      smsBody: "Hi {biz}, I'd like to make an appointment.",
+      qrCaption: "Put it on the door, the front desk, and every appointment card.",
+      kitPieces: ["Window sticker", "Front desk card", "Appointment card", "Receipt footer"],
+    },
+    other: {
+      quote: "Send a photo",
+      quoteDoneSub: "{biz} will text you back.",
+      smsBody: "Hi {biz}, I'd like to book a time.",
+      qrCaption: "Put it on the door, the counter, and every receipt.",
+      kitPieces: ["Window sticker", "Counter card", "Receipt footer", "Sticker"],
+    },
+  },
+  // change 54 (APPROVED, David): the name a door shows when its link carries
+  // none. The demo's stored bizName stays the demo's (/ is unchanged); a
+  // salon door reads "Salon", not "Aesthetics", and a heating-and-air door
+  // no longer says Plumbing. Dental and other keep their stored names.
+  defaultNames: {
+    salon: "Harbor Row Salon",
+    plumbing: "Ridgeline Plumbing",
+    hvac: "Ridgeline Heating and Air",
+    electrical: "Ridgeline Electric",
+    roofing: "Ridgeline Roofing",
+    garage: "Ridgeline Garage Doors",
+  } as Record<string, string>,
   // change 42: Andy's real voice line for /go demo mode. Texts use
   // contact.smsHref above; calls ring this one.
   goTel: "tel:+18044953492",
@@ -496,7 +542,9 @@ export const PRESETS: Preset[] = [
     customerName: "Priya S.",
     accent: "#7CC4E8", accentSoft: "#1C3E5C", accentInk: "#08161F",
     ticket: 600, missedPerMonth: 9, callsCaught: 3, recovered: 1800, lost: 5400,
-    radius: 25,
+    // change 54 (APPROVED, David): patients come to a dental office — no
+    // service radius, like the salon.
+    radius: null,
     hours: { days: [1, 2, 3, 4, 5, 6], open: 8, close: 18 },
     sinceCalls: 19, sinceRecovered: 9800,
     caught: [
@@ -522,7 +570,8 @@ export const PRESETS: Preset[] = [
     accent: "#9BB0C4", accentSoft: "#253546", accentInk: "#0B131B",
     tagline: "Any business that takes calls.",
     ticket: 250, missedPerMonth: 10, callsCaught: 3, recovered: 750, lost: 2500,
-    radius: 25,
+    // change 54: "any business that takes calls" claims no service area.
+    radius: null,
     hours: { days: [1, 2, 3, 4, 5, 6], open: 7, close: 18 },
     sinceCalls: 22, sinceRecovered: 5500,
     caught: [

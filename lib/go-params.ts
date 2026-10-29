@@ -44,7 +44,9 @@ export function resolveGoParams(sp: SP): GoParams {
   const rawTrade = one(sp.trade) as Trade;
   const trade: Trade | null = presetId === "home" ? (TRADES.includes(rawTrade) ? rawTrade : "plumbing") : null;
   return {
-    biz: biz || preset.bizName,
+    /* change 54: a door with no name shows its own kind of shop's name
+       (config defaultNames), else the preset's stored one. */
+    biz: biz || GO_COPY.defaultNames[trade ?? presetId] || preset.bizName,
     preset,
     presetId,
     trade,
@@ -83,6 +85,13 @@ export function jobsFor(p: GoParams): GoJob[] {
     own hours. */
 export function scheduleFor(p: GoParams) {
   return { ...GO_SCHEDULE, ...p.preset.hours };
+}
+
+/** change 54: the strings each kind of shop words its own way — the photo
+    tile, its done line and the pre-filled text (config GO_COPY.doors). */
+export function doorCopy(p: GoParams) {
+  const d = GO_COPY.doors[p.presetId];
+  return { quote: d.quote, quoteDoneSub: d.quoteDoneSub, smsBody: d.smsBody };
 }
 
 /** change 45: the proof row — every figure from config data. change 45.1:

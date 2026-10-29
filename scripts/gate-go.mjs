@@ -751,6 +751,129 @@ export async function runGoGates({ base, pw, check }) {
     { viewports: V2 },
   );
 
+  /* --- 262 (change 54): every door words its own kind of shop. The wording
+         is PRE-REGISTERED here (David's approved strings), not read from
+         config, so a config revert cannot move the expectation with it.
+         FORBIDDEN_TRADE holds the trade words a salon, dental or general
+         door must never show or pre-fill. Count guard: all DOOR_COUNT doors
+         must be visited and each must render its photo slot. --- */
+  const DOOR_COUNT = 4;
+  const DOORS = [
+    { id: "home", q: "preset=home&trade=hvac", quote: "Send a photo for a quote", sms: "Hi {biz}, I need help with a job.", trade: true },
+    { id: "salon", q: "preset=salon", quote: "Send a photo of the look you want", sms: "Hi {biz}, I'd like to book an appointment.", trade: false },
+    { id: "dental", q: "preset=dental", quote: "Send your insurance card", sms: "Hi {biz}, I'd like to make an appointment.", trade: false },
+    { id: "other", q: "preset=other", quote: "Send a photo", sms: "Hi {biz}, I'd like to book a time.", trade: false },
+  ];
+  const FORBIDDEN_TRADE = [/\bquote\b/i, /\bjob\b/i, /\btruck\b/i, /\byard\b/i, /\bmiles?\b/i];
+  /* The name a door shows with no biz= — and dental shows no service radius. */
+  const NO_NAME = [
+    ["preset=salon", "Harbor Row Salon"],
+    ["preset=home&trade=hvac", "Ridgeline Heating and Air"],
+    ["preset=home&trade=plumbing", "Ridgeline Plumbing"],
+    ["preset=dental", "Fairfield Dental"],
+  ];
+  await gate(
+    262,
+    "go 54: every door words its own shop — photo slot, pre-filled text, default name; no trade words off the home door",
+    async (browser, vp) => {
+      const out = [];
+      let ok = true;
+      const ctx = await ctxFor(browser, vp);
+      const page = await ctx.newPage();
+      let visited = 0;
+      for (const d of DOORS) {
+        const biz = "Shop Fifty Four";
+        await page.goto(url(`biz=${encodeURIComponent(biz)}&${d.q}&demo=1`), { waitUntil: "networkidle" });
+        const r = await page.evaluate(() => {
+          const q = document.querySelector("[data-go-slot=quote] [data-go-label]");
+          const t = document.querySelector("[data-go-slot=text]");
+          const href = t?.getAttribute("href") ?? "";
+          const i = href.indexOf("body=");
+          return {
+            quote: q && q.getClientRects().length ? q.textContent.trim() : null,
+            sms: i < 0 ? null : decodeURIComponent(href.slice(i + 5)),
+            text: document.querySelector("[data-go]")?.innerText ?? "",
+            radius: !!document.querySelector("[data-go-radius]"),
+          };
+        });
+        if (r.quote != null) visited++;
+        const wantSms = d.sms.replace("{biz}", biz);
+        const hits = d.trade ? [] : FORBIDDEN_TRADE.filter((re) => re.test(r.text) || re.test(r.sms ?? "")).map(String);
+        const radiusOk = d.id === "dental" || d.id === "salon" ? !r.radius : true;
+        const good = r.quote === d.quote && r.sms === wantSms && hits.length === 0 && radiusOk;
+        ok &&= good;
+        out.push(`${d.id} ${good ? "ok" : "RED"}: photo ${JSON.stringify(r.quote)}${r.quote === d.quote ? "" : ` want ${JSON.stringify(d.quote)}`}, sms ${r.sms === wantSms ? "ok" : JSON.stringify(r.sms)}${hits.length ? " FORBIDDEN " + hits.join(",") : ""}${radiusOk ? "" : " RADIUS SHOWN"}`);
+      }
+      for (const [q, want] of NO_NAME) {
+        await page.goto(url(q), { waitUntil: "networkidle" });
+        const h = (await page.textContent("[data-go-name]"))?.trim();
+        ok &&= h === want;
+        out.push(`no-name ${q} ${JSON.stringify(h)}${h === want ? "" : ` want ${JSON.stringify(want)}`}`);
+      }
+      await ctx.close();
+      ok &&= visited === DOOR_COUNT && DOORS.length === DOOR_COUNT;
+      return { ok, detail: `doors ${visited}/${DOOR_COUNT}; ` + out.join("; ") };
+    },
+    { viewports: [{ width: 390, height: 844 }] },
+  );
+
+  /* --- 263 (change 54): what a shop owner taps on David's tablet is a real
+         target. Every link, button, field and choice row on /go (demo) and
+         /start is at least MIN_TAP px in both dimensions — the legal links
+         included, which were 16px lines — and neither page scrolls sideways,
+         at 390x844, 601x962 (the Fire) and 800x1280. MIN_TAP is an absolute
+         size (Apple HIG 44pt), never read from the page. A checkbox or
+         radio is measured by the label row that takes its tap. Count guards
+         are fixed in advance: GO_TARGETS on the hvac demo door, START_TARGETS
+         on /start. --- */
+  const MIN_TAP = 44;
+  const GO_TARGETS = 8;
+  const START_TARGETS = 12;
+  const TABLET = [
+    { width: 390, height: 844 },
+    { width: 601, height: 962 },
+    { width: 800, height: 1280 },
+  ];
+  const TARGETS = (root) => {
+    const scope = document.querySelector(root);
+    const els = [...scope.querySelectorAll("a[href], button, input, select")]
+      .filter((e) => !e.closest('[aria-hidden="true"]') && e.type !== "hidden")
+      .map((e) => (e.type === "checkbox" || e.type === "radio" ? e.closest("label") ?? e : e))
+      .filter((e, i, a) => a.indexOf(e) === i && e.getClientRects().length > 0);
+    return {
+      n: els.length,
+      small: els
+        .map((e) => ({ k: (e.getAttribute("data-go-slot") ?? e.getAttribute("name") ?? e.textContent.trim()).slice(0, 16), w: e.getBoundingClientRect().width, h: e.getBoundingClientRect().height }))
+        .filter((r) => r.w < 44 - 0.01 || r.h < 44 - 0.01),
+      over: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    };
+  };
+  await gate(
+    263,
+    `go 54: every tap target on /go and /start >= ${MIN_TAP}px, no sideways scroll, at 390 / 601 / 800`,
+    async (browser, vp) => {
+      const ctx = await ctxFor(browser, vp);
+      await ctx.route("https://buy.stripe.com/**", (r) => r.fulfill({ status: 200, contentType: "text/plain", body: "stripe (gate stub)" }));
+      const page = await ctx.newPage();
+      await page.goto(url(bizQ), { waitUntil: "networkidle" });
+      await page.waitForTimeout(700);
+      const go = await page.evaluate(TARGETS, "[data-go]");
+      await page.goto(`${base}/start?biz=${encodeURIComponent(BIZ)}&trade=hvac`, { waitUntil: "networkidle" });
+      await page.waitForTimeout(700);
+      const st = await page.evaluate(TARGETS, "[data-start]");
+      await ctx.close();
+      /* the in-page filter literal must equal MIN_TAP: a drifted copy is red */
+      const lit = /w < (\d+) - 0\.01/.exec(TARGETS.toString())?.[1];
+      const ok = +lit === MIN_TAP && go.n === GO_TARGETS && st.n === START_TARGETS && go.small.length === 0 && st.small.length === 0 && go.over <= 0 && st.over <= 0;
+      const fmt = (m) => m.small.map((s) => `${s.k} ${s.w.toFixed(0)}x${s.h.toFixed(0)}`).join(", ");
+      return {
+        ok,
+        detail: `/go ${go.n}/${GO_TARGETS} targets, over ${go.over}px${go.small.length ? " UNDER " + fmt(go) : ""}; /start ${st.n}/${START_TARGETS} targets, over ${st.over}px${st.small.length ? " UNDER " + fmt(st) : ""}`,
+      };
+    },
+    { viewports: TABLET },
+  );
+
   /* --- 222 (45f): every rendered text node on /go clears 4.5:1, computed —
          the foreground composited over the real stack of backgrounds under
          it. Idle in both modes, each sheet step (inside the panel), done. --- */

@@ -5,7 +5,7 @@ import FitName from "@/app/go/FitName";
 import GoCard, { type GoCopy } from "@/app/go/GoCard";
 import { COPY, GO_COPY, LIVE_COPY } from "@/lib/client.config";
 import { isInApp, isIOS, prettyPhone, telNumber } from "@/lib/go";
-import { jobsFor, ogQuery, proofFor, resolveGoParams, sampleFor, scheduleFor, tradeLabel } from "@/lib/go-params";
+import { doorCopy, jobsFor, ogQuery, proofFor, resolveGoParams, sampleFor, scheduleFor, tradeLabel } from "@/lib/go-params";
 
 /*
  * change 42: /go — the page a business's customer lands on from a
@@ -65,6 +65,7 @@ export default async function GoPage({ searchParams }: { searchParams: SP }) {
   const tel = GO_COPY.goTel;
   const copy: GoCopy = {
     ...GO_COPY.go,
+    ...doorCopy(p),
     recoveredLabel: COPY.ledger.recoveredLabel,
     mark: COPY.productName.charAt(0),
     notify: COPY.notify,

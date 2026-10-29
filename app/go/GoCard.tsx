@@ -558,17 +558,21 @@ export default function GoCard(props: Props) {
         {/* 1. Identity: the name, the trade, the status instrument */}
         <header data-go-identity className="go-ident go-in" style={{ ["--i" as string]: 0 }}>
           {props.nameSlot}
+          {/* change 54: the dial carries its own reading — the trade and the
+              status pill stack beside it, one row instead of three. */}
           <div className="go-dialrow">
             <Dial schedule={schedule} now={now} />
-            {props.trade && (
-              <p data-go-trade className="go-caption text-muted">
-                {props.trade}
+            <div className="go-identmeta">
+              {props.trade && (
+                <p data-go-trade className="go-caption text-muted">
+                  {props.trade}
+                </p>
+              )}
+              <p data-go-status data-open={open ? "1" : "0"} className="go-status">
+                {open ? copy.open : copy.closed}
               </p>
-            )}
+            </div>
           </div>
-          <p data-go-status data-open={open ? "1" : "0"} className="go-status">
-            {open ? copy.open : copy.closed}
-          </p>
         </header>
 
         <section data-go-actions className="go-actions">
@@ -640,6 +644,11 @@ export default function GoCard(props: Props) {
                   {copy.call}
                 </span>
               </a>
+            </div>
+            {/* change 54: the two utility actions are rows in one surface —
+                a long, shop-specific photo label gets a full line instead of
+                a third line in a half-width tile. */}
+            <div className="go-rows go-in" style={{ ["--i" as string]: 5 }}>
               <button
                 type="button"
                 data-go-slot="quote"
@@ -647,8 +656,7 @@ export default function GoCard(props: Props) {
                   tap("quote");
                   openSheet("quote", e.currentTarget);
                 }}
-                className="go-slot go-tile go-in"
-                style={{ ["--i" as string]: 5 }}
+                className="go-slot go-row"
                 aria-haspopup="dialog"
               >
                 <span data-go-glyph className="go-glyph">
@@ -656,6 +664,9 @@ export default function GoCard(props: Props) {
                 </span>
                 <span data-go-label className="go-label">
                   {copy.quote}
+                </span>
+                <span className="go-chev ml-auto">
+                  <Glyph size={20}>{SLOT.chevron}</Glyph>
                 </span>
               </button>
               <button
@@ -665,8 +676,7 @@ export default function GoCard(props: Props) {
                   tap("save");
                   saveContact(e);
                 }}
-                className="go-slot go-tile go-in"
-                style={{ ["--i" as string]: 6 }}
+                className="go-slot go-row"
               >
                 <span data-go-glyph className="go-glyph">
                   <Glyph size={32}>{SLOT.save}</Glyph>
@@ -760,7 +770,7 @@ export default function GoCard(props: Props) {
             </p>
           )}
           {props.installHint && <InstallHint text={copy.installHint} />}
-          <p data-go-legal className="mt-3 flex gap-5 text-[13px]">
+          <p data-go-legal className="go-legal mt-1 flex gap-6 text-[13px]">
             <a href="/privacy" className="text-muted underline decoration-(--go-rule) underline-offset-2 outline-none focus-visible:outline-2 focus-visible:outline-teal">
               {copy.privacyLabel}
             </a>

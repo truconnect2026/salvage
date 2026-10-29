@@ -82,12 +82,23 @@ export default async function StartPage({ searchParams }: { searchParams: SP }) 
   return (
     <main data-start className="start-page min-h-svh px-5 pb-16 pt-12 text-ink">
       <div className="mx-auto w-full max-w-[560px]">
-        {trade && <p className="start-eyebrow">{GO_COPY.tradeLabels[trade as keyof typeof GO_COPY.tradeLabels]}</p>}
-        <h1 data-start-biz className="mt-2 font-display text-[44px] font-medium leading-[1.04] tracking-[-0.01em] text-ink">
-          {biz || COPY.productName}
-        </h1>
+        {/* change 54: whose page this is — the Salvage mark and the folio
+            line every /go door already carries — then the shop, then its
+            trade, the way /go reads. */}
+        <header className="start-in" style={{ ["--i" as string]: 0 }}>
+          <p className="start-brand">
+            <span aria-hidden="true" className="go-smark" style={{ width: 18, height: 18, fontSize: 12 }}>
+              {COPY.productName.charAt(0)}
+            </span>
+            {GO_COPY.go.poweredBy}
+          </p>
+          <h1 data-start-biz className="mt-4 font-display text-[44px] font-medium leading-[1.04] tracking-[-0.01em] text-ink">
+            {biz || COPY.productName}
+          </h1>
+          {trade && <p className="start-eyebrow mt-3">{GO_COPY.tradeLabels[trade as keyof typeof GO_COPY.tradeLabels]}</p>}
+        </header>
 
-        <div className="start-offer mt-7">
+        <div className="start-offer start-in mt-7" style={{ ["--i" as string]: 1 }}>
           <Line text={COPY.price.line} lead />
           <div className="start-rule" />
           <div className="flex flex-col gap-3">
@@ -97,13 +108,15 @@ export default async function StartPage({ searchParams }: { searchParams: SP }) 
           </div>
         </div>
 
-        <p data-start-agreement className="start-terms mt-5">
+        <p data-start-agreement className="start-terms start-in mt-5" style={{ ["--i" as string]: 2 }}>
           {S.agreement}
         </p>
 
-        <AgreePay agree={S.agree} pay={S.pay} href={payHref(biz)} />
+        <div className="start-in" style={{ ["--i" as string]: 3 }}>
+          <AgreePay agree={S.agree} pay={S.pay} href={payHref(biz)} />
+        </div>
 
-        <div className="start-card mt-10">
+        <div className="start-card start-in mt-10" style={{ ["--i" as string]: 4 }}>
           {sent ? (
             <p data-start-sent className="text-[17px] font-medium text-ink">
               {S.sent}
@@ -157,7 +170,7 @@ export default async function StartPage({ searchParams }: { searchParams: SP }) 
                 <div className="mt-2 grid grid-cols-2 gap-3">
                   {(["yes", "no"] as const).map((v, i) => (
                     <label key={v} className="start-choice">
-                      <input type="radio" name="hasEin" value={v} required className="h-5 w-5 accent-[var(--color-teal)]" />
+                      <input type="radio" name="hasEin" value={v} required className="start-radio" />
                       {S.einAnswers[i]}
                     </label>
                   ))}
@@ -170,7 +183,7 @@ export default async function StartPage({ searchParams }: { searchParams: SP }) 
           )}
         </div>
 
-        <nav data-legal-links className="mt-12 flex gap-6 text-[13px] text-muted">
+        <nav data-legal-links className="start-legal mt-10 flex gap-6 text-[13px] text-muted">
           <a href="/privacy" className="underline decoration-[rgba(44,199,182,0.7)] underline-offset-2 outline-none focus-visible:outline-2 focus-visible:outline-teal">
             {LIVE_COPY.legal.privacyLabel}
           </a>

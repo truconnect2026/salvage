@@ -1,0 +1,5 @@
+probe p3-legaltap build isGiZvBq8k-kYn1JWVyHc
+  (filtered: GO_ONLY=263)
+  FAIL  263. go 54: every tap target on /go and /start >= 44px, no sideways scroll, at 390 / 601 / 800 — chromium@390x844 RED: /go 8/8 targets, over 0px UNDER Privacy 44x20, Terms 44x20; /start 12/12 targets, over 0px | chromium@601x962 RED: /go 8/8 targets, over 0px UNDER Privacy 44x20, Terms 44x20; /start 12/12 targets, over 0px | chromium@800x1280 RED: /go 8/8 targets, over 0px UNDER Privacy 44x20, Terms 44x20; /start 12/12 targets, over 0px [WebKit NOT RUN: GATE_ALLOW_NO_WEBKIT=1]
+
+1 GO GATE(S) RED: 263
